@@ -14,12 +14,10 @@
 # Node / frontend
 node_modules/
 dist/
+dist-ssr/
+*.local
 *.log
 *.tsbuildinfo
-
-# Rust / Tauri
-src-tauri/target/
-src-tauri/gen/schemas/
 
 # Swift helper
 photos-helper/.build/

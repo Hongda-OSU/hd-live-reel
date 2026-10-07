@@ -12,7 +12,18 @@ Personal macOS desktop app that stitches iPhone Live Photos into one MP4 with or
 
 ## Commands
 
-Added once the scaffold exists.
+| Purpose | Command |
+|---|---|
+| Install JS deps | `pnpm install` |
+| Fetch FFmpeg sidecar | `./scripts/fetch-ffmpeg.sh` |
+| Run the app | `pnpm tauri dev` |
+| Frontend types + build | `pnpm build` |
+| Rust tests | `cargo test --manifest-path src-tauri/Cargo.toml` |
+| Build Swift helper | `swift build --package-path photos-helper` |
+| Run Swift helper | `"$(swift build --package-path photos-helper --show-bin-path)/photos-helper" list` |
+
+- Package manager: **pnpm** (not npm, not yarn). Frontend is React + TypeScript (Vite).
+- `photos-helper` needs a USB-connected, unlocked iPhone for `list` / `download`.
 
 ## Rules
 
