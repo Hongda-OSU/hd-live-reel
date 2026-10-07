@@ -45,6 +45,14 @@ pub struct Downloaded {
     pub error: Option<String>,
 }
 
+/// A JPEG thumbnail on disk, or why there is none.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Thumbnail {
+    pub id: String,
+    pub path: Option<PathBuf>,
+    pub error: Option<String>,
+}
+
 #[derive(Debug)]
 pub enum Error {
     Spawn(std::io::Error),
@@ -76,6 +84,21 @@ pub fn download(ids: &[String], dir: &Path) -> Result<Vec<Downloaded>, Error> {
     let mut args: Vec<&OsStr> = vec!["download".as_ref()];
     args.extend(ids.iter().map(OsStr::new));
     args.extend(["--to".as_ref(), dir.as_os_str()]);
+    run(args)
+}
+
+/// Writes thumbnails (longest side `max_pixels`) to `<dir>/<id>.jpg`.
+/// Ones already on disk are reused, so repeat calls are cheap.
+pub fn thumbnails(ids: &[String], dir: &Path, max_pixels: u32) -> Result<Vec<Thumbnail>, Error> {
+    let size = max_pixels.to_string();
+    let mut args: Vec<&OsStr> = vec!["thumbnails".as_ref()];
+    args.extend(ids.iter().map(OsStr::new));
+    args.extend([
+        "--to".as_ref(),
+        dir.as_os_str(),
+        "--size".as_ref(),
+        size.as_ref(),
+    ]);
     run(args)
 }
 
@@ -144,5 +167,19 @@ mod tests {
             Some(Path::new("/c/f/a.MOV"))
         );
         assert_eq!(results[1].error.as_deref(), Some("not found on device"));
+    }
+
+    #[test]
+    fn parses_thumbnails_output() {
+        let json = r#"[
+            {"id": "f/a.HEIC", "path": "/c/thumbs/f/a.HEIC.jpg"},
+            {"error": "timed out", "id": "f/b.MOV"}
+        ]"#;
+        let results: Vec<Thumbnail> = serde_json::from_str(json).unwrap();
+        assert_eq!(
+            results[0].path.as_deref(),
+            Some(Path::new("/c/thumbs/f/a.HEIC.jpg"))
+        );
+        assert_eq!(results[1].error.as_deref(), Some("timed out"));
     }
 }
