@@ -55,7 +55,26 @@ let usage = """
 usage: photos-helper list-devices
        photos-helper list
        photos-helper download <id>... --to <dir>
+       photos-helper thumbnails <id>... --to <dir> [--size <pixels>]
 """
+
+/// Splits "<id>... --to <dir> [--size <n>]" into its parts.
+func parseBatch(_ rest: [String]) -> (ids: [String], dir: URL, size: Int?) {
+    var ids = rest
+    var options: [String: String] = [:]
+    for flag in ["--to", "--size"] {
+        if let i = ids.firstIndex(of: flag) {
+            guard i + 1 < ids.count else { fail(usage, code: 64) }
+            options[flag] = ids[i + 1]
+            ids.removeSubrange(i...i + 1)
+        }
+    }
+    guard let dir = options["--to"], !ids.isEmpty else {
+        fail(usage, code: 64)
+    }
+    let size = options["--size"].map { Int($0) ?? { fail(usage, code: 64) }() }
+    return (ids, URL(fileURLWithPath: dir, isDirectory: true), size)
+}
 
 let args = Array(CommandLine.arguments.dropFirst())
 
@@ -70,17 +89,16 @@ case "list":
         printJSON(Catalog.items(from: session.files))
     }
 case "download":
-    var ids = Array(args.dropFirst())
-    guard let flag = ids.firstIndex(of: "--to"), flag + 1 < ids.count else {
-        fail(usage, code: 64)
-    }
-    let dir = URL(fileURLWithPath: ids[flag + 1], isDirectory: true)
-    ids.removeSubrange(flag...flag + 1)
-    guard !ids.isEmpty else {
-        fail(usage, code: 64)
-    }
+    let batch = parseBatch(Array(args.dropFirst()))
     withSession { session in
-        printJSON(Downloader.download(ids: ids, from: session.files, to: dir))
+        printJSON(Downloader.download(ids: batch.ids, from: session.files, to: batch.dir))
+    }
+case "thumbnails":
+    let batch = parseBatch(Array(args.dropFirst()))
+    withSession { session in
+        printJSON(Thumbnails.fetch(
+            ids: batch.ids, from: session.files, to: batch.dir, maxPixels: batch.size ?? 320
+        ))
     }
 case "-h", "--help":
     print(usage)
