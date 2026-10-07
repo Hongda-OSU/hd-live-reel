@@ -1,11 +1,40 @@
 pub mod ffmpeg;
 pub mod iphone;
 pub mod preview;
+pub mod project;
 mod sidecar;
 
 use std::path::PathBuf;
+use std::sync::Mutex;
 
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Emitter, Manager, State};
+
+/// File of the project the window is editing.
+struct CurrentProject(Mutex<Option<PathBuf>>);
+
+fn project_store(app: &AppHandle) -> Result<project::Store, String> {
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    Ok(project::Store::new(dir))
+}
+
+/// Reopens the last project (or starts a new one) and makes it current.
+#[tauri::command]
+fn load_project(
+    app: AppHandle,
+    current: State<CurrentProject>,
+) -> Result<project::Project, String> {
+    let (path, project) = project_store(&app)?.open_last()?;
+    *current.0.lock().unwrap() = Some(path);
+    Ok(project)
+}
+
+/// Writes the frontend's copy over the current project file.
+#[tauri::command]
+fn save_project(current: State<CurrentProject>, project: project::Project) -> Result<(), String> {
+    let current = current.0.lock().unwrap();
+    let path = current.as_ref().ok_or("no project is open")?;
+    project::save(path, &project)
+}
 
 /// Photos, videos and Live Photos on the connected iPhone, newest first.
 #[tauri::command]
@@ -53,7 +82,10 @@ async fn make_preview(app: AppHandle, ids: Vec<String>) -> Result<PathBuf, Strin
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .manage(CurrentProject(Mutex::new(None)))
         .invoke_handler(tauri::generate_handler![
+            load_project,
+            save_project,
             list_iphone_media,
             iphone_thumbnails,
             make_preview
