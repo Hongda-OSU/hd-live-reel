@@ -549,11 +549,13 @@ mod tests {
         // A missing or unreadable last project falls back to a new one.
         std::fs::remove_file(&path).unwrap();
         let (fresh_path, fresh) = store.open_last().unwrap();
+        let fresh_saved = fresh_path.is_file();
         std::fs::remove_dir_all(&dir).unwrap();
 
         assert_eq!(again_path, path);
         assert_eq!(again.name, "Devil's Lake");
-        assert_ne!(fresh_path, path);
+        // The fresh file may reuse the deleted name if created in the same ms.
+        assert!(fresh_saved);
         assert_eq!(fresh, Project::default());
     }
 }
