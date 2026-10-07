@@ -19,6 +19,7 @@ Personal macOS desktop app that stitches iPhone Live Photos into one MP4 with or
 | Run the app | `pnpm tauri dev` |
 | Frontend types + build | `pnpm build` |
 | Rust tests | `cargo test --manifest-path src-tauri/Cargo.toml` |
+| Baseline vs compose.py (personal media) | `HD_LIVE_REEL_SAMPLES=<dir> cargo test --manifest-path src-tauri/Cargo.toml --test baseline -- --ignored` |
 | Rust format + lint | `cargo fmt --manifest-path src-tauri/Cargo.toml && cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets` |
 | Build Swift helper | `swift build --package-path photos-helper` |
 | Run Swift helper | `"$(swift build --package-path photos-helper --show-bin-path)/photos-helper" list` |
