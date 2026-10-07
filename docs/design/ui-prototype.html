@@ -1,0 +1,897 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HD Live Reel 原型</title>
+<style>
+:root {
+  --accent: #0a84ff;
+  --accent-soft: color-mix(in srgb, var(--accent) 16%, transparent);
+  --window: #f6f6f8;
+  --sidebar: rgba(236, 236, 240, 0.78);
+  --surface: #ffffff;
+  --surface-2: #f0f0f3;
+  --border: rgba(0, 0, 0, 0.1);
+  --text: #1d1d1f;
+  --muted: #6e6e73;
+  --stage-bg: #e9e9ed;
+  --shadow: 0 24px 60px rgba(0, 0, 0, 0.22), 0 0 0 0.5px rgba(0, 0, 0, 0.18);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Helvetica Neue", sans-serif;
+  font-size: 13px;
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+}
+:root[data-theme="dark"] {
+  --window: #1f1f22;
+  --sidebar: rgba(40, 40, 44, 0.8);
+  --surface: #2c2c2f;
+  --surface-2: #343438;
+  --border: rgba(255, 255, 255, 0.1);
+  --text: #f5f5f7;
+  --muted: #98989f;
+  --stage-bg: #161618;
+  --shadow: 0 24px 60px rgba(0, 0, 0, 0.6), 0 0 0 0.5px rgba(255, 255, 255, 0.12);
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: linear-gradient(135deg, #8aa4b8, #5c7489 55%, #3e5266);
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+button, input, select { font: inherit; color: inherit; }
+
+/* ---------- window chrome ---------- */
+.window {
+  position: relative;
+  width: min(1320px, 100%);
+  height: min(860px, calc(100vh - 48px));
+  border-radius: 12px;
+  background: var(--window);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  display: grid;
+  grid-template-rows: 52px 1fr;
+}
+.toolbar {
+  display: grid;
+  grid-template-columns: 232px 1fr 272px;
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  background: var(--sidebar);
+  backdrop-filter: blur(30px) saturate(1.6);
+  -webkit-app-region: drag;
+}
+.toolbar .left { display: flex; align-items: center; gap: 14px; padding-left: 16px; }
+.lights { display: flex; gap: 8px; }
+.lights span { width: 12px; height: 12px; border-radius: 50%; }
+.lights span:nth-child(1) { background: #ff5f57; }
+.lights span:nth-child(2) { background: #febc2e; }
+.lights span:nth-child(3) { background: #28c840; }
+.toolbar .center { text-align: center; }
+.toolbar .center .name { font-weight: 600; }
+.toolbar .center .meta { font-size: 11px; color: var(--muted); }
+.toolbar .right { display: flex; justify-content: flex-end; gap: 8px; padding-right: 14px; }
+
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 28px; padding: 0 12px;
+  border: 1px solid var(--border); border-radius: 7px;
+  background: var(--surface); cursor: pointer;
+  box-shadow: 0 0.5px 1px rgba(0,0,0,0.08);
+}
+.btn:hover { background: var(--surface-2); }
+.btn.primary { background: var(--accent); border-color: transparent; color: #fff; }
+.btn.primary:hover { filter: brightness(1.06); }
+.btn.ghost { background: transparent; box-shadow: none; border-color: transparent; }
+.btn.ghost:hover { background: var(--accent-soft); }
+.btn:disabled { opacity: 0.45; cursor: default; }
+.icon { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+
+/* ---------- main layout ---------- */
+.body {
+  display: grid;
+  grid-template-columns: 232px 1fr 272px;
+  min-height: 0;
+}
+.sidebar {
+  background: var(--sidebar);
+  backdrop-filter: blur(30px) saturate(1.6);
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+  padding: 12px 10px;
+}
+.section-title {
+  font-size: 11px; font-weight: 600; color: var(--muted);
+  padding: 4px 8px 8px; display: flex; justify-content: space-between;
+}
+
+/* clip list */
+.clips { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.clip {
+  border-radius: 8px; padding: 6px 8px;
+  display: grid; grid-template-columns: 16px 30px 1fr auto; gap: 8px; align-items: center;
+  cursor: default; user-select: none;
+}
+.clip:hover { background: rgba(127,127,127,0.1); }
+.clip.selected { background: var(--accent-soft); }
+.clip.dragging { opacity: 0.35; }
+.clip.drop-before { box-shadow: inset 0 2px 0 var(--accent); }
+.clip .grip { color: var(--muted); cursor: grab; font-size: 11px; text-align: center; }
+.clip .thumb { width: 30px; height: 40px; border-radius: 4px; background-size: cover; background-position: center; }
+.clip .label { font-weight: 500; }
+.clip .sub { font-size: 11px; color: var(--muted); }
+.clip .muted-flag { color: var(--muted); }
+.clip.is-muted .label { color: var(--muted); }
+.clip-detail {
+  grid-column: 1 / -1; margin-top: 6px; padding: 8px; border-radius: 6px; background: var(--surface);
+  display: grid; gap: 8px; font-size: 12px;
+}
+.clip-detail .row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.trim { position: relative; height: 26px; border-radius: 4px; background-size: cover; background-position: center; }
+.trim .shade { position: absolute; top: 0; bottom: 0; background: rgba(0,0,0,0.55); }
+.trim .handle {
+  position: absolute; top: -2px; bottom: -2px; width: 8px; margin-left: -4px;
+  background: #ffd60a; border-radius: 3px; cursor: ew-resize;
+}
+.empty-list { color: var(--muted); font-size: 12px; padding: 8px; line-height: 1.6; }
+
+/* stage */
+.stage-area {
+  background: var(--stage-bg);
+  display: grid; grid-template-rows: 1fr auto; min-height: 0; min-width: 0;
+  padding: 18px 18px 10px;
+}
+.stage-wrap { min-height: 0; display: grid; place-items: center; }
+.stage {
+  position: relative; height: 100%; max-width: 100%; aspect-ratio: 9 / 16;
+  background: #000; border-radius: 10px; overflow: hidden;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.25);
+}
+.stage.aspect-wide { height: auto; width: 100%; aspect-ratio: 16 / 9; }
+.media { position: absolute; top: 0; bottom: 0; background-size: cover; background-position: center; }
+.media.bg { inset: -8%; filter: blur(24px) brightness(0.8); }
+.stage .crop-hint {
+  position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%);
+  background: rgba(0,0,0,0.55); color: #fff; font-size: 11px; padding: 4px 10px; border-radius: 99px;
+  opacity: 0; transition: opacity 0.2s; pointer-events: none; white-space: nowrap;
+}
+.stage:hover .crop-hint { opacity: 1; }
+.stage.can-drag { cursor: grab; }
+.stage.can-drag:active { cursor: grabbing; }
+.title-overlay {
+  position: absolute; inset: 0; display: grid; place-content: center; text-align: center;
+  color: #fff; pointer-events: none; padding: 0 8%;
+  text-shadow: 0 0 1px #000, 0 0 2px rgba(0,0,0,0.7);
+}
+.title-overlay .t { font-weight: 600; letter-spacing: 0.01em; }
+.title-overlay .s { margin-top: 4px; opacity: 0.95; }
+.stage-empty {
+  position: absolute; inset: 0; display: grid; place-content: center; gap: 12px; text-align: center; color: #aaa;
+}
+
+.transport {
+  display: grid; grid-template-columns: auto auto 1fr auto; gap: 12px; align-items: center;
+  padding-top: 10px; max-width: 760px; width: 100%; justify-self: center;
+}
+.transport .time { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 12px; }
+.scrub { position: relative; height: 20px; }
+.scrub input { width: 100%; margin: 0; }
+.scrub .ticks { position: absolute; left: 0; right: 0; top: 0; height: 4px; pointer-events: none; }
+.scrub .ticks i { position: absolute; top: 0; width: 1px; height: 4px; background: var(--muted); opacity: 0.6; }
+.quality { font-size: 11px; color: var(--muted); }
+.round {
+  width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--border);
+  background: var(--surface); display: grid; place-items: center; cursor: pointer;
+}
+
+/* inspector */
+.inspector {
+  border-left: 1px solid var(--border); background: var(--window); overflow-y: auto; padding: 6px 0 20px;
+}
+.group { border-bottom: 1px solid var(--border); padding: 12px 16px 14px; }
+.group h3 { margin: 0 0 10px; font-size: 12px; font-weight: 600; display: flex; justify-content: space-between; align-items: center; }
+.field { display: grid; gap: 4px; margin-bottom: 10px; }
+.field:last-child { margin-bottom: 0; }
+.field > span { font-size: 11px; color: var(--muted); }
+.field .inline { display: flex; align-items: center; gap: 8px; }
+.field .inline input[type=range] { flex: 1; }
+.field .val { font-size: 11px; color: var(--muted); min-width: 34px; text-align: right; font-variant-numeric: tabular-nums; }
+.text-input {
+  height: 26px; border: 1px solid var(--border); border-radius: 6px; padding: 0 8px; background: var(--surface);
+}
+.text-input:focus, .btn:focus-visible { outline: 3px solid var(--accent-soft); border-color: var(--accent); }
+.seg { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; background: var(--surface-2); border-radius: 7px; padding: 2px; }
+.seg button {
+  border: 0; background: transparent; border-radius: 5px; height: 22px; font-size: 12px; cursor: pointer;
+}
+.seg button.on { background: var(--surface); box-shadow: 0 0.5px 2px rgba(0,0,0,0.18); font-weight: 500; }
+.presets { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.preset { border: 0; background: none; padding: 0; cursor: pointer; display: grid; gap: 4px; font-size: 11px; color: var(--muted); }
+.preset .sw { aspect-ratio: 3 / 4; border-radius: 6px; background-size: cover; background-position: center; outline: 2px solid transparent; outline-offset: 1px; }
+.preset.on { color: var(--text); font-weight: 500; }
+.preset.on .sw { outline-color: var(--accent); }
+.switch { position: relative; width: 30px; height: 18px; border-radius: 99px; background: var(--surface-2); border: 1px solid var(--border); cursor: pointer; flex: none; }
+.switch::after { content: ""; position: absolute; top: 1px; left: 1px; width: 14px; height: 14px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,0.3); transition: left 0.15s; }
+.switch.on { background: var(--accent); border-color: transparent; }
+.switch.on::after { left: 13px; }
+input[type=range] { accent-color: var(--accent); }
+.hidden { display: none !important; }
+.note { font-size: 11px; color: var(--muted); line-height: 1.5; }
+
+/* ---------- sheets & dialogs ---------- */
+.scrim { position: absolute; inset: 52px 0 0; background: rgba(0,0,0,0.18); z-index: 10; }
+.sheet {
+  position: absolute; z-index: 11; left: 50%; top: 52px; transform: translate(-50%, -105%);
+  width: min(1040px, calc(100% - 60px)); height: calc(100% - 92px);
+  background: var(--window); border-radius: 0 0 12px 12px; box-shadow: var(--shadow);
+  display: grid; grid-template-rows: auto auto 1fr auto;
+  visibility: hidden; transition: transform 0.28s cubic-bezier(.2,.8,.2,1), visibility 0s 0.28s;
+}
+.sheet.open { transform: translate(-50%, 0); visibility: visible; transition-delay: 0s; }
+.sheet header { display: flex; align-items: center; gap: 12px; padding: 16px 20px 10px; }
+.sheet header h2 { margin: 0; font-size: 15px; }
+.sheet header .device { color: var(--muted); font-size: 12px; display: flex; align-items: center; gap: 6px; }
+.sheet header .device .dot { width: 7px; height: 7px; border-radius: 50%; background: #30d158; }
+.picker-bar { display: flex; align-items: center; gap: 12px; padding: 0 20px 12px; border-bottom: 1px solid var(--border); }
+.picker-bar .seg { width: 220px; }
+.picker-bar .spacer { flex: 1; }
+.ai-box { display: flex; align-items: center; gap: 10px; padding: 4px 6px 4px 10px; border-radius: 8px; background: var(--surface-2); }
+.ai-box input { width: 120px; }
+.ai-box .val { font-size: 12px; color: var(--muted); min-width: 92px; font-variant-numeric: tabular-nums; }
+.grid-scroll { overflow-y: auto; padding: 14px 20px; }
+.day { font-size: 12px; font-weight: 600; margin: 4px 0 8px; color: var(--muted); }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 4px; margin-bottom: 18px; }
+.tile { position: relative; aspect-ratio: 3 / 4; border-radius: 4px; overflow: hidden; background-size: cover; background-position: center; cursor: pointer; border: 0; padding: 0; }
+.tile::after { content: ""; position: absolute; inset: 0; border-radius: 4px; box-shadow: inset 0 0 0 3px transparent; transition: box-shadow 0.1s; }
+.tile.on::after { box-shadow: inset 0 0 0 3px var(--accent); }
+.tile .badge {
+  position: absolute; top: 6px; left: 6px; display: flex; align-items: center; gap: 3px;
+  color: #fff; font-size: 10px; font-weight: 600; letter-spacing: 0.04em; text-shadow: 0 1px 2px rgba(0,0,0,0.6);
+}
+.tile .dur { position: absolute; right: 6px; bottom: 6px; color: #fff; font-size: 11px; text-shadow: 0 1px 2px rgba(0,0,0,0.6); }
+.tile .check {
+  position: absolute; right: 6px; top: 6px; width: 20px; height: 20px; border-radius: 50%;
+  border: 1.5px solid rgba(255,255,255,0.9); background: rgba(0,0,0,0.15); display: grid; place-items: center;
+}
+.tile.on .check { background: var(--accent); border-color: #fff; }
+.tile.on .check::after { content: ""; width: 8px; height: 4px; border: 2px solid #fff; border-top: 0; border-right: 0; transform: translateY(-1px) rotate(-45deg); }
+.tile .order { position: absolute; right: 9px; top: 8px; color: #fff; font-size: 11px; font-weight: 700; }
+.tile .reason {
+  position: absolute; left: 0; right: 0; bottom: 0; padding: 18px 6px 5px; font-size: 10px; color: #fff;
+  background: linear-gradient(transparent, rgba(0,0,0,0.7)); text-align: left;
+}
+.tile.skipped { opacity: 0.45; }
+.sheet footer { display: flex; align-items: center; gap: 10px; padding: 12px 20px; border-top: 1px solid var(--border); }
+.sheet footer .summary { flex: 1; color: var(--muted); }
+
+.dialog {
+  position: absolute; z-index: 21; left: 50%; top: 50%; transform: translate(-50%, -50%) scale(0.96); opacity: 0;
+  width: 380px; background: var(--window); border-radius: 12px; box-shadow: var(--shadow);
+  padding: 20px; transition: opacity 0.18s, transform 0.18s; pointer-events: none;
+}
+.dialog.open { opacity: 1; transform: translate(-50%, -50%) scale(1); pointer-events: auto; }
+.dialog h2 { margin: 0 0 14px; font-size: 15px; }
+.dialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+.progress { height: 6px; border-radius: 99px; background: var(--surface-2); overflow: hidden; margin: 6px 0; }
+.progress i { display: block; height: 100%; width: 0; background: var(--accent); transition: width 0.2s; }
+.done-mark { width: 40px; height: 40px; border-radius: 50%; background: #30d158; display: grid; place-items: center; margin-bottom: 10px; }
+.done-mark::after { content: ""; width: 16px; height: 8px; border: 3px solid #fff; border-top: 0; border-right: 0; transform: translateY(-2px) rotate(-45deg); }
+.dialog-scrim { position: absolute; inset: 0; z-index: 20; background: rgba(0,0,0,0.25); }
+
+/* prototype controls (not part of the app) */
+.proto {
+  position: fixed; right: 16px; bottom: 16px; z-index: 50; display: flex; gap: 6px; align-items: center;
+  background: rgba(20,20,22,0.82); color: #eee; padding: 6px 8px 6px 12px; border-radius: 10px; font-size: 12px;
+}
+.proto button { background: rgba(255,255,255,0.12); border: 0; color: #fff; border-radius: 6px; padding: 4px 8px; cursor: pointer; }
+</style>
+</head>
+<body>
+
+<div class="window" id="win">
+  <div class="toolbar">
+    <div class="left">
+      <div class="lights"><span></span><span></span><span></span></div>
+      <button class="btn" id="addBtn">
+        <svg class="icon" viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></svg>添加照片
+      </button>
+    </div>
+    <div class="center">
+      <div class="name" id="projName">Turkey Run</div>
+      <div class="meta" id="projMeta">9 段 · 17.4 秒</div>
+    </div>
+    <div class="right">
+      <button class="btn primary" id="exportBtn">
+        <svg class="icon" viewBox="0 0 16 16"><path d="M8 10V2.5M5 5.5 8 2.5l3 3M3 9.5v3.5h10V9.5"/></svg>导出
+      </button>
+    </div>
+  </div>
+
+  <div class="body">
+    <!-- clips -->
+    <aside class="sidebar">
+      <div class="section-title"><span>片段</span><span id="clipCount"></span></div>
+      <ul class="clips" id="clipList"></ul>
+      <div class="empty-list hidden" id="clipEmpty">还没有片段。<br>点「添加照片」从 iPhone 挑选 Live Photo。</div>
+    </aside>
+
+    <!-- stage -->
+    <section class="stage-area">
+      <div class="stage-wrap">
+        <div class="stage can-drag" id="stage">
+          <div class="media bg hidden" id="mediaBg"></div>
+          <div class="media" id="media"></div>
+          <div class="title-overlay" id="titleOverlay"><div class="t" id="tMain"></div><div class="s" id="tSub"></div></div>
+          <div class="crop-hint" id="cropHint">左右拖动，调整保留的画面</div>
+          <div class="stage-empty hidden" id="stageEmpty">
+            <div>预览会显示在这里</div>
+            <div><button class="btn primary" id="emptyAdd">添加照片</button></div>
+          </div>
+        </div>
+      </div>
+      <div class="transport">
+        <button class="round" id="playBtn" title="播放 / 暂停（空格）">
+          <svg class="icon" viewBox="0 0 16 16" id="playIcon"><path d="M5 3.5v9l7-4.5z" fill="currentColor" stroke="none"/></svg>
+        </button>
+        <span class="time" id="timeLabel">0:00.0 / 0:17.4</span>
+        <div class="scrub"><div class="ticks" id="ticks"></div><input type="range" id="scrub" min="0" max="1000" value="0"></div>
+        <span class="quality">低清预览 · 与导出同一处理链</span>
+      </div>
+    </section>
+
+    <!-- inspector -->
+    <aside class="inspector">
+      <div class="group">
+        <h3>标题 <span class="switch on" id="titleOn" role="switch" aria-checked="true"></span></h3>
+        <div id="titleFields">
+          <label class="field"><span>主标题</span><input class="text-input" id="titleText" value="Indiana"></label>
+          <label class="field"><span>副标题</span><input class="text-input" id="titleSub" value="Turkey Run State Park, IN"></label>
+          <div class="field"><span>显示时长</span>
+            <div class="inline"><input type="range" id="showFor" min="0.5" max="3" step="0.1" value="1"><span class="val" id="showForVal">1.0 秒</span></div>
+          </div>
+          <div class="field"><span>消失方式</span>
+            <div class="seg" id="titleFade"><button class="on" data-v="0">直接消失</button><button data-v="0.3">淡出</button></div>
+          </div>
+          <div class="field"><span>位置</span>
+            <div class="seg" id="titlePos"><button data-v="top">上</button><button class="on" data-v="center">中</button><button data-v="bottom">下</button></div>
+          </div>
+          <div class="field"><span>字号</span>
+            <div class="inline"><input type="range" id="titleSize" min="14" max="40" value="22"><span class="val" id="titleSizeVal">22</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="group">
+        <h3>声音</h3>
+        <div class="field">
+          <div class="seg" id="audioMode"><button class="on" data-v="original">原声</button><button data-v="music">配乐</button><button data-v="mix">配乐 + 原声</button></div>
+        </div>
+        <div class="field hidden" id="musicField"><span>配乐</span>
+          <button class="btn" style="justify-content:flex-start">选择音频文件…</button>
+        </div>
+        <div class="field hidden" id="musicVol"><span>配乐音量</span>
+          <div class="inline"><input type="range" min="0" max="100" value="80"><span class="val">80%</span></div>
+        </div>
+        <div class="field" id="origVol"><span>原声音量</span>
+          <div class="inline"><input type="range" min="0" max="100" value="100"><span class="val">100%</span></div>
+        </div>
+        <p class="note" id="audioNote">每段自动拉齐响度，接缝处不爆音。</p>
+      </div>
+
+      <div class="group">
+        <h3>滤镜</h3>
+        <div class="field"><div class="presets" id="presets"></div></div>
+        <div class="field"><span>亮度</span><div class="inline"><input type="range" id="fBright" min="-30" max="30" value="0"><span class="val" id="fBrightVal">0</span></div></div>
+        <div class="field"><span>对比度</span><div class="inline"><input type="range" id="fContrast" min="-30" max="30" value="0"><span class="val" id="fContrastVal">0</span></div></div>
+        <div class="field"><span>饱和度</span><div class="inline"><input type="range" id="fSat" min="-30" max="30" value="0"><span class="val" id="fSatVal">0</span></div></div>
+      </div>
+
+      <div class="group">
+        <h3>画幅</h3>
+        <div class="field"><div class="seg" id="aspect"><button class="on" data-v="9:16">9:16 竖屏</button><button data-v="16:9">16:9 横屏</button></div></div>
+        <div class="field"><span>填充方式</span>
+          <div class="seg" id="fill"><button class="on" data-v="crop">铺满裁切</button><button data-v="black">黑边</button><button data-v="blur">模糊背景</button></div>
+        </div>
+        <div class="field"><span>转场</span>
+          <div class="seg" id="transition"><button class="on" data-v="none">硬切</button><button data-v="fade">淡入淡出</button></div>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <!-- picker sheet -->
+  <div class="scrim hidden" id="scrim"></div>
+  <div class="sheet" id="sheet" role="dialog" aria-label="从 iPhone 选择">
+    <header>
+      <h2>从 iPhone 选择</h2>
+      <span class="device"><span class="dot"></span>iPhone · 已连接 · 1,271 项</span>
+    </header>
+    <div class="picker-bar">
+      <div class="seg" id="kindFilter"><button data-v="all">全部</button><button class="on" data-v="live">Live Photo</button><button data-v="video">视频</button></div>
+      <span class="spacer"></span>
+      <div class="ai-box">
+        <span class="val" id="targetVal">目标 40 秒 ≈ 20 张</span>
+        <input type="range" id="target" min="30" max="45" value="40">
+        <button class="btn" id="aiBtn">
+          <svg class="icon" viewBox="0 0 16 16"><path d="M8 1.5 9.4 6 14 7.5 9.4 9 8 13.5 6.6 9 2 7.5 6.6 6z"/></svg>AI 选片
+        </button>
+      </div>
+    </div>
+    <div class="grid-scroll" id="gridScroll"></div>
+    <footer>
+      <span class="summary" id="pickSummary">还没有选择</span>
+      <button class="btn" id="pickCancel">取消</button>
+      <button class="btn primary" id="pickAdd" disabled>添加</button>
+    </footer>
+  </div>
+
+  <!-- export dialog -->
+  <div class="dialog-scrim hidden" id="dlgScrim"></div>
+  <div class="dialog" id="dlg" role="dialog" aria-label="导出">
+    <div id="dlgForm">
+      <h2>导出视频</h2>
+      <div class="field"><span>画幅</span><div class="seg" id="exAspect"><button class="on">9:16 竖屏</button><button>16:9 横屏</button></div></div>
+      <div class="field"><span>清晰度</span><div class="seg" id="exRes"><button class="on">1080p</button><button>720p</button></div></div>
+      <p class="note">MP4（H.264 + AAC），微信可以直接发送和播放。</p>
+      <div class="actions"><button class="btn" id="dlgCancel">取消</button><button class="btn primary" id="dlgGo">导出</button></div>
+    </div>
+    <div id="dlgRun" class="hidden">
+      <h2>正在导出…</h2>
+      <div class="progress"><i id="dlgBar"></i></div>
+      <p class="note" id="dlgStep">合成画面…</p>
+      <div class="actions"><button class="btn" id="dlgStop">取消导出</button></div>
+    </div>
+    <div id="dlgDone" class="hidden">
+      <div class="done-mark"></div>
+      <h2>导出完成</h2>
+      <p class="note">Turkey Run.mp4 · 1080 × 1920 · 17.4 秒 · 24 MB</p>
+      <div class="actions"><button class="btn" id="dlgClose">完成</button><button class="btn primary">在 Finder 中显示</button></div>
+    </div>
+  </div>
+</div>
+
+<div class="proto">
+  原型
+  <button id="protoTheme">切换深色</button>
+  <button id="protoEmpty">首次打开</button>
+</div>
+
+<script>
+// ---------- placeholder imagery: CSS "scenes" standing in for photos ----------
+const SCENES = [
+  "radial-gradient(120% 70% at 30% 18%, #fff6d8 0 8%, transparent 30%), linear-gradient(180deg, #8fc3e8 0 34%, #4e7a3f 34% 52%, #2f5a2c 52% 70%, #4d7f8e 70%)",
+  "linear-gradient(180deg, #b7d6ee 0 30%, #6d9a5a 30% 46%, #355c33 46% 62%, #3d7182 62% 100%)",
+  "radial-gradient(80% 40% at 70% 70%, #e2c79a 0 20%, transparent 50%), linear-gradient(180deg, #9cc7e6 0 26%, #b8a68a 26% 48%, #7c8b5a 48% 66%, #4a6b78 66%)",
+  "linear-gradient(170deg, #f6b26b 0 18%, #e8875b 18% 32%, #5e6f8f 32% 58%, #2f3c58 58%)",
+  "radial-gradient(60% 30% at 50% 60%, #c9e3f2 0 20%, transparent 60%), linear-gradient(180deg, #a6cfe9 0 40%, #3f6f86 40% 100%)",
+  "linear-gradient(180deg, #7fae6a 0 22%, #3f6b3a 22% 50%, #2b4d29 50% 78%, #6a5a3e 78%)",
+  "linear-gradient(180deg, #d9e8f2 0 25%, #97b8c9 25% 45%, #557a63 45% 70%, #36513e 70%)",
+  "radial-gradient(90% 50% at 40% 40%, #f3d9a4 0 15%, transparent 45%), linear-gradient(180deg, #c76f4a 0 30%, #9b5a3a 30% 55%, #4f3a2b 55%)",
+  "linear-gradient(180deg, #a9c9dd 0 20%, #7a9c7c 20% 35%, #e9f2f6 35% 40%, #5b8aa0 40% 100%)",
+  "linear-gradient(200deg, #f8d38a 0 20%, #d98c4a 20% 40%, #6c7a4b 40% 70%, #3b4a2e 70%)",
+  "linear-gradient(180deg, #8ab6d8 0 45%, #2f6f86 45% 60%, #1f4d5e 60%)",
+  "radial-gradient(70% 60% at 50% 100%, #3f7a3a 0 40%, transparent 70%), linear-gradient(180deg, #cfe4ef 0 50%, #6e9b63 50%)",
+];
+const scene = (i) => SCENES[i % SCENES.length];
+
+// ---------- project state (mirrors project.json) ----------
+const state = {
+  clips: [
+    { id: "c1", scene: 0, dur: 1.97, trim: [0, 1.97], muted: false, crop: 0.5, src: "landscape", name: "IMG_2388" },
+    { id: "c2", scene: 1, dur: 2.10, trim: [0, 2.10], muted: false, crop: 0.5, src: "landscape", name: "IMG_2390" },
+    { id: "c3", scene: 2, dur: 1.83, trim: [0, 1.83], muted: false, crop: 0.35, src: "landscape", name: "IMG_2391" },
+    { id: "c4", scene: 4, dur: 1.87, trim: [0, 1.87], muted: true, crop: 0.5, src: "portrait", name: "IMG_2396" },
+    { id: "c5", scene: 5, dur: 1.90, trim: [0, 1.90], muted: false, crop: 0.5, src: "landscape", name: "IMG_2401" },
+    { id: "c6", scene: 6, dur: 1.80, trim: [0, 1.80], muted: false, crop: 0.6, src: "landscape", name: "IMG_2409" },
+    { id: "c7", scene: 8, dur: 2.10, trim: [0.2, 2.10], muted: false, crop: 0.5, src: "portrait", name: "IMG_2416" },
+    { id: "c8", scene: 10, dur: 1.73, trim: [0, 1.73], muted: false, crop: 0.5, src: "landscape", name: "IMG_2419" },
+    { id: "c9", scene: 3, dur: 1.80, trim: [0, 1.80], muted: false, crop: 0.5, src: "landscape", name: "IMG_2420" },
+  ],
+  selected: "c3",
+  title: { on: true, text: "Indiana", sub: "Turkey Run State Park, IN", showFor: 1, fade: 0, pos: "center", size: 22 },
+  filter: { preset: "forest", b: 0, c: 0, s: 0 },
+  audio: "original",
+  aspect: "9:16",
+  fill: "crop",
+  transition: "none",
+  time: 0,
+  playing: false,
+};
+
+const $ = (id) => document.getElementById(id);
+const len = (c) => c.trim[1] - c.trim[0];
+const total = () => state.clips.reduce((sum, c) => sum + len(c), 0);
+const fmt = (t) => `${Math.floor(t / 60)}:${(t % 60).toFixed(1).padStart(4, "0")}`;
+
+const PRESETS = [
+  { id: "none", name: "原片", css: "" },
+  { id: "forest", name: "林间", css: "saturate(1.25) contrast(1.06) hue-rotate(-6deg)" },
+  { id: "river", name: "水色", css: "saturate(1.1) brightness(1.05) hue-rotate(8deg) contrast(1.04)" },
+  { id: "golden", name: "暖阳", css: "sepia(0.22) saturate(1.2) brightness(1.03)" },
+];
+function filterCss() {
+  const p = PRESETS.find((x) => x.id === state.filter.preset).css;
+  const { b, c, s } = state.filter;
+  return `${p} brightness(${1 + b / 100}) contrast(${1 + c / 100}) saturate(${1 + s / 100})`.trim();
+}
+
+// ---------- clip list ----------
+function renderClips() {
+  const list = $("clipList");
+  list.innerHTML = "";
+  $("clipEmpty").classList.toggle("hidden", state.clips.length > 0);
+  $("clipCount").textContent = state.clips.length ? `${state.clips.length}` : "";
+  state.clips.forEach((c, i) => {
+    const li = document.createElement("li");
+    li.className = "clip" + (c.id === state.selected ? " selected" : "") + (c.muted ? " is-muted" : "");
+    li.draggable = true;
+    li.dataset.id = c.id;
+    li.innerHTML = `
+      <span class="grip">⋮⋮</span>
+      <span class="thumb" style="background-image:${scene(c.scene)}"></span>
+      <span><div class="label">${i + 1}. ${c.name}</div><div class="sub">${len(c).toFixed(1)} 秒${c.src === "portrait" ? " · 竖拍" : ""}</div></span>
+      <span class="muted-flag">${c.muted ? "🔇" : ""}</span>`;
+    if (c.id === state.selected) {
+      const d = document.createElement("div");
+      d.className = "clip-detail";
+      const l = (c.trim[0] / c.dur) * 100, r = (c.trim[1] / c.dur) * 100;
+      d.innerHTML = `
+        <div class="row"><span>截取</span><span class="note">${c.trim[0].toFixed(1)}s – ${c.trim[1].toFixed(1)}s</span></div>
+        <div class="trim" style="background-image:${scene(c.scene)}">
+          <div class="shade" style="left:0;width:${l}%"></div>
+          <div class="shade" style="left:${r}%;right:0"></div>
+          <div class="handle" data-h="0" style="left:${l}%"></div>
+          <div class="handle" data-h="1" style="left:${r}%"></div>
+        </div>
+        <div class="row"><span>静音这一段</span><span class="switch ${c.muted ? "on" : ""}" data-mute></span></div>
+        <div class="row"><span class="note">裁切位置：在预览上拖动</span><button class="btn ghost" data-remove style="height:22px;padding:0 6px;color:#ff453a">移除</button></div>`;
+      li.appendChild(d);
+      wireTrim(d.querySelector(".trim"), c);
+      d.querySelector("[data-mute]").onclick = (e) => { e.stopPropagation(); c.muted = !c.muted; renderClips(); };
+      d.querySelector("[data-remove]").onclick = (e) => {
+        e.stopPropagation();
+        state.clips = state.clips.filter((x) => x !== c);
+        state.selected = state.clips[0]?.id ?? null;
+        renderAll();
+      };
+      d.addEventListener("click", (e) => e.stopPropagation());
+    }
+    li.onclick = () => { state.selected = c.id; seekToClip(c.id); renderClips(); };
+    li.ondragstart = (e) => { li.classList.add("dragging"); e.dataTransfer.setData("text/plain", c.id); };
+    li.ondragend = () => li.classList.remove("dragging");
+    li.ondragover = (e) => { e.preventDefault(); li.classList.add("drop-before"); };
+    li.ondragleave = () => li.classList.remove("drop-before");
+    li.ondrop = (e) => {
+      e.preventDefault();
+      const from = state.clips.findIndex((x) => x.id === e.dataTransfer.getData("text/plain"));
+      const [moved] = state.clips.splice(from, 1);
+      state.clips.splice(state.clips.findIndex((x) => x.id === c.id), 0, moved);
+      renderAll();
+    };
+    list.appendChild(li);
+  });
+}
+
+function wireTrim(el, c) {
+  el.querySelectorAll(".handle").forEach((h) => {
+    h.onpointerdown = (e) => {
+      e.preventDefault();
+      h.setPointerCapture(e.pointerId);
+      const rect = el.getBoundingClientRect();
+      h.onpointermove = (ev) => {
+        const t = Math.min(1, Math.max(0, (ev.clientX - rect.left) / rect.width)) * c.dur;
+        if (h.dataset.h === "0") c.trim[0] = Math.min(t, c.trim[1] - 0.5);
+        else c.trim[1] = Math.max(t, c.trim[0] + 0.5);
+        const l = (c.trim[0] / c.dur) * 100, r = (c.trim[1] / c.dur) * 100;
+        el.children[0].style.width = l + "%"; el.children[1].style.left = r + "%";
+        el.children[2].style.left = l + "%"; el.children[3].style.left = r + "%";
+        el.parentElement.querySelector(".row .note").textContent = `${c.trim[0].toFixed(1)}s – ${c.trim[1].toFixed(1)}s`;
+        updateMeta();
+      };
+      h.onpointerup = () => { h.onpointermove = null; renderClips(); };
+    };
+  });
+}
+
+// ---------- stage ----------
+function clipAt(t) {
+  let acc = 0;
+  for (const c of state.clips) {
+    if (t < acc + len(c) || c === state.clips.at(-1)) return { clip: c, offset: t - acc, start: acc };
+    acc += len(c);
+  }
+  return null;
+}
+function seekToClip(id) {
+  let acc = 0;
+  for (const c of state.clips) { if (c.id === id) break; acc += len(c); }
+  state.time = acc + 0.01;
+  renderStage();
+}
+
+function renderStage() {
+  const stage = $("stage"), media = $("media"), bg = $("mediaBg");
+  const empty = state.clips.length === 0;
+  $("stageEmpty").classList.toggle("hidden", !empty);
+  media.classList.toggle("hidden", empty);
+  stage.classList.toggle("aspect-wide", state.aspect === "16:9");
+  if (empty) { bg.classList.add("hidden"); $("titleOverlay").classList.add("hidden"); updateTransport(); return; }
+
+  const { clip } = clipAt(state.time);
+  // Source shape vs frame shape decides how much overflows and which way it drags.
+  const frame = state.aspect === "9:16" ? 9 / 16 : 16 / 9;
+  const src = clip.src === "landscape" ? 4 / 3 : 3 / 4;
+  media.style.backgroundImage = scene(clip.scene);
+  media.style.filter = filterCss();
+  bg.style.backgroundImage = scene(clip.scene);
+  bg.style.filter = filterCss() + " blur(24px) brightness(0.8)";
+  bg.classList.toggle("hidden", state.fill !== "blur");
+  media.style.inset = "";
+  if (state.fill === "crop") {
+    if (src > frame) { // wider than the frame: crop left/right
+      const w = (src / frame) * 100;
+      Object.assign(media.style, { top: "0", bottom: "0", width: w + "%", height: "", left: -(w - 100) * clip.crop + "%" });
+      $("cropHint").textContent = "左右拖动，调整保留的画面";
+    } else {
+      const h = (frame / src) * 100;
+      Object.assign(media.style, { left: "0", right: "0", width: "100%", height: h + "%", top: -(h - 100) * clip.crop + "%", bottom: "" });
+      $("cropHint").textContent = "上下拖动，调整保留的画面";
+    }
+    stage.classList.add("can-drag");
+  } else {
+    if (src > frame) { const h = (frame / src) * 100; Object.assign(media.style, { left: "0", width: "100%", height: h + "%", top: (100 - h) / 2 + "%", bottom: "" }); }
+    else { const w = (src / frame) * 100; Object.assign(media.style, { top: "0", height: "100%", width: w + "%", left: (100 - w) / 2 + "%", bottom: "" }); }
+    stage.classList.remove("can-drag");
+  }
+  $("cropHint").classList.toggle("hidden", state.fill !== "crop" || state.playing);
+
+  // Title over the first frames, as exported.
+  const t = state.title, over = $("titleOverlay");
+  const visible = t.on && state.time < t.showFor;
+  over.classList.toggle("hidden", !visible);
+  if (visible) {
+    const fadeStart = t.showFor - t.fade;
+    over.style.opacity = t.fade > 0 && state.time > fadeStart ? 1 - (state.time - fadeStart) / t.fade : 1;
+    over.style.alignContent = t.pos === "top" ? "start" : t.pos === "bottom" ? "end" : "center";
+    over.style.padding = t.pos === "center" ? "0 8%" : "18% 8%";
+    const scale = stage.clientHeight / 640;
+    $("tMain").textContent = t.text;
+    $("tMain").style.fontSize = t.size * scale + "px";
+    $("tSub").textContent = t.sub;
+    $("tSub").style.fontSize = t.size * 0.62 * scale + "px";
+  }
+  updateTransport();
+}
+
+// drag-to-crop
+(() => {
+  const stage = $("stage");
+  stage.onpointerdown = (e) => {
+    if (state.fill !== "crop" || !state.clips.length) return;
+    const { clip } = clipAt(state.time);
+    state.selected = clip.id; renderClips();
+    stage.setPointerCapture(e.pointerId);
+    const start = { x: e.clientX, y: e.clientY, crop: clip.crop };
+    const frame = state.aspect === "9:16" ? 9 / 16 : 16 / 9;
+    const src = clip.src === "landscape" ? 4 / 3 : 3 / 4;
+    const horizontal = src > frame;
+    const overflow = horizontal ? stage.clientWidth * (src / frame - 1) : stage.clientHeight * (frame / src - 1);
+    stage.onpointermove = (ev) => {
+      const d = horizontal ? ev.clientX - start.x : ev.clientY - start.y;
+      clip.crop = Math.min(1, Math.max(0, start.crop - d / overflow));
+      renderStage();
+    };
+    stage.onpointerup = () => { stage.onpointermove = null; };
+  };
+})();
+
+// ---------- transport ----------
+function updateTransport() {
+  const T = total();
+  $("timeLabel").textContent = `${fmt(Math.min(state.time, T))} / ${fmt(T)}`;
+  $("scrub").value = T ? (state.time / T) * 1000 : 0;
+  $("playIcon").innerHTML = state.playing
+    ? '<path d="M5 3.5v9M11 3.5v9" stroke-width="2.2"/>'
+    : '<path d="M5 3.5v9l7-4.5z" fill="currentColor" stroke="none"/>';
+}
+function renderTicks() {
+  const T = total(), ticks = $("ticks");
+  ticks.innerHTML = "";
+  let acc = 0;
+  state.clips.slice(0, -1).forEach((c) => { acc += len(c); const i = document.createElement("i"); i.style.left = (acc / T) * 100 + "%"; ticks.appendChild(i); });
+}
+let last = 0;
+function tick(now) {
+  if (state.playing) {
+    state.time += (now - last) / 1000;
+    if (state.time >= total()) { state.time = 0; }
+    renderStage();
+  }
+  last = now;
+  requestAnimationFrame(tick);
+}
+requestAnimationFrame(tick);
+$("playBtn").onclick = () => { if (!state.clips.length) return; state.playing = !state.playing; renderStage(); };
+$("scrub").oninput = (e) => { state.time = (e.target.value / 1000) * total(); renderStage(); };
+document.addEventListener("keydown", (e) => {
+  if (e.code === "Space" && !["INPUT", "TEXTAREA"].includes(document.activeElement.tagName)) { e.preventDefault(); $("playBtn").click(); }
+  if (e.key === "Escape") { closeSheet(); closeDialog(); }
+});
+
+function updateMeta() {
+  $("projMeta").textContent = state.clips.length ? `${state.clips.length} 段 · ${total().toFixed(1)} 秒` : "空工程";
+  renderTicks();
+  updateTransport();
+}
+function renderAll() { renderClips(); renderStage(); updateMeta(); }
+
+// ---------- inspector ----------
+function seg(id, onPick) {
+  $(id).querySelectorAll("button").forEach((b) => b.onclick = () => {
+    $(id).querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b));
+    onPick(b.dataset.v);
+  });
+}
+$("titleOn").onclick = (e) => { state.title.on = !state.title.on; e.target.classList.toggle("on", state.title.on); $("titleFields").style.opacity = state.title.on ? 1 : 0.4; state.time = 0; renderStage(); };
+$("titleText").oninput = (e) => { state.title.text = e.target.value; state.time = 0; renderStage(); };
+$("titleSub").oninput = (e) => { state.title.sub = e.target.value; state.time = 0; renderStage(); };
+$("showFor").oninput = (e) => { state.title.showFor = +e.target.value; $("showForVal").textContent = (+e.target.value).toFixed(1) + " 秒"; };
+$("titleSize").oninput = (e) => { state.title.size = +e.target.value; $("titleSizeVal").textContent = e.target.value; state.time = 0; renderStage(); };
+seg("titleFade", (v) => { state.title.fade = +v; state.time = 0; state.playing = true; });
+seg("titlePos", (v) => { state.title.pos = v; state.time = 0; renderStage(); });
+seg("audioMode", (v) => {
+  state.audio = v;
+  $("musicField").classList.toggle("hidden", v === "original");
+  $("musicVol").classList.toggle("hidden", v === "original");
+  $("origVol").classList.toggle("hidden", v === "music");
+  $("audioNote").textContent = v === "original" ? "每段自动拉齐响度，接缝处不爆音。" : v === "music" ? "配乐自动裁到视频长度，结尾淡出。" : "配乐为主，原声压低保留。";
+});
+seg("aspect", (v) => { state.aspect = v; renderStage(); });
+seg("fill", (v) => { state.fill = v; renderStage(); });
+seg("transition", (v) => { state.transition = v; });
+function renderPresets() {
+  const box = $("presets");
+  box.innerHTML = "";
+  PRESETS.forEach((p) => {
+    const b = document.createElement("button");
+    b.className = "preset" + (p.id === state.filter.preset ? " on" : "");
+    b.innerHTML = `<span class="sw" style="background-image:${scene(0)};filter:${p.css || "none"}"></span>${p.name}`;
+    b.onclick = () => { state.filter.preset = p.id; renderPresets(); renderStage(); };
+    box.appendChild(b);
+  });
+}
+[["fBright", "b"], ["fContrast", "c"], ["fSat", "s"]].forEach(([id, k]) => {
+  $(id).oninput = (e) => { state.filter[k] = +e.target.value; $(id + "Val").textContent = e.target.value > 0 ? "+" + e.target.value : e.target.value; renderStage(); };
+});
+
+// ---------- picker sheet ----------
+const DAYS = ["今天", "10月3日 周五", "9月28日 周日 · Turkey Run", "9月27日 周六 · Devil's Lake"];
+const library = [];
+let n = 0;
+DAYS.forEach((day, d) => {
+  const count = [6, 9, 14, 12][d];
+  for (let i = 0; i < count; i++) {
+    const kind = (n * 7) % 11 === 0 ? "video" : (n * 5) % 13 === 4 ? "photo" : "live";
+    library.push({ id: "p" + n, day, kind, scene: (n * 5 + d) % SCENES.length, dur: kind === "video" ? 4 + (n % 9) : 2 });
+    n++;
+  }
+});
+const pick = { filter: "live", chosen: [], reasons: {}, skipped: new Set() };
+
+function renderGrid() {
+  const box = $("gridScroll");
+  box.innerHTML = "";
+  DAYS.forEach((day) => {
+    const items = library.filter((x) => x.day === day && (pick.filter === "all" || x.kind === pick.filter || (pick.filter === "live" && x.kind === "live")));
+    if (!items.length) return;
+    const h = document.createElement("div"); h.className = "day"; h.textContent = day; box.appendChild(h);
+    const g = document.createElement("div"); g.className = "grid";
+    items.forEach((x) => {
+      const on = pick.chosen.includes(x.id);
+      const t = document.createElement("button");
+      t.className = "tile" + (on ? " on" : "") + (pick.skipped.has(x.id) ? " skipped" : "");
+      t.style.backgroundImage = scene(x.scene);
+      t.disabled = x.kind === "photo";
+      t.title = x.kind === "photo" ? "静态照片没有动态画面" : "";
+      if (x.kind === "photo") t.style.opacity = 0.5;
+      t.innerHTML = `
+        ${x.kind === "live" ? '<span class="badge"><svg class="icon" viewBox="0 0 16 16" style="width:12px;height:12px"><circle cx="8" cy="8" r="2"/><circle cx="8" cy="8" r="4.5"/><circle cx="8" cy="8" r="6.8" stroke-dasharray="1.5 1.6"/></svg>LIVE</span>' : ""}
+        ${x.kind === "video" ? `<span class="dur">0:${String(x.dur).padStart(2, "0")}</span>` : ""}
+        ${x.kind !== "photo" ? `<span class="check"></span>` : ""}
+        ${pick.reasons[x.id] ? `<span class="reason">${pick.reasons[x.id]}</span>` : ""}`;
+      t.onclick = () => {
+        if (on) pick.chosen = pick.chosen.filter((id) => id !== x.id); else pick.chosen.push(x.id);
+        pick.skipped.delete(x.id);
+        renderGrid();
+      };
+      g.appendChild(t);
+    });
+    box.appendChild(g);
+  });
+  const secs = pick.chosen.reduce((s, id) => s + library.find((x) => x.id === id).dur, 0);
+  $("pickSummary").textContent = pick.chosen.length ? `已选 ${pick.chosen.length} 项 · 约 ${secs.toFixed(0)} 秒` : "还没有选择 · 也可以用「AI 选片」先挑一轮";
+  $("pickAdd").disabled = !pick.chosen.length;
+  $("pickAdd").textContent = pick.chosen.length ? `添加 ${pick.chosen.length} 项` : "添加";
+}
+seg("kindFilter", (v) => { pick.filter = v; renderGrid(); });
+$("target").oninput = (e) => { $("targetVal").textContent = `目标 ${e.target.value} 秒 ≈ ${Math.round(e.target.value / 2)} 张`; };
+$("aiBtn").onclick = () => {
+  const want = Math.round($("target").value / 2);
+  const candidates = library.filter((x) => x.kind === "live");
+  const REASONS = ["开头 · 最有代表性的远景", "这一组最清晰", "水流动得最多", "换了个场景", "这一组最清晰", "画面有人物动作", "结尾 · 评分最高"];
+  pick.chosen = []; pick.reasons = {}; pick.skipped = new Set();
+  candidates.forEach((x, i) => {
+    if (pick.chosen.length < want && i % 3 !== 2) pick.chosen.push(x.id);
+    else if (i % 3 === 2) { pick.skipped.add(x.id); pick.reasons[x.id] = "和上一张几乎一样，已跳过"; }
+  });
+  pick.chosen.forEach((id, i) => {
+    pick.reasons[id] = i === 0 ? REASONS[0] : i === pick.chosen.length - 1 ? REASONS[6] : REASONS[1 + (i % 5)];
+  });
+  renderGrid();
+};
+function openSheet() { $("sheet").classList.add("open"); $("scrim").classList.remove("hidden"); state.playing = false; renderGrid(); }
+function closeSheet() { $("sheet").classList.remove("open"); $("scrim").classList.add("hidden"); }
+$("addBtn").onclick = openSheet;
+$("emptyAdd").onclick = openSheet;
+$("pickCancel").onclick = closeSheet;
+$("scrim").onclick = closeSheet;
+$("pickAdd").onclick = () => {
+  pick.chosen.forEach((id, i) => {
+    const x = library.find((y) => y.id === id);
+    state.clips.push({ id: "n" + id, scene: x.scene, dur: Math.min(x.dur, 6), trim: [0, Math.min(x.dur, 6)], muted: false, crop: 0.5, src: i % 4 === 3 ? "portrait" : "landscape", name: x.kind === "video" ? `视频 ${id.slice(1)}` : `IMG_${2500 + +id.slice(1)}` });
+  });
+  pick.chosen = []; pick.reasons = {}; pick.skipped = new Set();
+  state.selected = state.selected ?? state.clips[0]?.id;
+  if ($("projName").textContent === "未命名") $("projName").textContent = "未命名工程";
+  closeSheet(); state.time = 0; renderAll();
+};
+
+// ---------- export dialog ----------
+let exportTimer = null;
+function openDialog() {
+  if (!state.clips.length) return;
+  state.playing = false;
+  ["dlgForm", "dlgRun", "dlgDone"].forEach((id) => $(id).classList.toggle("hidden", id !== "dlgForm"));
+  $("dlg").classList.add("open"); $("dlgScrim").classList.remove("hidden");
+}
+function closeDialog() { clearInterval(exportTimer); $("dlg").classList.remove("open"); $("dlgScrim").classList.add("hidden"); }
+$("exportBtn").onclick = openDialog;
+$("dlgCancel").onclick = closeDialog;
+$("dlgStop").onclick = closeDialog;
+$("dlgClose").onclick = closeDialog;
+seg("exAspect", () => {}); seg("exRes", () => {});
+$("dlgGo").onclick = () => {
+  $("dlgForm").classList.add("hidden"); $("dlgRun").classList.remove("hidden");
+  let p = 0;
+  exportTimer = setInterval(() => {
+    p += 2.5;
+    $("dlgBar").style.width = p + "%";
+    $("dlgStep").textContent = p < 70 ? `合成画面… ${Math.round(p)}%` : p < 95 ? "混音、拉齐响度…" : "写入文件…";
+    if (p >= 100) { clearInterval(exportTimer); $("dlgRun").classList.add("hidden"); $("dlgDone").classList.remove("hidden"); }
+  }, 80);
+};
+
+// ---------- prototype controls ----------
+const media = matchMedia("(prefers-color-scheme: dark)");
+document.documentElement.dataset.theme = media.matches ? "dark" : "light";
+$("protoTheme").onclick = () => {
+  const dark = document.documentElement.dataset.theme !== "dark";
+  document.documentElement.dataset.theme = dark ? "dark" : "light";
+  $("protoTheme").textContent = dark ? "切换浅色" : "切换深色";
+};
+$("protoTheme").textContent = media.matches ? "切换浅色" : "切换深色";
+$("protoEmpty").onclick = () => {
+  state.clips = []; state.selected = null; state.time = 0; state.playing = false;
+  $("projName").textContent = "未命名"; renderAll();
+  setTimeout(openSheet, 250);
+};
+
+renderPresets();
+renderAll();
+window.addEventListener("resize", renderStage);
+</script>
+</body>
+</html>
