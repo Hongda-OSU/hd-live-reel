@@ -35,13 +35,20 @@ enum Catalog {
         "\(item.parentFolder?.name ?? "")/\(item.name ?? "")"
     }
 
+    /// The Live Photo video among a photo's sidecars, if any.
+    static func pairedVideo(of photo: ICCameraFile) -> ICCameraFile? {
+        (photo.sidecarFiles ?? [])
+            .compactMap { $0 as? ICCameraFile }
+            .first { $0.uti == "public.movie" || $0.name?.uppercased().hasSuffix(".MOV") == true }
+    }
+
     /// Builds picker items, newest first. Live Photo videos come from the
     /// photo's sidecar files; `.AAE` edit sidecars are ignored.
     static func items(from files: [ICCameraFile]) -> [MediaItem] {
         files.compactMap { file -> MediaItem? in
             switch file.uti {
             case "public.image":
-                let video = (file.sidecarFiles ?? []).first { $0.uti == "public.movie" || $0.name?.uppercased().hasSuffix(".MOV") == true }
+                let video = pairedVideo(of: file)
                 return MediaItem(
                     id: id(of: file),
                     kind: video == nil ? .photo : .livePhoto,

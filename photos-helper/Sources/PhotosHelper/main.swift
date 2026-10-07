@@ -54,9 +54,12 @@ func withSession(_ body: (CameraSession) -> Void) {
 let usage = """
 usage: photos-helper list-devices
        photos-helper list
+       photos-helper download <id>... --to <dir>
 """
 
-switch CommandLine.arguments.dropFirst().first {
+let args = Array(CommandLine.arguments.dropFirst())
+
+switch args.first {
 case "list-devices":
     let browser = DeviceBrowser()
     let cameras = browser.discover(timeout: 5)
@@ -65,6 +68,19 @@ case "list-devices":
 case "list":
     withSession { session in
         printJSON(Catalog.items(from: session.files))
+    }
+case "download":
+    var ids = Array(args.dropFirst())
+    guard let flag = ids.firstIndex(of: "--to"), flag + 1 < ids.count else {
+        fail(usage, code: 64)
+    }
+    let dir = URL(fileURLWithPath: ids[flag + 1], isDirectory: true)
+    ids.removeSubrange(flag...flag + 1)
+    guard !ids.isEmpty else {
+        fail(usage, code: 64)
+    }
+    withSession { session in
+        printJSON(Downloader.download(ids: ids, from: session.files, to: dir))
     }
 case "-h", "--help":
     print(usage)
