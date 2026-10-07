@@ -1,50 +1,144 @@
-import { useState } from "react";
-import reactLogo from "./assets/react.svg";
-import { invoke } from "@tauri-apps/api/core";
+import { useEffect, useMemo, useState } from "react";
+import { listIphoneMedia, makePreview, onPreviewProgress, type MediaItem, type Progress } from "./api";
 import "./App.css";
 
-function App() {
-  const [greetMsg, setGreetMsg] = useState("");
-  const [name, setName] = useState("");
+type Phone =
+  | { state: "loading" }
+  | { state: "error"; message: string }
+  | { state: "ready"; items: MediaItem[] };
 
-  async function greet() {
-    // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-    setGreetMsg(await invoke("greet", { name }));
+const dateFormat = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
+
+function progressLabel({ stage, done, total }: Progress): string {
+  switch (stage) {
+    case "downloading":
+      return `Copying ${total} from iPhone…`;
+    case "normalizing":
+      return `Preparing clip ${done + 1} of ${total}…`;
+    case "composing":
+      return "Building preview…";
+  }
+}
+
+function App() {
+  const [phone, setPhone] = useState<Phone>({ state: "loading" });
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState<Progress | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function loadPhone() {
+    setPhone({ state: "loading" });
+    try {
+      setPhone({ state: "ready", items: await listIphoneMedia() });
+    } catch (e) {
+      setPhone({ state: "error", message: String(e) });
+    }
+  }
+
+  useEffect(() => {
+    loadPhone();
+    const unlisten = onPreviewProgress(setProgress);
+    return () => {
+      unlisten.then((stop) => stop());
+    };
+  }, []);
+
+  // Still photos have no motion to stitch.
+  const usable = useMemo(
+    () => (phone.state === "ready" ? phone.items.filter((item) => item.kind !== "photo") : []),
+    [phone],
+  );
+
+  function toggle(id: string) {
+    setSelected((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  async function generate() {
+    // Default order is capture time, oldest first.
+    const ids = usable
+      .filter((item) => selected.has(item.id))
+      .sort((a, b) => (a.createdAt ?? "").localeCompare(b.createdAt ?? ""))
+      .map((item) => item.id);
+    setBusy(true);
+    setError(null);
+    try {
+      setPreviewUrl(await makePreview(ids));
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setBusy(false);
+      setProgress(null);
+    }
   }
 
   return (
-    <main className="container">
-      <h1>Welcome to Tauri + React</h1>
+    <div className="app">
+      <header className="toolbar">
+        <h1>HD Live Reel</h1>
+        <span className="count">
+          {selected.size > 0 ? `${selected.size} selected` : "Pick Live Photos to stitch"}
+        </span>
+        <button onClick={loadPhone} disabled={busy || phone.state === "loading"}>
+          Refresh
+        </button>
+        <button className="primary" onClick={generate} disabled={busy || selected.size === 0}>
+          {busy ? "Working…" : "Make Preview"}
+        </button>
+      </header>
 
-      <div className="row">
-        <a href="https://vite.dev" target="_blank">
-          <img src="/vite.svg" className="logo vite" alt="Vite logo" />
-        </a>
-        <a href="https://tauri.app" target="_blank">
-          <img src="/tauri.svg" className="logo tauri" alt="Tauri logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <p>Click on the Tauri, Vite, and React logos to learn more.</p>
+      <main className="layout">
+        <section className="picker" aria-label="iPhone media">
+          {phone.state === "loading" && <p className="notice">Reading iPhone…</p>}
+          {phone.state === "error" && (
+            <div className="notice">
+              <p>{phone.message}</p>
+              <p className="hint">Connect your iPhone with a cable, unlock it, then Refresh.</p>
+            </div>
+          )}
+          {phone.state === "ready" && (
+            <ul className="grid">
+              {usable.map((item) => (
+                <li key={item.id}>
+                  <label className={selected.has(item.id) ? "card selected" : "card"}>
+                    <input
+                      type="checkbox"
+                      checked={selected.has(item.id)}
+                      onChange={() => toggle(item.id)}
+                      disabled={busy}
+                    />
+                    <span className="badge">{item.kind === "livePhoto" ? "LIVE" : "VIDEO"}</span>
+                    <span className="name">{item.name}</span>
+                    <span className="date">
+                      {item.createdAt ? dateFormat.format(new Date(item.createdAt)) : "—"}
+                    </span>
+                  </label>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
 
-      <form
-        className="row"
-        onSubmit={(e) => {
-          e.preventDefault();
-          greet();
-        }}
-      >
-        <input
-          id="greet-input"
-          onChange={(e) => setName(e.currentTarget.value)}
-          placeholder="Enter a name..."
-        />
-        <button type="submit">Greet</button>
-      </form>
-      <p>{greetMsg}</p>
-    </main>
+        <aside className="preview" aria-label="Preview">
+          <div className="frame">
+            {previewUrl ? (
+              <video key={previewUrl} src={previewUrl} controls autoPlay />
+            ) : (
+              <p className="placeholder">Preview appears here</p>
+            )}
+          </div>
+          <p className="status" role="status">
+            {error ?? (progress ? progressLabel(progress) : busy ? "Starting…" : "")}
+          </p>
+        </aside>
+      </main>
+    </div>
   );
 }
 
