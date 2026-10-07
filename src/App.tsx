@@ -1,143 +1,241 @@
-import { useEffect, useMemo, useState } from "react";
-import { listIphoneMedia, makePreview, onPreviewProgress, type MediaItem, type Progress } from "./api";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
+import {
+  addIphoneClips,
+  fileUrl,
+  loadProject,
+  onClipsProgress,
+  renderPreview,
+  saveProject,
+  saveTitleImage,
+  type ClipsProgress,
+} from "./api";
+import { ClipList } from "./components/ClipList";
+import { ExportDialog } from "./components/ExportDialog";
+import { Inspector } from "./components/Inspector";
+import { PickerSheet } from "./components/PickerSheet";
+import { Stage } from "./components/Stage";
+import { clipLength, hasTitleText, reducer, renderKey, titleImageKey, totalLength } from "./project";
+import { renderTitlePng } from "./title";
+import { useLibrary } from "./useLibrary";
 import "./App.css";
 
-type Phone =
-  | { state: "loading" }
-  | { state: "error"; message: string }
-  | { state: "ready"; items: MediaItem[] };
+/** Quiet time after an edit before saving / re-rendering, in ms. */
+const SAVE_DELAY = 400;
+const TITLE_DELAY = 250;
+const PREVIEW_DELAY = 350;
 
-const dateFormat = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
-
-function progressLabel({ stage, done, total }: Progress): string {
-  switch (stage) {
-    case "downloading":
-      return `Copying ${total} from iPhone…`;
-    case "normalizing":
-      return `Preparing clip ${done + 1} of ${total}…`;
-    case "composing":
-      return "Building preview…";
-  }
+interface Preview {
+  url: string | null;
+  busy: boolean;
+  error: string | null;
 }
 
 function App() {
-  const [phone, setPhone] = useState<Phone>({ state: "loading" });
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [busy, setBusy] = useState(false);
-  const [progress, setProgress] = useState<Progress | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [project, dispatch] = useReducer(reducer, null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [adding, setAdding] = useState<ClipsProgress | "starting" | null>(null);
+  const [addError, setAddError] = useState<string | null>(null);
+  const [preview, setPreview] = useState<Preview>({ url: null, busy: false, error: null });
+  const [seekTo, setSeekTo] = useState<{ time: number; nonce: number } | null>(null);
+  const { library, thumbs, refresh, loadThumbs } = useLibrary();
 
-  async function loadPhone() {
-    setPhone({ state: "loading" });
-    try {
-      setPhone({ state: "ready", items: await listIphoneMedia() });
-    } catch (e) {
-      setPhone({ state: "error", message: String(e) });
-    }
-  }
-
+  // ---------- load + autosave ----------
+  /** Title fields the current `textImage` was rendered from. */
+  const [imageKey, setImageKey] = useState<string | null>(null);
   useEffect(() => {
-    loadPhone();
-    const unlisten = onPreviewProgress(setProgress);
-    return () => {
-      unlisten.then((stop) => stop());
-    };
+    loadProject()
+      .then((loaded) => {
+        dispatch({ type: "load", project: loaded });
+        setImageKey(titleImageKey(loaded.title));
+        setSelectedId(loaded.clips[0]?.id ?? null);
+        if (loaded.clips.length === 0) setPickerOpen(true);
+      })
+      .catch((e) => setLoadError(String(e)));
   }, []);
 
-  // Still photos have no motion to stitch.
-  const usable = useMemo(
-    () => (phone.state === "ready" ? phone.items.filter((item) => item.kind !== "photo") : []),
-    [phone],
+  const firstState = useRef(true);
+  useEffect(() => {
+    if (!project) return;
+    if (firstState.current) {
+      firstState.current = false; // just loaded; nothing to save
+      return;
+    }
+    const timer = setTimeout(() => {
+      saveProject(project)
+        .then(() => setSaveError(null))
+        .catch((e) => setSaveError(String(e)));
+    }, SAVE_DELAY);
+    return () => clearTimeout(timer);
+  }, [project]);
+
+  // ---------- title PNG ----------
+  const titleKey = project ? titleImageKey(project.title) : null;
+  useEffect(() => {
+    if (!project || titleKey === imageKey) return;
+    if (!hasTitleText(project.title)) {
+      setImageKey(titleKey);
+      return;
+    }
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      const path = await saveTitleImage(await renderTitlePng(project.title));
+      if (cancelled) return;
+      dispatch({ type: "updateTitle", patch: { textImage: path } });
+      setImageKey(titleKey);
+    }, TITLE_DELAY);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+    // Re-run only when the title's look changes.
+  }, [titleKey, imageKey]);
+
+  // ---------- preview ----------
+  const key = project ? renderKey(project) : null;
+  // Wait for the PNG so a text edit never renders with the old title.
+  const titleReady = titleKey !== null && titleKey === imageKey;
+  const latest = useRef(project);
+  latest.current = project;
+  const renderSeq = useRef(0);
+  useEffect(() => {
+    const current = latest.current;
+    if (!current || !titleReady) return;
+    if (current.clips.length === 0) {
+      setPreview({ url: null, busy: false, error: null });
+      return;
+    }
+    const seq = ++renderSeq.current;
+    const timer = setTimeout(async () => {
+      setPreview((p) => ({ ...p, busy: true }));
+      try {
+        const path = await renderPreview(latest.current!);
+        if (seq === renderSeq.current) setPreview({ url: fileUrl(path), busy: false, error: null });
+      } catch (e) {
+        if (seq === renderSeq.current) setPreview((p) => ({ ...p, busy: false, error: String(e) }));
+      }
+    }, PREVIEW_DELAY);
+    return () => clearTimeout(timer);
+  }, [key, titleReady]);
+
+  // ---------- thumbnails for the clip list ----------
+  const clipAssets = project?.clips.map((c) => c.assetId).filter((id): id is string => !!id) ?? [];
+  const clipAssetKey = clipAssets.join("|");
+  useEffect(() => {
+    if (clipAssets.length) loadThumbs(clipAssets);
+  }, [clipAssetKey, loadThumbs]);
+
+  // ---------- actions ----------
+  const addClips = useCallback(
+    async (ids: string[]) => {
+      setAdding("starting");
+      setAddError(null);
+      const unlisten = await onClipsProgress(setAdding);
+      try {
+        const clips = await addIphoneClips(ids);
+        dispatch({ type: "addClips", clips });
+        setSelectedId((current) => current ?? clips[0]?.id ?? null);
+        setPickerOpen(false);
+      } catch (e) {
+        setAddError(String(e));
+      } finally {
+        unlisten();
+        setAdding(null);
+      }
+    },
+    [],
   );
 
-  function toggle(id: string) {
-    setSelected((current) => {
-      const next = new Set(current);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+  function selectClip(id: string) {
+    if (!project) return;
+    setSelectedId(id);
+    const index = project.clips.findIndex((c) => c.id === id);
+    const start = project.clips.slice(0, index).reduce((sum, c) => sum + clipLength(c), 0);
+    setSeekTo({ time: start + 0.01, nonce: Date.now() });
   }
 
-  async function generate() {
-    // Default order is capture time, oldest first.
-    const ids = usable
-      .filter((item) => selected.has(item.id))
-      .sort((a, b) => (a.createdAt ?? "").localeCompare(b.createdAt ?? ""))
-      .map((item) => item.id);
-    setBusy(true);
-    setError(null);
-    try {
-      setPreviewUrl(await makePreview(ids));
-    } catch (e) {
-      setError(String(e));
-    } finally {
-      setBusy(false);
-      setProgress(null);
-    }
-  }
+  if (loadError) return <p className="fatal">无法打开工程：{loadError}</p>;
+  if (!project) return null;
 
+  const total = totalLength(project);
   return (
     <div className="app">
-      <header className="toolbar">
-        <h1>HD Live Reel</h1>
-        <span className="count">
-          {selected.size > 0 ? `${selected.size} selected` : "Pick Live Photos to stitch"}
-        </span>
-        <button onClick={loadPhone} disabled={busy || phone.state === "loading"}>
-          Refresh
-        </button>
-        <button className="primary" onClick={generate} disabled={busy || selected.size === 0}>
-          {busy ? "Working…" : "Make Preview"}
-        </button>
+      <header className="toolbar" data-tauri-drag-region>
+        <div className="left" data-tauri-drag-region>
+          <button className="btn" onClick={() => setPickerOpen(true)}>
+            <svg className="icon" viewBox="0 0 16 16">
+              <path d="M8 3v10M3 8h10" />
+            </svg>
+            添加照片
+          </button>
+        </div>
+        <div className="center" data-tauri-drag-region>
+          <input
+            className="name"
+            value={project.name}
+            placeholder="未命名"
+            aria-label="工程名称"
+            onChange={(e) => dispatch({ type: "rename", name: e.target.value })}
+          />
+          <div className="meta" data-tauri-drag-region>
+            {saveError
+              ? `保存失败：${saveError}`
+              : project.clips.length
+                ? `${project.clips.length} 段 · ${total.toFixed(1)} 秒`
+                : "空工程"}
+          </div>
+        </div>
+        <div className="right" data-tauri-drag-region>
+          <button className="btn primary" disabled={project.clips.length === 0} onClick={() => setExportOpen(true)}>
+            <svg className="icon" viewBox="0 0 16 16">
+              <path d="M8 10V2.5M5 5.5 8 2.5l3 3M3 9.5v3.5h10V9.5" />
+            </svg>
+            导出
+          </button>
+        </div>
       </header>
 
-      <main className="layout">
-        <section className="picker" aria-label="iPhone media">
-          {phone.state === "loading" && <p className="notice">Reading iPhone…</p>}
-          {phone.state === "error" && (
-            <div className="notice">
-              <p>{phone.message}</p>
-              <p className="hint">Connect your iPhone with a cable, unlock it, then Refresh.</p>
-            </div>
-          )}
-          {phone.state === "ready" && (
-            <ul className="grid">
-              {usable.map((item) => (
-                <li key={item.id}>
-                  <label className={selected.has(item.id) ? "card selected" : "card"}>
-                    <input
-                      type="checkbox"
-                      checked={selected.has(item.id)}
-                      onChange={() => toggle(item.id)}
-                      disabled={busy}
-                    />
-                    <span className="badge">{item.kind === "livePhoto" ? "LIVE" : "VIDEO"}</span>
-                    <span className="name">{item.name}</span>
-                    <span className="date">
-                      {item.createdAt ? dateFormat.format(new Date(item.createdAt)) : "—"}
-                    </span>
-                  </label>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-
-        <aside className="preview" aria-label="Preview">
-          <div className="frame">
-            {previewUrl ? (
-              <video key={previewUrl} src={previewUrl} controls autoPlay />
-            ) : (
-              <p className="placeholder">Preview appears here</p>
-            )}
+      <main className="body">
+        <aside className="sidebar">
+          <div className="section-title">
+            <span>片段</span>
+            <span>{project.clips.length || ""}</span>
           </div>
-          <p className="status" role="status">
-            {error ?? (progress ? progressLabel(progress) : busy ? "Starting…" : "")}
-          </p>
+          <ClipList
+            clips={project.clips}
+            selectedId={selectedId}
+            thumbs={thumbs}
+            onSelect={selectClip}
+            dispatch={dispatch}
+          />
         </aside>
+        <Stage
+          src={preview.url}
+          lengths={project.clips.map(clipLength)}
+          seekTo={seekTo}
+          busy={preview.busy}
+          error={preview.error}
+          empty={project.clips.length === 0}
+          onAdd={() => setPickerOpen(true)}
+        />
+        <Inspector title={project.title} dispatch={dispatch} />
       </main>
+
+      <PickerSheet
+        open={pickerOpen}
+        library={library}
+        thumbs={thumbs}
+        adding={adding}
+        error={addError}
+        onRefresh={refresh}
+        onLoadThumbs={loadThumbs}
+        onAdd={addClips}
+        onClose={() => setPickerOpen(false)}
+      />
+      <ExportDialog open={exportOpen} project={project} onClose={() => setExportOpen(false)} />
     </div>
   );
 }

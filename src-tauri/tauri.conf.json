@@ -13,10 +13,12 @@
     "windows": [
       {
         "title": "HD Live Reel",
-        "width": 1100,
-        "height": 800,
-        "minWidth": 720,
-        "minHeight": 560
+        "width": 1280,
+        "height": 840,
+        "minWidth": 960,
+        "minHeight": 640,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true
       }
     ],
     "security": {

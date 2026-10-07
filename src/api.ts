@@ -1,14 +1,11 @@
-// Typed wrappers around the Rust commands in src-tauri/src/lib.rs.
+// Types mirroring the Rust structs, and typed wrappers around the commands
+// in src-tauri/src/lib.rs.
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
-export type MediaKind = "photo" | "video" | "livePhoto";
+// ---------- iPhone ----------
 
-export interface FileRef {
-  id: string;
-  name: string;
-  size: number;
-}
+export type MediaKind = "photo" | "video" | "livePhoto";
 
 export interface MediaItem {
   /** "<device folder>/<file name>" */
@@ -18,27 +15,85 @@ export interface MediaItem {
   size: number;
   /** ISO 8601, UTC */
   createdAt?: string | null;
-  /** The paired video of a Live Photo. */
-  video?: FileRef | null;
+  video?: { id: string; name: string; size: number } | null;
 }
 
-export interface Progress {
-  stage: "downloading" | "normalizing" | "composing";
+export interface Thumbnail {
+  id: string;
+  path: string | null;
+  error: string | null;
+}
+
+// ---------- project.json ----------
+
+export interface Clip {
+  id: string;
+  source: "library" | "iphone" | "file";
+  kind: "livePhoto" | "video";
+  assetId?: string | null;
+  stillPath?: string | null;
+  videoPath: string;
+  normalizedPath?: string | null;
+  takenAt?: string | null;
+  duration: number;
+  trimStart: number;
+  trimEnd: number;
+  muted: boolean;
+  cropOffset: number;
+  aiScore?: number | null;
+  aiReason?: string | null;
+}
+
+export type TitlePosition = "top" | "center" | "bottom";
+
+export interface Title {
+  text: string;
+  subtitle: string;
+  font: string;
+  /** Pixels at 1080 wide. */
+  fontSize: number;
+  color: string;
+  position: TitlePosition;
+  showFor: number;
+  fadeOut: number;
+  textImage?: string | null;
+}
+
+export interface Project {
+  version: number;
+  name: string;
+  clips: Clip[];
+  title: Title;
+  filter: { preset: "none" | "forest" | "river" | "golden"; brightness: number; contrast: number; saturation: number };
+  audio: { mode: "original" | "music" | "mix"; musicPath?: string | null; musicVolume: number; originalVolume: number };
+  transition: { type: "none" | "fade"; duration: number };
+  selection: { mode: "manual" | "ai"; targetSeconds: number };
+  output: { aspect: "9:16" | "16:9"; fill: "crop" | "black" | "blur"; height: number };
+}
+
+export interface ClipsProgress {
+  stage: "downloading" | "normalizing";
   done: number;
   total: number;
 }
 
-export function listIphoneMedia(): Promise<MediaItem[]> {
-  return invoke("list_iphone_media");
+// ---------- commands ----------
+
+export const loadProject = () => invoke<Project>("load_project");
+export const saveProject = (project: Project) => invoke<void>("save_project", { project });
+
+export const listIphoneMedia = () => invoke<MediaItem[]>("list_iphone_media");
+export const iphoneThumbnails = (ids: string[]) => invoke<Thumbnail[]>("iphone_thumbnails", { ids });
+export const addIphoneClips = (ids: string[]) => invoke<Clip[]>("add_iphone_clips", { ids });
+
+export const saveTitleImage = (png: Uint8Array) =>
+  invoke<string>("save_title_image", { png: Array.from(png) });
+export const renderPreview = (project: Project) => invoke<string>("render_preview", { project });
+export const exportVideo = (project: Project) => invoke<string>("export_video", { project });
+
+export function onClipsProgress(handler: (progress: ClipsProgress) => void): Promise<UnlistenFn> {
+  return listen<ClipsProgress>("clips-progress", (event) => handler(event.payload));
 }
 
-/** Resolves to a URL the <video> element can play. */
-export async function makePreview(ids: string[]): Promise<string> {
-  const path = await invoke<string>("make_preview", { ids });
-  // The file is rewritten in place; bust the webview cache.
-  return `${convertFileSrc(path)}?t=${Date.now()}`;
-}
-
-export function onPreviewProgress(handler: (progress: Progress) => void): Promise<UnlistenFn> {
-  return listen<Progress>("preview-progress", (event) => handler(event.payload));
-}
+/** A local file as a URL the webview can load. */
+export const fileUrl = (path: string) => convertFileSrc(path);
