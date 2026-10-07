@@ -1,0 +1,43 @@
+# macOS
+.DS_Store
+
+# Editors
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Node / frontend
+node_modules/
+dist/
+*.log
+*.tsbuildinfo
+
+# Rust / Tauri
+src-tauri/target/
+src-tauri/gen/schemas/
+
+# Swift helper
+photos-helper/.build/
+photos-helper/.swiftpm/
+xcuserdata/
+
+# FFmpeg sidecar binaries (large; fetched locally, not committed)
+src-tauri/binaries/
+
+# Personal media: Live Photos carry location metadata
+*.heic
+*.HEIC
+*.mov
+*.MOV
+*.mp4
+*.MP4
+*.jpg
+*.JPG
+
+# Claude Code local settings
+.claude/settings.local.json
