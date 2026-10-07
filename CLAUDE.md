@@ -21,8 +21,8 @@ Personal macOS desktop app that stitches iPhone Live Photos into one MP4 with or
 | Rust tests | `cargo test --manifest-path src-tauri/Cargo.toml` |
 | Baseline vs compose.py (personal media) | `HD_LIVE_REEL_SAMPLES=<dir> cargo test --manifest-path src-tauri/Cargo.toml --test baseline -- --ignored` |
 | Rust format + lint | `cargo fmt --manifest-path src-tauri/Cargo.toml && cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets` |
-| Build Swift helper | `swift build --package-path photos-helper` |
-| Run Swift helper | `"$(swift build --package-path photos-helper --show-bin-path)/photos-helper" list` |
+| Build Swift helper into `binaries/` | `pnpm helper` (also run by `pnpm tauri dev`) |
+| Run Swift helper | `./binaries/photos-helper-aarch64-apple-darwin list` |
 
 - Package manager: **pnpm** (not npm, not yarn). Frontend is React + TypeScript (Vite).
 - `photos-helper` needs a USB-connected, unlocked iPhone for `list` / `download`.

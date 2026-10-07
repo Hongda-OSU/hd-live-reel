@@ -18,7 +18,7 @@ git clone https://github.com/Hongda-OSU/hd-live-reel.git
 cd hd-live-reel
 pnpm install
 ./scripts/fetch-ffmpeg.sh
-swift build --package-path photos-helper
+pnpm helper
 ~~~
 
 ## Usage
