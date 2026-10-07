@@ -1,10 +1,7 @@
 use std::ffi::OsStr;
 use std::fmt;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::{Command, Output};
-
-/// macOS on Apple silicon only; matches the names `scripts/fetch-ffmpeg.sh` writes.
-const TARGET_TRIPLE: &str = "aarch64-apple-darwin";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Tool {
@@ -20,19 +17,8 @@ impl Tool {
         }
     }
 
-    /// Tauri copies sidecars next to the app executable, both in dev and in
-    /// the bundle. Test binaries live one level deeper (`target/*/deps`), so
-    /// fall back to the fetched binaries in the repo.
     pub fn path(self) -> PathBuf {
-        let beside_exe = std::env::current_exe()
-            .ok()
-            .and_then(|exe| exe.parent().map(|dir| dir.join(self.name())))
-            .filter(|path| path.is_file());
-        beside_exe.unwrap_or_else(|| {
-            Path::new(env!("CARGO_MANIFEST_DIR"))
-                .join("../binaries")
-                .join(format!("{}-{}", self.name(), TARGET_TRIPLE))
-        })
+        crate::sidecar::path(self.name())
     }
 
     /// Runs the tool to completion; a non-zero exit becomes `Error::Failed`.
@@ -83,15 +69,6 @@ fn tail(text: &str, lines: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn falls_back_to_repo_binaries_under_test() {
-        let path = Tool::Ffprobe.path();
-        assert!(
-            path.ends_with("binaries/ffprobe-aarch64-apple-darwin"),
-            "{path:?}"
-        );
-    }
 
     #[test]
     fn runs_the_sidecar() {
