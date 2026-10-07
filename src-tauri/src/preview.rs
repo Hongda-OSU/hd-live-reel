@@ -78,7 +78,7 @@ pub fn make_preview(
     });
     let out = cache.join("preview.mp4");
     let composition = Composition {
-        clips: normalized,
+        clips: normalized.into_iter().map(Into::into).collect(),
         title: None,
     };
     ffmpeg::compose(&composition, Quality::Preview, &out).map_err(|e| e.to_string())?;

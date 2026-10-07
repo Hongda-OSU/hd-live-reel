@@ -8,7 +8,9 @@
 
 use std::path::{Path, PathBuf};
 
-use hd_live_reel_lib::ffmpeg::{compose, loudness, normalize, probe, Composition, Quality, Title};
+use hd_live_reel_lib::ffmpeg::{
+    compose, loudness, normalize, probe, Composition, Quality, Segment, Title,
+};
 
 const BASELINE: &str = "devils-lake-baseline.mp4";
 
@@ -37,14 +39,14 @@ fn matches_compose_py_baseline() {
         .collect();
     sources.sort();
 
-    let clips: Vec<PathBuf> = sources
+    let clips: Vec<Segment> = sources
         .iter()
         .map(|(_, src)| {
             let dst = work
                 .join(src.file_stem().unwrap())
                 .with_extension("norm.mov");
             normalize(src, &dst, 0.5).unwrap();
-            dst
+            dst.into()
         })
         .collect();
     let title = std::env::var("HD_LIVE_REEL_TITLE").ok().map(|image| Title {

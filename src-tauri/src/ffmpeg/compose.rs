@@ -3,7 +3,7 @@
 
 use std::path::{Path, PathBuf};
 
-use super::normalize::FPS;
+use super::normalize::{EDGE_FADE, FPS};
 use super::{Error, Tool};
 
 /// Ceiling for the final limiter (about -1 dBFS).
@@ -27,10 +27,29 @@ pub enum Quality {
     Export,
 }
 
+/// One normalized clip and how much of it to use.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Segment {
+    pub path: PathBuf,
+    /// Start and end, in seconds into the clip; `None` keeps all of it.
+    pub trim: Option<(f64, f64)>,
+    pub muted: bool,
+}
+
+impl From<PathBuf> for Segment {
+    fn from(path: PathBuf) -> Self {
+        Self {
+            path,
+            trim: None,
+            muted: false,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Composition {
     /// Normalized clips in playback order.
-    pub clips: Vec<PathBuf>,
+    pub clips: Vec<Segment>,
     pub title: Option<Title>,
 }
 
@@ -45,7 +64,7 @@ pub fn compose(composition: &Composition, quality: Quality, out: &Path) -> Resul
 fn args(composition: &Composition, quality: Quality, out: &Path) -> Vec<String> {
     let mut args: Vec<String> = vec!["-y".into(), "-v".into(), "error".into()];
     for clip in &composition.clips {
-        args.extend(["-i".into(), clip.to_string_lossy().into_owned()]);
+        args.extend(["-i".into(), clip.path.to_string_lossy().into_owned()]);
     }
     if let Some(title) = &composition.title {
         // Loop the still for exactly `show_for` so a fade has frames to work on.
@@ -69,8 +88,13 @@ fn args(composition: &Composition, quality: Quality, out: &Path) -> Vec<String> 
 
 fn filter_graph(composition: &Composition, quality: Quality) -> String {
     let n = composition.clips.len();
-    let inputs: String = (0..n).map(|i| format!("[{i}:v][{i}:a]")).collect();
-    let mut graph = format!("{inputs}concat=n={n}:v=1:a=1[joined][a0];");
+    let mut graph = String::new();
+    let mut inputs = String::new();
+    for (i, segment) in composition.clips.iter().enumerate() {
+        let (video, audio) = segment_filters(i, segment, &mut graph);
+        inputs.push_str(&format!("[{video}][{audio}]"));
+    }
+    graph.push_str(&format!("{inputs}concat=n={n}:v=1:a=1[joined][a0];"));
 
     let mut video = "joined".to_string();
     if let Some(title) = &composition.title {
@@ -95,6 +119,39 @@ fn filter_graph(composition: &Composition, quality: Quality) -> String {
     }
     graph.push_str(&format!("[a0]alimiter=limit={LIMIT}[a]"));
     graph
+}
+
+/// Adds trim / mute chains for input `i` to `graph` and returns the labels
+/// to feed into concat. Untouched clips go in as they are.
+fn segment_filters(i: usize, segment: &Segment, graph: &mut String) -> (String, String) {
+    if segment.trim.is_none() && !segment.muted {
+        return (format!("{i}:v"), format!("{i}:a"));
+    }
+    let mut video = format!("{i}:v");
+    let mut audio_chain = Vec::new();
+    if let Some((start, end)) = segment.trim {
+        // Snap to whole frames so audio and video cut at the same instant.
+        let (start, end) = (snap(start), snap(end));
+        graph.push_str(&format!(
+            "[{i}:v]trim=start={start}:end={end},setpts=PTS-STARTPTS[s{i}v];"
+        ));
+        video = format!("s{i}v");
+        // Trimming cuts off the click-guard fades normalize added; redo them.
+        audio_chain.push(format!(
+            "atrim=start={start}:end={end},asetpts=PTS-STARTPTS,\
+             afade=t=in:d={EDGE_FADE},afade=t=out:st={:.4}:d={EDGE_FADE}",
+            end - start - EDGE_FADE
+        ));
+    }
+    if segment.muted {
+        audio_chain.push("volume=0".into());
+    }
+    graph.push_str(&format!("[{i}:a]{}[s{i}a];", audio_chain.join(",")));
+    (video, format!("s{i}a"))
+}
+
+fn snap(seconds: f64) -> f64 {
+    (seconds * FPS as f64).round() / FPS as f64
 }
 
 fn encoder_args(quality: Quality) -> Vec<String> {
@@ -137,7 +194,7 @@ mod tests {
 
     fn composition(title: Option<Title>) -> Composition {
         Composition {
-            clips: vec!["a.mov".into(), "b.mov".into()],
+            clips: vec![PathBuf::from("a.mov").into(), PathBuf::from("b.mov").into()],
             title,
         }
     }
@@ -186,6 +243,35 @@ mod tests {
     }
 
     #[test]
+    fn trims_and_mutes_only_the_segments_that_ask() {
+        let composition = Composition {
+            clips: vec![
+                Segment {
+                    path: "a.mov".into(),
+                    trim: Some((0.51, 1.5)),
+                    muted: false,
+                },
+                PathBuf::from("b.mov").into(),
+                Segment {
+                    path: "c.mov".into(),
+                    trim: None,
+                    muted: true,
+                },
+            ],
+            title: None,
+        };
+        assert_eq!(
+            filter_graph(&composition, Quality::Export),
+            "[0:v]trim=start=0.5:end=1.5,setpts=PTS-STARTPTS[s0v];\
+             [0:a]atrim=start=0.5:end=1.5,asetpts=PTS-STARTPTS,\
+             afade=t=in:d=0.03,afade=t=out:st=0.9700:d=0.03[s0a];\
+             [2:a]volume=0[s2a];\
+             [s0v][s0a][1:v][1:a][2:v][s2a]concat=n=3:v=1:a=1[joined][a0];\
+             [joined]null[v];[a0]alimiter=limit=0.89[a]"
+        );
+    }
+
+    #[test]
     fn preview_shares_the_graph_and_only_scales_down() {
         let export = filter_graph(&composition(Some(title(0.0))), Quality::Export);
         let preview = filter_graph(&composition(Some(title(0.0))), Quality::Preview);
@@ -221,6 +307,87 @@ mod tests {
             })
             .map(|value| value.parse().unwrap_or(f64::INFINITY))
             .collect()
+    }
+
+    /// Integrated loudness of `path` between `from` and `to` seconds.
+    fn loudness_between(path: &Path, from: f64, to: f64) -> Option<f64> {
+        let output = Tool::Ffmpeg
+            .run([
+                "-hide_banner".to_string(),
+                "-i".into(),
+                path.to_string_lossy().into_owned(),
+                "-af".into(),
+                format!("atrim={from}:{to},ebur128=framelog=quiet"),
+                "-f".into(),
+                "null".into(),
+                "-".into(),
+            ])
+            .unwrap();
+        String::from_utf8_lossy(&output.stderr)
+            .lines()
+            .rev()
+            .find_map(|l| l.trim().strip_prefix("I:"))
+            .and_then(|rest| rest.split_whitespace().next()?.parse().ok())
+            .filter(|lufs: &f64| lufs.is_finite())
+    }
+
+    #[test]
+    fn trims_and_mutes_generated_clips() {
+        let dir = std::env::temp_dir().join(format!("hd-live-reel-trim-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut clips = Vec::new();
+        for i in 0..2 {
+            let src = dir.join(format!("src{i}.mov"));
+            Tool::Ffmpeg
+                .run([
+                    "-y",
+                    "-v",
+                    "error",
+                    "-f",
+                    "lavfi",
+                    "-i",
+                    "testsrc2=size=640x480:rate=30:duration=2",
+                    "-f",
+                    "lavfi",
+                    "-i",
+                    "sine=duration=2",
+                    "-c:v",
+                    "libx264",
+                    "-c:a",
+                    "pcm_s16le",
+                    src.to_str().unwrap(),
+                ])
+                .unwrap();
+            let norm = dir.join(format!("norm{i}.mov"));
+            normalize(&src, &norm, 0.5).unwrap();
+            clips.push(norm);
+        }
+        let out = dir.join("out.mp4");
+        let composition = Composition {
+            clips: vec![
+                Segment {
+                    path: clips[0].clone(),
+                    trim: Some((0.5, 1.5)),
+                    muted: false,
+                },
+                Segment {
+                    path: clips[1].clone(),
+                    trim: None,
+                    muted: true,
+                },
+            ],
+            title: None,
+        };
+        compose(&composition, Quality::Preview, &out).unwrap();
+        let info = crate::ffmpeg::probe(&out).unwrap();
+        let first = loudness_between(&out, 0.1, 0.9);
+        let second = loudness_between(&out, 1.2, 2.8);
+        std::fs::remove_dir_all(&dir).unwrap();
+
+        assert!((info.duration - 3.0).abs() < 0.05, "{}", info.duration);
+        assert!(first.is_some_and(|lufs| lufs > -40.0), "{first:?}");
+        // ebur128 reports silence as its gating floor, -70 LUFS.
+        assert!(second.is_none_or(|lufs| lufs <= -70.0), "muted: {second:?}");
     }
 
     #[test]
@@ -273,6 +440,7 @@ mod tests {
         let plain = dir.join("plain.mp4");
         let titled = dir.join("titled.mp4");
         let preview = dir.join("preview.mp4");
+        let clips: Vec<Segment> = clips.into_iter().map(Segment::from).collect();
         let without = Composition {
             clips: clips.clone(),
             title: None,
