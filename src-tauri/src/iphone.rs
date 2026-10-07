@@ -88,18 +88,46 @@ pub fn download(ids: &[String], dir: &Path) -> Result<Vec<Downloaded>, Error> {
 }
 
 /// Writes thumbnails (longest side `max_pixels`) to `<dir>/<id>.jpg`.
-/// Ones already on disk are reused, so repeat calls are cheap.
+/// Ones already on disk are returned without asking the phone, so this
+/// works for cached items even when no iPhone is connected.
 pub fn thumbnails(ids: &[String], dir: &Path, max_pixels: u32) -> Result<Vec<Thumbnail>, Error> {
-    let size = max_pixels.to_string();
-    let mut args: Vec<&OsStr> = vec!["thumbnails".as_ref()];
-    args.extend(ids.iter().map(OsStr::new));
-    args.extend([
-        "--to".as_ref(),
-        dir.as_os_str(),
-        "--size".as_ref(),
-        size.as_ref(),
-    ]);
-    run(args)
+    let cached = |id: &String| {
+        let path = dir.join(format!("{id}.jpg"));
+        path.is_file().then_some(path)
+    };
+    let missing: Vec<&String> = ids.iter().filter(|id| cached(id).is_none()).collect();
+    let mut fetched: Vec<Thumbnail> = Vec::new();
+    if !missing.is_empty() {
+        let size = max_pixels.to_string();
+        let mut args: Vec<&OsStr> = vec!["thumbnails".as_ref()];
+        args.extend(missing.iter().map(OsStr::new));
+        args.extend([
+            "--to".as_ref(),
+            dir.as_os_str(),
+            "--size".as_ref(),
+            size.as_ref(),
+        ]);
+        fetched = run(args)?;
+    }
+    Ok(ids
+        .iter()
+        .map(|id| match cached(id) {
+            Some(path) => Thumbnail {
+                id: id.clone(),
+                path: Some(path),
+                error: None,
+            },
+            None => fetched
+                .iter()
+                .find(|t| &t.id == id)
+                .cloned()
+                .unwrap_or_else(|| Thumbnail {
+                    id: id.clone(),
+                    path: None,
+                    error: Some("no thumbnail".into()),
+                }),
+        })
+        .collect())
 }
 
 fn run<T, I, S>(args: I) -> Result<T, Error>
@@ -167,6 +195,20 @@ mod tests {
             Some(Path::new("/c/f/a.MOV"))
         );
         assert_eq!(results[1].error.as_deref(), Some("not found on device"));
+    }
+
+    #[test]
+    fn cached_thumbnails_need_no_phone() {
+        let dir = std::env::temp_dir().join(format!("hd-live-reel-thumbs-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("f")).unwrap();
+        std::fs::write(dir.join("f/a.HEIC.jpg"), b"jpg").unwrap();
+        let result = thumbnails(&["f/a.HEIC".into()], &dir, 320);
+        std::fs::remove_dir_all(&dir).unwrap();
+        let thumbs = result.unwrap();
+        assert_eq!(
+            thumbs[0].path.as_deref(),
+            Some(dir.join("f/a.HEIC.jpg").as_path())
+        );
     }
 
     #[test]
