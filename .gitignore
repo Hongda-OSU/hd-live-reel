@@ -27,7 +27,7 @@ photos-helper/.swiftpm/
 xcuserdata/
 
 # FFmpeg sidecar binaries (large; fetched locally, not committed)
-src-tauri/binaries/
+/binaries/
 
 # Personal media: Live Photos carry location metadata
 *.heic

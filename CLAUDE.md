@@ -7,7 +7,7 @@ Personal macOS desktop app that stitches iPhone Live Photos into one MP4 with or
 - Shell: Tauri 2, TypeScript frontend (`src/`)
 - Core: Rust (`src-tauri/`) — project JSON, FFmpeg command building, job queue
 - Photo access: Swift CLI (`photos-helper/`) — ImageCaptureCore (iPhone over USB), PhotoKit; prints JSON, called by Rust
-- Video: FFmpeg + ffprobe as Tauri sidecars (`src-tauri/binaries/`), built with libzimg
+- Video: FFmpeg + ffprobe as Tauri sidecars (`binaries/`, fetched by `scripts/fetch-ffmpeg.sh`), built with libzimg
 - macOS only, all processing local; no cloud, login or database
 
 ## Commands
