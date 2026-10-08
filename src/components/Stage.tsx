@@ -229,10 +229,10 @@ export function Stage(props: Props) {
     else togglePlay();
   }
 
-  // Keep the playhead where it was when a new preview replaces the old one.
-  // A removed <video> fires no pause event, so this still holds what the
-  // old preview was doing when the new one loads.
-  const playback = useRef({ time: 0, playing: false });
+  // A new preview starts from the top, playing if the old one was. A
+  // removed <video> fires no pause event, so this still holds whether the
+  // old preview was playing when the new one loads.
+  const wasPlaying = useRef(false);
 
   useEffect(() => {
     if (seekTo && video.current) video.current.currentTime = seekTo.time;
@@ -277,20 +277,17 @@ export function Stage(props: Props) {
               onLoadedMetadata={(e) => {
                 const el = e.currentTarget;
                 setDuration(el.duration);
-                el.currentTime = Math.min(playback.current.time, el.duration);
-                if (playback.current.playing) el.play().catch(() => setPlaying(false));
+                setTime(0);
+                if (wasPlaying.current) el.play().catch(() => setPlaying(false));
                 else setPlaying(false);
               }}
-              onTimeUpdate={(e) => {
-                playback.current.time = e.currentTarget.currentTime;
-                setTime(e.currentTarget.currentTime);
-              }}
+              onTimeUpdate={(e) => setTime(e.currentTarget.currentTime)}
               onPlay={() => {
-                playback.current.playing = true;
+                wasPlaying.current = true;
                 setPlaying(true);
               }}
               onPause={() => {
-                playback.current.playing = false;
+                wasPlaying.current = false;
                 setPlaying(false);
               }}
               {...stylex.props(styles.video)}
