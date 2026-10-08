@@ -65,12 +65,22 @@ export interface Title {
   textImage?: string | null;
 }
 
+export interface Filter {
+  preset: "none" | "forest" | "river" | "golden";
+  /** Added to luma; 0 leaves it alone. */
+  brightness: number;
+  /** 1 leaves it alone. */
+  contrast: number;
+  /** 1 leaves it alone. */
+  saturation: number;
+}
+
 export interface Project {
   version: number;
   name: string;
   clips: Clip[];
   title: Title;
-  filter: { preset: "none" | "forest" | "river" | "golden"; brightness: number; contrast: number; saturation: number };
+  filter: Filter;
   audio: { mode: "original" | "music" | "mix"; musicPath?: string | null; musicVolume: number; originalVolume: number };
   transition: { type: "none" | "fade"; duration: number };
   selection: { mode: "manual" | "ai"; targetSeconds: number };

@@ -1,8 +1,8 @@
 import * as stylex from "@stylexjs/stylex";
-import type { Title, TitlePosition, TitleTextStyle, TitleWeight } from "../api";
+import type { Filter, Title, TitlePosition, TitleTextStyle, TitleWeight } from "../api";
 import type { Action } from "../project";
 import { colors } from "../tokens.stylex";
-import { Field, Group, Select, Seg, Slider, Swatches, ui } from "../ui";
+import { Button, Field, Group, Select, Seg, Slider, Swatches, ui } from "../ui";
 
 /** Fade used by the "淡出" choice, in seconds. */
 const FADE = 0.3;
@@ -39,13 +39,29 @@ const styles = stylex.create({
   },
 });
 
+const NEUTRAL: Pick<Filter, "brightness" | "contrast" | "saturation"> = {
+  brightness: 0,
+  contrast: 1,
+  saturation: 1,
+};
+
+/** "+0.05" / "−0.10" / "0": slider offsets from neutral. */
+const signed = (value: number) =>
+  Math.abs(value) < 1e-9 ? "0" : `${value > 0 ? "+" : "−"}${Math.abs(value).toFixed(2)}`;
+
 interface Props {
   title: Title;
+  filter: Filter;
   dispatch: (action: Action) => void;
 }
 
-export function Inspector({ title, dispatch }: Props) {
+export function Inspector({ title, filter, dispatch }: Props) {
   const set = (patch: Partial<Title>) => dispatch({ type: "updateTitle", patch });
+  const setFilter = (patch: Partial<Filter>) => dispatch({ type: "updateFilter", patch });
+  const adjusted =
+    filter.brightness !== NEUTRAL.brightness ||
+    filter.contrast !== NEUTRAL.contrast ||
+    filter.saturation !== NEUTRAL.saturation;
 
   return (
     <aside {...stylex.props(styles.panel)}>
@@ -163,17 +179,54 @@ export function Inspector({ title, dispatch }: Props) {
         <p {...stylex.props(ui.note)}>每段已自动拉齐响度，接缝处不爆音。</p>
       </Group>
 
-      <Group title="滤镜" badge="即将支持" dimmed>
-        <Seg
-          options={[
-            ["none", "原片"],
-            ["forest", "林间"],
-            ["river", "水色"],
-            ["golden", "暖阳"],
-          ]}
-          value="none"
-          disabled
-        />
+      <Group title="滤镜">
+        <Field>
+          <Seg<Filter["preset"]>
+            options={[
+              ["none", "原片"],
+              ["forest", "林间"],
+              ["river", "水色"],
+              ["golden", "暖阳"],
+            ]}
+            value={filter.preset}
+            onChange={(preset) => setFilter({ preset })}
+          />
+        </Field>
+        <Field label="亮度">
+          <Slider
+            min={-0.2}
+            max={0.2}
+            step={0.01}
+            value={filter.brightness}
+            shown={signed(filter.brightness)}
+            onChange={(brightness) => setFilter({ brightness })}
+          />
+        </Field>
+        <Field label="对比度">
+          <Slider
+            min={0.7}
+            max={1.3}
+            step={0.01}
+            value={filter.contrast}
+            shown={signed(filter.contrast - 1)}
+            onChange={(contrast) => setFilter({ contrast })}
+          />
+        </Field>
+        <Field label="饱和度">
+          <Slider
+            min={0.5}
+            max={1.5}
+            step={0.01}
+            value={filter.saturation}
+            shown={signed(filter.saturation - 1)}
+            onChange={(saturation) => setFilter({ saturation })}
+          />
+        </Field>
+        {adjusted && (
+          <Button variant="ghost" onClick={() => setFilter(NEUTRAL)}>
+            重置滑块
+          </Button>
+        )}
       </Group>
 
       <Group title="画幅" badge="即将支持" dimmed>

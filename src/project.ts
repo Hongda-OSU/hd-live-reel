@@ -1,6 +1,6 @@
 // Edits to the open project. The reducer is the only place the project
 // changes; App persists every new state.
-import type { Clip, Project, Title } from "./api";
+import type { Clip, Filter, Project, Title } from "./api";
 
 export type Action =
   | { type: "load"; project: Project }
@@ -9,7 +9,8 @@ export type Action =
   | { type: "moveClip"; from: number; to: number }
   | { type: "updateClip"; id: string; patch: Partial<Clip> }
   | { type: "removeClip"; id: string }
-  | { type: "updateTitle"; patch: Partial<Title> };
+  | { type: "updateTitle"; patch: Partial<Title> }
+  | { type: "updateFilter"; patch: Partial<Filter> };
 
 export function reducer(project: Project | null, action: Action): Project | null {
   if (action.type === "load") return action.project;
@@ -34,6 +35,8 @@ export function reducer(project: Project | null, action: Action): Project | null
       return { ...project, clips: project.clips.filter((clip) => clip.id !== action.id) };
     case "updateTitle":
       return { ...project, title: { ...project.title, ...action.patch } };
+    case "updateFilter":
+      return { ...project, filter: { ...project.filter, ...action.patch } };
   }
 }
 
@@ -57,9 +60,10 @@ export const hasTitleText = (title: Title) => title.text.trim() !== "" || title.
 
 /** Everything that changes the rendered video; previews re-run when it does. */
 export function renderKey(project: Project): string {
-  const { clips, title } = project;
+  const { clips, title, filter } = project;
   return JSON.stringify({
     clips: clips.map((c) => [c.normalizedPath, c.trimStart, c.trimEnd, c.muted]),
     title: hasTitleText(title) ? [title.textImage, title.showFor, title.fadeOut] : null,
+    filter,
   });
 }

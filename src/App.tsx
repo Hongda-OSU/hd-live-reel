@@ -372,7 +372,7 @@ function App() {
           onCropEnd={endCrop}
           onAdd={() => setPickerOpen(true)}
         />
-        <Inspector title={project.title} dispatch={dispatch} />
+        <Inspector title={project.title} filter={project.filter} dispatch={dispatch} />
       </main>
 
       <PickerSheet
