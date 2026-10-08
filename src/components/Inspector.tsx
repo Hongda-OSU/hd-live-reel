@@ -118,7 +118,12 @@ export function Inspector({ title, filter, dispatch }: Props) {
           />
         </Field>
         <Field label="颜色">
-          <Swatches options={COLOURS} value={title.color} onChange={(color) => set({ color })} />
+          <Swatches
+            options={COLOURS}
+            value={title.color}
+            onChange={(color) => set({ color })}
+            customLabel="自定义颜色"
+          />
         </Field>
         <Field label="文字效果">
           <Seg<TitleTextStyle>
