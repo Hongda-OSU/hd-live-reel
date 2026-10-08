@@ -28,6 +28,13 @@ function fitFont(ctx: CanvasRenderingContext2D, text: string, weight: number, si
   return fitted + 2;
 }
 
+/** "Devil's" with a typewriter quote, or with the ‘ a Chinese input method
+ * types for the first quote, becomes "Devil’s". Only quotes between Latin
+ * letters change, so Chinese ‘…’ pairs are left alone. */
+function fixApostrophes(text: string) {
+  return text.replace(/(?<=[A-Za-z0-9])['‘](?=[A-Za-z])/g, "’");
+}
+
 /** True for colours dark enough to need a light outline or shadow. */
 function isDark(hex: string) {
   const n = parseInt(hex.replace("#", ""), 16);
@@ -64,10 +71,11 @@ export async function renderTitlePng(title: Title): Promise<Uint8Array> {
 
   const [titleWeight, subtitleWeight] = WEIGHTS[title.weight];
   const lines: { text: string; weight: number; size: number }[] = [];
-  if (title.text.trim()) lines.push({ text: title.text.trim(), weight: titleWeight, size: title.fontSize });
+  if (title.text.trim())
+    lines.push({ text: fixApostrophes(title.text.trim()), weight: titleWeight, size: title.fontSize });
   if (title.subtitle.trim())
     lines.push({
-      text: title.subtitle.trim(),
+      text: fixApostrophes(title.subtitle.trim()),
       weight: subtitleWeight,
       size: Math.round(title.fontSize * SUBTITLE_SCALE),
     });
