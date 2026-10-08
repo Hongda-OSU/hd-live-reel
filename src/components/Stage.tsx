@@ -229,11 +229,6 @@ export function Stage(props: Props) {
     else togglePlay();
   }
 
-  // A new preview starts from the top, playing if the old one was. A
-  // removed <video> fires no pause event, so this still holds whether the
-  // old preview was playing when the new one loads.
-  const wasPlaying = useRef(false);
-
   useEffect(() => {
     if (seekTo && video.current) video.current.currentTime = seekTo.time;
   }, [seekTo]);
@@ -275,21 +270,15 @@ export function Stage(props: Props) {
               src={src}
               playsInline
               onLoadedMetadata={(e) => {
-                const el = e.currentTarget;
-                setDuration(el.duration);
+                // A new preview waits, paused at the start. The replaced
+                // <video> fired no pause event, so reset the button here.
+                setDuration(e.currentTarget.duration);
                 setTime(0);
-                if (wasPlaying.current) el.play().catch(() => setPlaying(false));
-                else setPlaying(false);
-              }}
-              onTimeUpdate={(e) => setTime(e.currentTarget.currentTime)}
-              onPlay={() => {
-                wasPlaying.current = true;
-                setPlaying(true);
-              }}
-              onPause={() => {
-                wasPlaying.current = false;
                 setPlaying(false);
               }}
+              onTimeUpdate={(e) => setTime(e.currentTarget.currentTime)}
+              onPlay={() => setPlaying(true)}
+              onPause={() => setPlaying(false)}
               {...stylex.props(styles.video)}
             />
           )}
