@@ -1,11 +1,29 @@
 import * as stylex from "@stylexjs/stylex";
-import type { Title, TitlePosition } from "../api";
+import type { Title, TitlePosition, TitleTextStyle, TitleWeight } from "../api";
 import type { Action } from "../project";
 import { colors } from "../tokens.stylex";
-import { Field, Group, Seg, Slider, ui } from "../ui";
+import { Field, Group, Select, Seg, Slider, Swatches, ui } from "../ui";
 
 /** Fade used by the "淡出" choice, in seconds. */
 const FADE = 0.3;
+
+/** Title fonts that ship with macOS. */
+const FONTS: [string, string][] = [
+  ["PingFang SC", "苹方"],
+  ["Songti SC", "宋体"],
+  ["Avenir Next", "Avenir Next"],
+  ["Futura", "Futura"],
+  ["Didot", "Didot"],
+  ["Snell Roundhand", "Snell Roundhand（英文手写）"],
+];
+
+const COLOURS: [string, string][] = [
+  ["#ffffff", "白"],
+  ["#f3e9d2", "米白"],
+  ["#ffd166", "暖黄"],
+  ["#cfe6ff", "浅蓝"],
+  ["#1d1d1f", "黑"],
+];
 
 const styles = stylex.create({
   panel: {
@@ -49,6 +67,65 @@ export function Inspector({ title, dispatch }: Props) {
             {...stylex.props(ui.textInput)}
           />
         </Field>
+        <Field label="字体">
+          <Select label="字体" options={FONTS} value={title.font} onChange={(font) => set({ font })} />
+        </Field>
+        <Field label="粗细">
+          <Seg<TitleWeight>
+            options={[
+              ["light", "细"],
+              ["regular", "常规"],
+              ["bold", "粗"],
+            ]}
+            value={title.weight}
+            onChange={(weight) => set({ weight })}
+          />
+        </Field>
+        <Field label="字号">
+          <Slider
+            min={40}
+            max={140}
+            step={2}
+            value={title.fontSize}
+            shown={String(title.fontSize)}
+            onChange={(fontSize) => set({ fontSize })}
+          />
+        </Field>
+        <Field label="行距">
+          <Slider
+            min={0}
+            max={80}
+            step={2}
+            value={title.lineGap}
+            shown={String(title.lineGap)}
+            onChange={(lineGap) => set({ lineGap })}
+          />
+        </Field>
+        <Field label="颜色">
+          <Swatches options={COLOURS} value={title.color} onChange={(color) => set({ color })} />
+        </Field>
+        <Field label="文字效果">
+          <Seg<TitleTextStyle>
+            options={[
+              ["outline", "描边"],
+              ["shadow", "阴影"],
+              ["none", "无"],
+            ]}
+            value={title.textStyle}
+            onChange={(textStyle) => set({ textStyle })}
+          />
+        </Field>
+        <Field label="位置">
+          <Seg<TitlePosition>
+            options={[
+              ["top", "上"],
+              ["center", "中"],
+              ["bottom", "下"],
+            ]}
+            value={title.position}
+            onChange={(position) => set({ position })}
+          />
+        </Field>
         <Field label="显示时长">
           <Slider
             min={0.5}
@@ -67,27 +144,6 @@ export function Inspector({ title, dispatch }: Props) {
             ]}
             value={title.fadeOut > 0 ? FADE : 0}
             onChange={(fadeOut) => set({ fadeOut: Math.min(fadeOut, title.showFor) })}
-          />
-        </Field>
-        <Field label="位置">
-          <Seg<TitlePosition>
-            options={[
-              ["top", "上"],
-              ["center", "中"],
-              ["bottom", "下"],
-            ]}
-            value={title.position}
-            onChange={(position) => set({ position })}
-          />
-        </Field>
-        <Field label="字号">
-          <Slider
-            min={40}
-            max={140}
-            step={2}
-            value={title.fontSize}
-            shown={String(title.fontSize)}
-            onChange={(fontSize) => set({ fontSize })}
           />
         </Field>
       </Group>

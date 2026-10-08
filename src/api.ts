@@ -45,6 +45,8 @@ export interface Clip {
 }
 
 export type TitlePosition = "top" | "center" | "bottom";
+export type TitleWeight = "light" | "regular" | "bold";
+export type TitleTextStyle = "outline" | "shadow" | "none";
 
 export interface Title {
   text: string;
@@ -54,6 +56,10 @@ export interface Title {
   fontSize: number;
   color: string;
   position: TitlePosition;
+  /** Space between title and subtitle, in pixels at 1080 wide. */
+  lineGap: number;
+  weight: TitleWeight;
+  textStyle: TitleTextStyle;
   showFor: number;
   fadeOut: number;
   textImage?: string | null;

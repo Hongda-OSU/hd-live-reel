@@ -102,6 +102,24 @@ pub enum Position {
     Bottom,
 }
 
+/// Stroke weight of the title lines; the frontend maps it to font weights.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Weight {
+    Light,
+    Regular,
+    Bold,
+}
+
+/// What keeps the title readable on bright or busy footage.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum TextStyle {
+    Outline,
+    Shadow,
+    None,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Title {
@@ -111,6 +129,10 @@ pub struct Title {
     pub font_size: u32,
     pub color: String,
     pub position: Position,
+    /// Space between title and subtitle, in pixels at 1080 wide.
+    pub line_gap: f64,
+    pub weight: Weight,
+    pub text_style: TextStyle,
     /// Seconds on screen from the first frame.
     pub show_for: f64,
     /// Seconds of fade at the end of `show_for`; 0 cuts it off.
@@ -128,6 +150,9 @@ impl Default for Title {
             font_size: 72,
             color: "#ffffff".into(),
             position: Position::Center,
+            line_gap: 18.0,
+            weight: Weight::Regular,
+            text_style: TextStyle::Outline,
             show_for: 1.0,
             fade_out: 0.0,
             text_image: None,
@@ -296,6 +321,9 @@ impl Project {
         if self.title.fade_out > self.title.show_for {
             return Err("title fade is longer than the time it is shown".into());
         }
+        if self.title.line_gap < 0.0 {
+            return Err("title line gap cannot be negative".into());
+        }
         if self.audio.music_volume < 0.0 || self.audio.original_volume < 0.0 {
             return Err("volumes cannot be negative".into());
         }
@@ -462,6 +490,9 @@ mod tests {
         assert_eq!(project.output.aspect, Aspect::Portrait);
         assert_eq!(project.transition.kind, TransitionKind::None);
         assert_eq!(project.clips[0].kind, ClipKind::LivePhoto);
+        assert_eq!(project.title.line_gap, 18.0, "older titles keep their look");
+        assert_eq!(project.title.weight, Weight::Regular);
+        assert_eq!(project.title.text_style, TextStyle::Outline);
         project.validate().unwrap();
     }
 
@@ -473,6 +504,8 @@ mod tests {
         assert_eq!(json["output"]["aspect"], "9:16");
         assert_eq!(json["transition"]["type"], "none");
         assert_eq!(json["title"]["showFor"], 1.0);
+        assert_eq!(json["title"]["lineGap"], 18.0);
+        assert_eq!(json["title"]["textStyle"], "outline");
         assert_eq!(json["clips"][0]["cropOffset"], 0.5);
         assert_eq!(json["clips"][0]["source"], "iphone");
         assert_eq!(json["selection"]["targetSeconds"], 40.0);
@@ -499,6 +532,9 @@ mod tests {
         project.clips[0] = clip(0.0, 2.0, 0.5);
         project.title.fade_out = 2.0;
         assert!(project.validate().unwrap_err().contains("fade"));
+        project.title.fade_out = 0.0;
+        project.title.line_gap = -1.0;
+        assert!(project.validate().unwrap_err().contains("line gap"));
     }
 
     #[test]

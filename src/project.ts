@@ -49,8 +49,8 @@ export function clipLabel(clip: Clip): string {
 
 /** Title fields that change the rendered PNG. */
 export function titleImageKey(title: Title): string {
-  const { text, subtitle, font, fontSize, color, position } = title;
-  return JSON.stringify({ text, subtitle, font, fontSize, color, position });
+  const { text, subtitle, font, fontSize, color, position, lineGap, weight, textStyle } = title;
+  return JSON.stringify({ text, subtitle, font, fontSize, color, position, lineGap, weight, textStyle });
 }
 
 export const hasTitleText = (title: Title) => title.text.trim() !== "" || title.subtitle.trim() !== "";
