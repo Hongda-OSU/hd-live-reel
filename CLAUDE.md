@@ -4,10 +4,12 @@ Personal macOS desktop app that stitches iPhone Live Photos into one MP4 with or
 
 ## Stack
 
-- Shell: Tauri 2, TypeScript frontend (`src/`)
-- Core: Rust (`src-tauri/`) — project JSON, FFmpeg command building, job queue
-- Photo access: Swift CLI (`photos-helper/`) — ImageCaptureCore (iPhone over USB), PhotoKit; prints JSON, called by Rust
+- Shell: Tauri 2
+- Frontend: React + TypeScript (Vite), styled with StyleX (`src/`)
+- Core: Rust (`src-tauri/`) — project JSON, FFmpeg command building
+- Photo access: Swift CLI (`photos-helper/`) — ImageCaptureCore (iPhone over USB); prints JSON, called by Rust
 - Video: FFmpeg + ffprobe as Tauri sidecars (`binaries/`, fetched by `scripts/fetch-ffmpeg.sh`), built with libzimg
+- Package manager: **pnpm** (not npm, not yarn)
 - macOS only, all processing local; no cloud, login or database
 
 ## Commands
@@ -24,7 +26,6 @@ Personal macOS desktop app that stitches iPhone Live Photos into one MP4 with or
 | Build Swift helper into `binaries/`                                 | `pnpm helper` (also run by `pnpm tauri dev`)                                                              |
 | Run Swift helper                                                    | `./binaries/photos-helper-aarch64-apple-darwin list`                                                      |
 
-- Package manager: **pnpm** (not npm, not yarn). Frontend is React + TypeScript (Vite), styled with StyleX.
 - `photos-helper` needs a USB-connected, unlocked iPhone for `list` / `download`.
 
 ## Rules
