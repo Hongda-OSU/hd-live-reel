@@ -215,7 +215,7 @@ function ClipRow({ clip, index, selected, thumb, onSelect, dispatch }: RowProps)
             />
           </div>
           <div {...stylex.props(styles.detailRow)}>
-            <span {...stylex.props(ui.note)}>裁切位置：下一版支持在预览上拖动</span>
+            <span {...stylex.props(ui.note)}>裁切位置：在预览上左右拖动</span>
             <Button variant="danger" onClick={() => dispatch({ type: "removeClip", id: clip.id })}>
               移除
             </Button>

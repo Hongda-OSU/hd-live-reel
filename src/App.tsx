@@ -2,6 +2,8 @@ import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import * as stylex from "@stylexjs/stylex";
 import {
   addIphoneClips,
+  cropClip,
+  cropFrame,
   fileUrl,
   loadProject,
   onClipsProgress,
@@ -14,7 +16,7 @@ import { ClipList } from "./components/ClipList";
 import { ExportDialog } from "./components/ExportDialog";
 import { Inspector } from "./components/Inspector";
 import { PickerSheet } from "./components/PickerSheet";
-import { Stage } from "./components/Stage";
+import { Stage, type CropView } from "./components/Stage";
 import { clipLength, hasTitleText, reducer, renderKey, titleImageKey, totalLength } from "./project";
 import { renderTitlePng } from "./title";
 import { colors, layout } from "./tokens.stylex";
@@ -118,6 +120,13 @@ interface Preview {
   error: string | null;
 }
 
+interface Crop extends Omit<CropView, "applying"> {
+  clipId: string;
+  /** "rendering" once the new crop is in the project; the overlay stays
+   * until the preview that includes it arrives. */
+  phase: "drag" | "cropping" | "rendering";
+}
+
 function App() {
   const [project, dispatch] = useReducer(reducer, null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -129,6 +138,7 @@ function App() {
   const [addError, setAddError] = useState<string | null>(null);
   const [preview, setPreview] = useState<Preview>({ url: null, busy: false, error: null });
   const [seekTo, setSeekTo] = useState<{ time: number; nonce: number } | null>(null);
+  const [crop, setCrop] = useState<Crop | null>(null);
   const { library, thumbs, refresh, loadThumbs } = useLibrary();
 
   // ---------- load + autosave ----------
@@ -202,9 +212,15 @@ function App() {
       setPreview((p) => ({ ...p, busy: true }));
       try {
         const path = await renderPreview(latest.current!);
-        if (seq === renderSeq.current) setPreview({ url: fileUrl(path), busy: false, error: null });
+        if (seq === renderSeq.current) {
+          setPreview({ url: fileUrl(path), busy: false, error: null });
+          setCrop((c) => (c?.phase === "rendering" ? null : c));
+        }
       } catch (e) {
-        if (seq === renderSeq.current) setPreview((p) => ({ ...p, busy: false, error: String(e) }));
+        if (seq === renderSeq.current) {
+          setPreview((p) => ({ ...p, busy: false, error: String(e) }));
+          setCrop((c) => (c?.phase === "rendering" ? null : c));
+        }
       }
     }, PREVIEW_DELAY);
     return () => clearTimeout(timer);
@@ -243,6 +259,49 @@ function App() {
     const index = project.clips.findIndex((c) => c.id === id);
     const start = project.clips.slice(0, index).reduce((sum, c) => sum + clipLength(c), 0);
     setSeekTo({ time: start + 0.01, nonce: Date.now() });
+  }
+
+  // ---------- crop ----------
+  function startCrop(time: number) {
+    if (!project) return;
+    let start = 0;
+    const clip =
+      project.clips.find((c) => {
+        start += clipLength(c);
+        return time < start;
+      }) ?? project.clips[project.clips.length - 1];
+    if (!clip) return;
+    setSelectedId(clip.id);
+    setCrop({ clipId: clip.id, frame: null, start: clip.cropOffset, offset: clip.cropOffset, phase: "drag" });
+    cropFrame(clip)
+      .then((path) => setCrop((c) => (c?.clipId === clip.id ? { ...c, frame: fileUrl(path) } : c)))
+      .catch((e) => {
+        setCrop(null);
+        setPreview((p) => ({ ...p, error: String(e) }));
+      });
+  }
+
+  async function endCrop() {
+    const clip = project?.clips.find((c) => c.id === crop?.clipId);
+    // Cache files are named by whole percent.
+    const offset = crop ? Math.round(crop.offset * 100) / 100 : 0;
+    if (!crop || !clip || offset === clip.cropOffset) {
+      setCrop(null);
+      return;
+    }
+    setCrop({ ...crop, offset, phase: "cropping" });
+    try {
+      const cropped = await cropClip(clip, offset);
+      dispatch({
+        type: "updateClip",
+        id: clip.id,
+        patch: { cropOffset: cropped.cropOffset, normalizedPath: cropped.normalizedPath },
+      });
+      setCrop((c) => c && { ...c, phase: "rendering" });
+    } catch (e) {
+      setCrop(null);
+      setPreview((p) => ({ ...p, error: String(e) }));
+    }
   }
 
   if (loadError) return <p {...stylex.props(styles.fatal)}>无法打开工程：{loadError}</p>;
@@ -307,6 +366,10 @@ function App() {
           busy={preview.busy}
           error={preview.error}
           empty={project.clips.length === 0}
+          crop={crop && { ...crop, applying: crop.phase !== "drag" }}
+          onCropStart={startCrop}
+          onCropChange={(offset) => setCrop((c) => c && { ...c, offset })}
+          onCropEnd={endCrop}
           onAdd={() => setPickerOpen(true)}
         />
         <Inspector title={project.title} dispatch={dispatch} />

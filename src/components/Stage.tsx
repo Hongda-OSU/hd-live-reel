@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type PointerEvent } from "react";
 import * as stylex from "@stylexjs/stylex";
 import { colors, shadows } from "../tokens.stylex";
 import { Button, Icon, withStyle } from "../ui";
+import { CropLayer, fillFactor } from "./CropLayer";
 
 const styles = stylex.create({
   area: {
@@ -15,10 +16,12 @@ const styles = stylex.create({
     paddingLeft: "18px",
     backgroundColor: colors.stage,
   },
+  // Clips the uncropped still where it spills past the frame.
   wrap: {
     display: "grid",
     placeItems: "center",
     minHeight: 0,
+    overflow: "hidden",
   },
   // Height-bound: a 9:16 frame on a landscape window fills the height.
   frame: {
@@ -30,6 +33,14 @@ const styles = stylex.create({
     overflow: "hidden",
     backgroundColor: "#000",
     boxShadow: shadows.stage,
+    touchAction: "none",
+  },
+  grab: {
+    cursor: "grab",
+  },
+  cropping: {
+    overflow: "visible",
+    cursor: "grabbing",
   },
   video: {
     display: "block",
@@ -58,6 +69,10 @@ const styles = stylex.create({
     fontSize: 11,
     whiteSpace: "nowrap",
     pointerEvents: "none",
+  },
+  hint: {
+    top: "auto",
+    bottom: 14,
   },
   errorPill: {
     maxWidth: "90%",
@@ -140,16 +155,79 @@ interface Props {
   busy: boolean;
   error: string | null;
   empty: boolean;
+  /** The crop being dragged or applied, if any. */
+  crop: CropView | null;
+  /** A drag began on the picture at this preview time. */
+  onCropStart: (time: number) => void;
+  onCropChange: (offset: number) => void;
+  onCropEnd: () => void;
   onAdd: () => void;
 }
 
+export interface CropView {
+  /** Uncropped still, or null while it loads. */
+  frame: string | null;
+  /** Offset when the drag began. */
+  start: number;
+  offset: number;
+  /** Released and being re-normalized / re-rendered. */
+  applying: boolean;
+}
+
+/** Pointer travel before a press counts as a drag, not a click. */
+const DRAG_THRESHOLD = 4;
+
+const clamp01 = (n: number) => Math.min(1, Math.max(0, n));
+
 const fmt = (t: number) => `${Math.floor(t / 60)}:${(t % 60).toFixed(1).padStart(4, "0")}`;
 
-export function Stage({ src, lengths, seekTo, busy, error, empty, onAdd }: Props) {
+export function Stage(props: Props) {
+  const { src, lengths, seekTo, busy, error, empty, crop, onAdd } = props;
   const video = useRef<HTMLVideoElement>(null);
+  const frame = useRef<HTMLDivElement>(null);
   const [time, setTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [playing, setPlaying] = useState(false);
+  const [hovered, setHovered] = useState(false);
+  const [still, setStill] = useState<{ src: string; width: number; height: number } | null>(null);
+  const stillSize = crop && still?.src === crop.frame ? still : null;
+  const press = useRef<{ x: number; y: number; dragging: boolean } | null>(null);
+
+  const togglePlay = () => (video.current?.paused ? video.current.play() : video.current?.pause());
+
+  function onPointerDown(e: PointerEvent<HTMLDivElement>) {
+    if (!src || e.button !== 0 || crop?.applying) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    press.current = { x: e.clientX, y: e.clientY, dragging: false };
+  }
+
+  function onPointerMove(e: PointerEvent<HTMLDivElement>) {
+    const p = press.current;
+    if (!p) return;
+    const dx = e.clientX - p.x;
+    const dy = e.clientY - p.y;
+    if (!p.dragging) {
+      if (Math.hypot(dx, dy) < DRAG_THRESHOLD) return;
+      p.dragging = true;
+      video.current?.pause();
+      props.onCropStart(video.current?.currentTime ?? 0);
+      return;
+    }
+    if (!crop || !stillSize || !frame.current) return;
+    // Dragging the picture right shows more of its left side.
+    const rect = frame.current.getBoundingClientRect();
+    const factor = fillFactor(stillSize.width, stillSize.height);
+    if (factor.x > 1) props.onCropChange(clamp01(crop.start - dx / (rect.width * (factor.x - 1))));
+    else if (factor.y > 1) props.onCropChange(clamp01(crop.start - dy / (rect.height * (factor.y - 1))));
+  }
+
+  function onPointerUp() {
+    const p = press.current;
+    press.current = null;
+    if (!p) return;
+    if (p.dragging) props.onCropEnd();
+    else togglePlay();
+  }
 
   // Keep the playhead where it was when a new preview replaces the old one.
   const resumeAt = useRef(0);
@@ -181,7 +259,16 @@ export function Stage({ src, lengths, seekTo, busy, error, empty, onAdd }: Props
   return (
     <section {...stylex.props(styles.area)}>
       <div {...stylex.props(styles.wrap)}>
-        <div {...stylex.props(styles.frame)}>
+        <div
+          ref={frame}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onPointerCancel={onPointerUp}
+          onPointerEnter={() => setHovered(true)}
+          onPointerLeave={() => setHovered(false)}
+          {...stylex.props(styles.frame, src !== null && styles.grab, crop !== null && styles.cropping)}
+        >
           {src && (
             <video
               ref={video}
@@ -195,7 +282,6 @@ export function Stage({ src, lengths, seekTo, busy, error, empty, onAdd }: Props
               onTimeUpdate={(e) => setTime(e.currentTarget.currentTime)}
               onPlay={() => setPlaying(true)}
               onPause={() => setPlaying(false)}
-              onClick={(e) => (e.currentTarget.paused ? e.currentTarget.play() : e.currentTarget.pause())}
               {...stylex.props(styles.video)}
             />
           )}
@@ -207,7 +293,22 @@ export function Stage({ src, lengths, seekTo, busy, error, empty, onAdd }: Props
               </Button>
             </div>
           )}
-          {busy && <div {...stylex.props(styles.pill)}>正在更新预览…</div>}
+          {crop?.frame && (
+            <CropLayer
+              src={crop.frame}
+              size={stillSize}
+              offset={crop.offset}
+              onSize={(size) => setStill({ src: crop.frame!, ...size })}
+            />
+          )}
+          {src && hovered && !playing && !crop && !busy && (
+            <div {...stylex.props(styles.pill, styles.hint)}>拖动画面可调整裁切位置</div>
+          )}
+          {crop?.applying ? (
+            <div {...stylex.props(styles.pill)}>正在应用裁切…</div>
+          ) : (
+            busy && <div {...stylex.props(styles.pill)}>正在更新预览…</div>
+          )}
           {error && !busy && <div {...stylex.props(styles.pill, styles.errorPill)}>{error}</div>}
         </div>
       </div>
@@ -215,7 +316,7 @@ export function Stage({ src, lengths, seekTo, busy, error, empty, onAdd }: Props
         <button
           aria-label={playing ? "暂停" : "播放"}
           disabled={!src}
-          onClick={() => (video.current?.paused ? video.current.play() : video.current?.pause())}
+          onClick={togglePlay}
           {...stylex.props(styles.play)}
         >
           <Icon>
