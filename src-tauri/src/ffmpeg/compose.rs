@@ -4,7 +4,7 @@
 use std::path::{Path, PathBuf};
 
 use super::normalize::{EDGE_FADE, FPS};
-use super::{Error, Tool};
+use super::{Error, Grade, Tool};
 
 /// Ceiling for the final limiter (about -1 dBFS).
 const LIMIT: f64 = 0.89;
@@ -50,6 +50,7 @@ impl From<PathBuf> for Segment {
 pub struct Composition {
     /// Normalized clips in playback order.
     pub clips: Vec<Segment>,
+    pub grade: Grade,
     pub title: Option<Title>,
 }
 
@@ -97,6 +98,21 @@ fn filter_graph(composition: &Composition, quality: Quality) -> String {
     graph.push_str(&format!("{inputs}concat=n={n}:v=1:a=1[joined][a0];"));
 
     let mut video = "joined".to_string();
+    // The preview shrinks first so grading touches a quarter of the pixels;
+    // grading is per pixel, so the order does not change the look.
+    let shrink = match quality {
+        Quality::Preview => ",scale=iw/2:ih/2",
+        Quality::Export => "",
+    };
+    if quality == Quality::Preview {
+        graph.push_str(&format!("[{video}]scale=iw/2:ih/2[small];"));
+        video = "small".into();
+    }
+    // Graded before the title goes on, so the text keeps its colour.
+    if let Some(grade) = composition.grade.filter() {
+        graph.push_str(&format!("[{video}]{grade}[graded];"));
+        video = "graded".into();
+    }
     if let Some(title) = &composition.title {
         let fade = if title.fade_out > 0.0 {
             format!(
@@ -108,15 +124,13 @@ fn filter_graph(composition: &Composition, quality: Quality) -> String {
             String::new()
         };
         graph.push_str(&format!(
-            "[{n}:v]format=rgba{fade}[title];[{video}][title]overlay=0:0:eof_action=pass[titled];"
+            "[{n}:v]format=rgba{shrink}{fade}[title];\
+             [{video}][title]overlay=0:0:eof_action=pass[titled];"
         ));
         video = "titled".into();
     }
 
-    match quality {
-        Quality::Preview => graph.push_str(&format!("[{video}]scale=iw/2:ih/2[v];")),
-        Quality::Export => graph.push_str(&format!("[{video}]null[v];")),
-    }
+    graph.push_str(&format!("[{video}]null[v];"));
     graph.push_str(&format!("[a0]alimiter=limit={LIMIT}[a]"));
     graph
 }
@@ -194,6 +208,7 @@ mod tests {
 
     fn composition(title: Option<Title>) -> Composition {
         Composition {
+            grade: Grade::default(),
             clips: vec![PathBuf::from("a.mov").into(), PathBuf::from("b.mov").into()],
             title,
         }
@@ -245,6 +260,7 @@ mod tests {
     #[test]
     fn trims_and_mutes_only_the_segments_that_ask() {
         let composition = Composition {
+            grade: Grade::default(),
             clips: vec![
                 Segment {
                     path: "a.mov".into(),
@@ -272,14 +288,28 @@ mod tests {
     }
 
     #[test]
-    fn preview_shares_the_graph_and_only_scales_down() {
-        let export = filter_graph(&composition(Some(title(0.0))), Quality::Export);
-        let preview = filter_graph(&composition(Some(title(0.0))), Quality::Preview);
+    fn preview_shrinks_video_and_title_first() {
+        let graph = filter_graph(&composition(Some(title(0.0))), Quality::Preview);
         assert_eq!(
-            preview,
-            export.replace("[titled]null[v]", "[titled]scale=iw/2:ih/2[v]")
+            graph,
+            "[0:v][0:a][1:v][1:a]concat=n=2:v=1:a=1[joined][a0];\
+             [joined]scale=iw/2:ih/2[small];\
+             [2:v]format=rgba,scale=iw/2:ih/2[title];\
+             [small][title]overlay=0:0:eof_action=pass[titled];\
+             [titled]null[v];[a0]alimiter=limit=0.89[a]"
         );
         assert!(encoder_args(Quality::Preview).contains(&"ultrafast".to_string()));
+    }
+
+    #[test]
+    fn grades_before_the_title() {
+        let mut graded = composition(Some(title(0.0)));
+        graded.grade.saturation = 0.5;
+        let eq = "eq=brightness=0.000:contrast=1.000:saturation=0.500";
+        assert!(filter_graph(&graded, Quality::Export).contains(&format!(
+            "[joined]{eq}[graded];[2:v]format=rgba[title];[graded][title]overlay"
+        )));
+        assert!(filter_graph(&graded, Quality::Preview).contains(&format!("[small]{eq}[graded];")));
     }
 
     /// Per-frame PSNR of `a` against `b`; identical frames give infinity.
@@ -364,6 +394,7 @@ mod tests {
         }
         let out = dir.join("out.mp4");
         let composition = Composition {
+            grade: Grade::default(),
             clips: vec![
                 Segment {
                     path: clips[0].clone(),
@@ -442,10 +473,12 @@ mod tests {
         let preview = dir.join("preview.mp4");
         let clips: Vec<Segment> = clips.into_iter().map(Segment::from).collect();
         let without = Composition {
+            grade: Grade::default(),
             clips: clips.clone(),
             title: None,
         };
         let with = Composition {
+            grade: Grade::default(),
             clips,
             title: Some(Title {
                 image: png,

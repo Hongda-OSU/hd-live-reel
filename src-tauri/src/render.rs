@@ -5,8 +5,8 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 
-use crate::ffmpeg::{self, Composition, Quality, Segment, Title};
-use crate::project::Project;
+use crate::ffmpeg::{self, Composition, Grade, Look, Quality, Segment, Title};
+use crate::project::{Filter, Preset, Project};
 
 /// What FFmpeg should join for `project`.
 pub fn composition(project: &Project) -> Result<Composition, String> {
@@ -41,7 +41,25 @@ pub fn composition(project: &Project) -> Result<Composition, String> {
         }),
         _ => None,
     };
-    Ok(Composition { clips, title })
+    Ok(Composition {
+        clips,
+        grade: grade(&project.filter),
+        title,
+    })
+}
+
+fn grade(filter: &Filter) -> Grade {
+    Grade {
+        look: match filter.preset {
+            Preset::None => None,
+            Preset::Forest => Some(Look::Forest),
+            Preset::River => Some(Look::River),
+            Preset::Golden => Some(Look::Golden),
+        },
+        brightness: filter.brightness,
+        contrast: filter.contrast,
+        saturation: filter.saturation,
+    }
 }
 
 pub fn render(project: &Project, quality: Quality, out: &Path) -> Result<(), String> {
@@ -140,6 +158,21 @@ mod tests {
         let title = composition(&project).unwrap().title.unwrap();
         assert_eq!(title.image, Path::new("/c/t.png"));
         assert_eq!((title.show_for, title.fade_out), (1.0, 0.3));
+    }
+
+    #[test]
+    fn filter_becomes_the_grade() {
+        let mut project = Project {
+            clips: vec![clip((0.0, 2.0), false)],
+            ..Default::default()
+        };
+        assert_eq!(composition(&project).unwrap().grade, Grade::default());
+
+        project.filter.preset = Preset::River;
+        project.filter.contrast = 1.2;
+        let grade = composition(&project).unwrap().grade;
+        assert_eq!(grade.look, Some(Look::River));
+        assert_eq!(grade.contrast, 1.2);
     }
 
     #[test]
