@@ -360,7 +360,7 @@ export function Stage(props: Props) {
             {...stylex.props(styles.range)}
           />
         </div>
-        <span {...stylex.props(styles.quality)}>低清预览 · 与导出同一处理链</span>
+        <span {...stylex.props(styles.quality)}>低清预览 · 导出为高清</span>
       </div>
     </section>
   );
