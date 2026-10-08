@@ -4,7 +4,7 @@
 
 use std::path::Path;
 
-use super::{probe, Error, MediaInfo, Tool};
+use super::{probe, Error, MediaInfo, Tool, VideoInfo};
 
 pub const WIDTH: u32 = 1080;
 pub const HEIGHT: u32 = 1920;
@@ -132,19 +132,11 @@ fn plan(info: &MediaInfo, lufs: Option<f64>, crop_offset: f64) -> Result<Plan, E
     let duration = frames as f64 / FPS as f64;
     let gain_db = gain_db(lufs);
 
-    let range_in = if video.full_range { "full" } else { "limited" };
-    let primaries_in = video
-        .primaries
-        .as_deref()
-        .filter(|p| matches!(*p, "bt709" | "smpte432" | "bt2020"))
-        .unwrap_or("bt709");
     let offset = crop_offset.clamp(0.0, 1.0);
     let video_filter = format!(
-        "zscale=rin={range_in}:pin={primaries_in}:tin=bt709:min=bt709\
-         :r=limited:p=bt709:t=bt709:m=bt709,format=yuv420p,\
-         fps={FPS},\
-         scale={WIDTH}:{HEIGHT}:force_original_aspect_ratio=increase:flags=lanczos,\
-         {},setsar=1",
+        "{},fps={FPS},{},{},setsar=1",
+        colour_filter(video),
+        fill_scale(WIDTH, HEIGHT),
         crop_filter(offset),
     );
     let audio_filter = format!(
@@ -163,6 +155,53 @@ fn plan(info: &MediaInfo, lufs: Option<f64>, crop_offset: f64) -> Result<Plan, E
     })
 }
 
+/// Converts any SDR source to limited-range BT.709 yuv420p.
+fn colour_filter(video: &VideoInfo) -> String {
+    let range_in = if video.full_range { "full" } else { "limited" };
+    let primaries_in = video
+        .primaries
+        .as_deref()
+        .filter(|p| matches!(*p, "bt709" | "smpte432" | "bt2020"))
+        .unwrap_or("bt709");
+    format!(
+        "zscale=rin={range_in}:pin={primaries_in}:tin=bt709:min=bt709\
+         :r=limited:p=bt709:t=bt709:m=bt709,format=yuv420p"
+    )
+}
+
+/// Scales so the picture covers `width`×`height`; one axis may overflow.
+fn fill_scale(width: u32, height: u32) -> String {
+    format!("scale={width}:{height}:force_original_aspect_ratio=increase:flags=lanczos")
+}
+
+/// Writes one JPEG frame from the middle of `src`, filled to half the
+/// output size but not cropped, so the crop picker can show what the
+/// crop leaves out.
+pub fn uncropped_frame(src: &Path, dst: &Path) -> Result<(), Error> {
+    let info = probe(src)?;
+    let video = info
+        .video
+        .as_ref()
+        .ok_or_else(|| Error::Parse("no video stream".into()))?;
+    let filter = format!(
+        "{},{},setsar=1",
+        colour_filter(video),
+        fill_scale(WIDTH / 2, HEIGHT / 2)
+    );
+    let mut args: Vec<String> = vec!["-y".into(), "-v".into(), "error".into()];
+    args.extend([
+        "-ss".into(),
+        format!("{:.3}", info.duration / 2.0),
+        "-i".into(),
+        src.to_string_lossy().into_owned(),
+    ]);
+    args.extend(["-vf".into(), filter]);
+    args.extend(["-frames:v", "1", "-q:v", "3"].map(String::from));
+    args.push(dst.to_string_lossy().into_owned());
+    Tool::Ffmpeg.run(&args)?;
+    Ok(())
+}
+
 /// After the fill scale only one axis overflows, so one offset serves both.
 fn crop_filter(offset: f64) -> String {
     if offset == 0.5 {
@@ -176,7 +215,6 @@ fn crop_filter(offset: f64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ffmpeg::VideoInfo;
 
     fn live_photo() -> MediaInfo {
         MediaInfo {
@@ -329,5 +367,19 @@ mod tests {
             silent_summary.contains("sample_rate=48000|channels=2"),
             "silence added: {silent_summary}"
         );
+    }
+
+    #[test]
+    fn uncropped_frame_keeps_the_overflow() {
+        let dir = std::env::temp_dir().join(format!("hd-live-reel-frame-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let src = generated_clip(&dir, false);
+        let dst = dir.join("frame.jpg");
+        uncropped_frame(&src, &dst).unwrap();
+        let summary = stream_summary(&dst);
+        std::fs::remove_dir_all(&dir).unwrap();
+
+        // 640×480 scaled to cover 540×960: the full 4:3 width survives.
+        assert!(summary.contains("width=1280|height=960"), "{summary}");
     }
 }

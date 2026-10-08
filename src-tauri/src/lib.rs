@@ -89,6 +89,24 @@ async fn add_iphone_clips(app: AppHandle, ids: Vec<String>) -> Result<Vec<projec
     .await
 }
 
+/// Re-normalizes `clip` with a new crop offset; returns the updated clip.
+#[tauri::command]
+async fn crop_clip(
+    app: AppHandle,
+    clip: project::Clip,
+    crop_offset: f64,
+) -> Result<project::Clip, String> {
+    let cache = cache_dir(&app)?;
+    blocking(move || clips::recrop(&clip, crop_offset, &cache)).await
+}
+
+/// An uncropped still of `clip` for the crop picker.
+#[tauri::command]
+async fn crop_frame(app: AppHandle, clip: project::Clip) -> Result<PathBuf, String> {
+    let cache = cache_dir(&app)?;
+    blocking(move || clips::crop_frame(&clip, &cache)).await
+}
+
 /// Stores the title PNG the frontend laid out; returns its path.
 #[tauri::command]
 fn save_title_image(app: AppHandle, png: Vec<u8>) -> Result<PathBuf, String> {
@@ -151,6 +169,8 @@ pub fn run() {
             list_iphone_media,
             iphone_thumbnails,
             add_iphone_clips,
+            crop_clip,
+            crop_frame,
             save_title_image,
             render_preview,
             export_video
