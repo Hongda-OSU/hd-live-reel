@@ -54,23 +54,28 @@ impl Grade {
     }
 }
 
-/// colorbalance shifts shadows (s), midtones (m) and highlights (h) per
-/// channel; vibrance lifts muted colours more than vivid ones.
+/// Each look works on its own colours so the rest of the picture (white
+/// clouds, grey rock) keeps its colour. huesaturation edits one hue range
+/// (g = greens, y = yellows, c = cyans, b = blues, r = reds); colorbalance
+/// shifts shadows (s) and midtones (m) of coloured pixels only, leaving
+/// greys and whites alone.
 fn look_filter(look: Look) -> &'static str {
     match look {
+        // Deeper, richer foliage.
         Look::Forest => {
-            "vibrance=intensity=0.2,\
-             colorbalance=rs=-0.02:gs=0.03:bs=-0.01:rm=-0.03:gm=0.04:bm=-0.02,\
-             eq=contrast=1.05:gamma=0.97"
+            "huesaturation=colors=g+y:saturation=0.6:intensity=-0.12:strength=3,\
+             eq=contrast=1.06"
         }
+        // Clearer, brighter water and sky.
         Look::River => {
-            "colorbalance=rs=-0.04:bs=0.05:rm=-0.02:bm=0.03:rh=-0.02:bh=0.03,\
-             vibrance=intensity=0.15,\
-             eq=contrast=1.04:brightness=0.02"
+            "huesaturation=colors=c+b:saturation=0.5:intensity=0.08:strength=3,\
+             eq=contrast=1.05:brightness=0.015"
         }
+        // Warm light, with autumn leaves and sunsets lifted.
         Look::Golden => {
-            "colorbalance=rs=0.04:bs=-0.05:rm=0.06:gm=0.02:bm=-0.05:rh=0.04:bh=-0.03,\
-             eq=contrast=1.03:saturation=1.08"
+            "colorbalance=rs=0.06:bs=-0.07:rm=0.10:gm=0.02:bm=-0.10,\
+             huesaturation=colors=r+y:saturation=0.3:strength=3,\
+             eq=contrast=1.04"
         }
     }
 }
@@ -109,9 +114,13 @@ mod tests {
         assert!(filter.ends_with("eq=brightness=0.100:contrast=1.000:saturation=1.000"));
     }
 
-    /// Mean of a signalstats value over the first frame of a test pattern
-    /// run through `filter`.
+    /// A signalstats value for the first frame of a test pattern run
+    /// through `filter`.
     fn stat(filter: Option<String>, key: &str) -> f64 {
+        stat_of("testsrc2=size=320x240:rate=1:duration=1", filter, key)
+    }
+
+    fn stat_of(source: &str, filter: Option<String>, key: &str) -> f64 {
         let chain = match filter {
             Some(f) => format!("{f},format=yuv420p,signalstats"),
             None => "signalstats".into(),
@@ -122,7 +131,7 @@ mod tests {
                 "-f".into(),
                 "lavfi".into(),
                 "-i".into(),
-                "testsrc2=size=320x240:rate=1:duration=1,format=yuv420p".into(),
+                format!("{source},format=yuv420p"),
                 "-vf".into(),
                 format!("{chain},metadata=print:key=lavfi.signalstats.{key}"),
                 "-frames:v".into(),
@@ -141,7 +150,24 @@ mod tests {
     }
 
     #[test]
-    fn looks_and_sliders_move_colours_the_right_way() {
+    fn looks_leave_white_alone() {
+        for look in [Look::Forest, Look::River, Look::Golden] {
+            let grade = Grade {
+                look: Some(look),
+                ..Grade::default()
+            };
+            for key in ["UAVG", "VAVG"] {
+                let value = stat_of("color=white:s=64x64:d=1", grade.filter(), key);
+                assert!(
+                    (value - 128.0).abs() < 1.0,
+                    "{look:?} tints white: {key}={value}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn looks_change_only_their_own_colours() {
         let look = |look| {
             Grade {
                 look: Some(look),
@@ -149,18 +175,31 @@ mod tests {
             }
             .filter()
         };
+        let green = "color=0x3a7d2a:s=64x64:d=1";
+        let blue = "color=0x3a6ea5:s=64x64:d=1";
+        // colorbalance leaves pure greys alone, so warmth is checked on tan.
+        let tan = "color=0x8a7a5a:s=64x64:d=1";
+        let sat = |source, filter| stat_of(source, filter, "SATAVG");
+
+        assert!(sat(green, look(Look::Forest)) > sat(green, None) * 1.2);
+        assert!((sat(blue, look(Look::Forest)) - sat(blue, None)).abs() < 3.0);
+        assert!(sat(blue, look(Look::River)) > sat(blue, None) * 1.2);
+        assert!((sat(green, look(Look::River)) - sat(green, None)).abs() < 3.0);
+
         // V is red minus luma and U blue minus luma, so V - U rises as a
         // picture gets warmer.
-        let warmth = |filter: Option<String>| stat(filter.clone(), "VAVG") - stat(filter, "UAVG");
-        let plain = warmth(None);
-        assert!(warmth(look(Look::Golden)) > plain + 2.0);
-        assert!(warmth(look(Look::River)) < plain);
+        let warmth = |filter: Option<String>| {
+            stat_of(tan, filter.clone(), "VAVG") - stat_of(tan, filter, "UAVG")
+        };
+        assert!(warmth(look(Look::Golden)) > warmth(None) + 1.0);
+    }
 
-        let plain_sat = stat(None, "SATAVG");
+    #[test]
+    fn saturation_slider_fades_colour() {
         let faded = Grade {
             saturation: 0.5,
             ..Grade::default()
         };
-        assert!(stat(faded.filter(), "SATAVG") < plain_sat * 0.6);
+        assert!(stat(faded.filter(), "SATAVG") < stat(None, "SATAVG") * 0.6);
     }
 }
