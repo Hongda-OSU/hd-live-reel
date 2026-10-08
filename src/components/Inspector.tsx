@@ -10,7 +10,10 @@ const FADE = 0.3;
 const styles = stylex.create({
   panel: {
     overflowY: "auto",
-    padding: "6px 0 20px",
+    paddingTop: "6px",
+    paddingRight: "0",
+    paddingBottom: "20px",
+    paddingLeft: "0",
     borderLeftWidth: 1,
     borderLeftStyle: "solid",
     borderLeftColor: colors.border,

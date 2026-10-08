@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import * as stylex from "@stylexjs/stylex";
 import { exportVideo, type Project } from "../api";
@@ -33,7 +33,10 @@ const styles = stylex.create({
     transform: "translate(-50%, -50%)",
   },
   heading: {
-    margin: "0 0 12px",
+    marginTop: "0",
+    marginRight: "0",
+    marginBottom: "12px",
+    marginLeft: "0",
     fontSize: 15,
   },
   actions: {
@@ -44,7 +47,10 @@ const styles = stylex.create({
   },
   track: {
     height: 6,
-    margin: "6px 0 10px",
+    marginTop: "6px",
+    marginRight: "0",
+    marginBottom: "10px",
+    marginLeft: "0",
     borderRadius: 99,
     backgroundColor: colors.surface2,
     overflow: "hidden",
@@ -73,7 +79,10 @@ const styles = stylex.create({
       content: '""',
       width: 16,
       height: 8,
-      borderWidth: "0 0 3px 3px",
+      borderTopWidth: "0",
+      borderRightWidth: "0",
+      borderBottomWidth: "3px",
+      borderLeftWidth: "3px",
       borderStyle: "solid",
       borderColor: "#fff",
       transform: "translateY(-2px) rotate(-45deg)",
@@ -87,12 +96,13 @@ interface Props {
   onClose: () => void;
 }
 
-export function ExportDialog({ open, project, onClose }: Props) {
-  const [phase, setPhase] = useState<Phase>({ step: "form" });
+export function ExportDialog({ open, ...rest }: Props) {
+  // Mounting the body only while open gives every opening a fresh form.
+  return open ? <DialogBody {...rest} /> : null;
+}
 
-  useEffect(() => {
-    if (open) setPhase({ step: "form" });
-  }, [open]);
+function DialogBody({ project, onClose }: Omit<Props, "open">) {
+  const [phase, setPhase] = useState<Phase>({ step: "form" });
 
   async function run() {
     setPhase({ step: "running" });
@@ -103,7 +113,6 @@ export function ExportDialog({ open, project, onClose }: Props) {
     }
   }
 
-  if (!open) return null;
   const running = phase.step === "running";
   return (
     <>

@@ -9,7 +9,10 @@ const styles = stylex.create({
     gridTemplateRows: "1fr auto",
     minHeight: 0,
     minWidth: 0,
-    padding: "18px 18px 10px",
+    paddingTop: "18px",
+    paddingRight: "18px",
+    paddingBottom: "10px",
+    paddingLeft: "18px",
     backgroundColor: colors.stage,
   },
   wrap: {
@@ -47,7 +50,8 @@ const styles = stylex.create({
     left: "50%",
     top: 14,
     transform: "translateX(-50%)",
-    padding: "4px 12px",
+    paddingBlock: "4px",
+    paddingInline: "12px",
     borderRadius: 99,
     backgroundColor: "rgba(0, 0, 0, 0.6)",
     color: "#fff",
@@ -171,8 +175,8 @@ export function Stage({ src, lengths, seekTo, busy, error, empty, onAdd }: Props
   }, []);
 
   const total = lengths.reduce((a, b) => a + b, 0);
-  let acc = 0;
-  const ticks = lengths.slice(0, -1).map((len) => (acc += len) / total);
+  // Where each clip ends, as a share of the whole; the last end is the edge.
+  const ticks = lengths.slice(0, -1).map((_, i) => lengths.slice(0, i + 1).reduce((a, b) => a + b, 0) / total);
 
   return (
     <section {...stylex.props(styles.area)}>

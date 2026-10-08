@@ -30,7 +30,8 @@ const styles = stylex.create({
     gridTemplateColumns: "16px 30px 1fr auto",
     gap: 8,
     alignItems: "center",
-    padding: "6px 8px",
+    paddingBlock: "6px",
+    paddingInline: "8px",
     borderRadius: 8,
     backgroundColor: {
       default: "transparent",
@@ -75,7 +76,8 @@ const styles = stylex.create({
     color: colors.muted,
   },
   detail: {
-    gridColumn: "1 / -1",
+    gridColumnEnd: "-1",
+    gridColumnStart: "1",
     display: "grid",
     gap: 8,
     marginTop: 6,

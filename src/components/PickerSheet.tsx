@@ -27,7 +27,10 @@ const styles = stylex.create({
     gridTemplateRows: "auto auto 1fr auto",
     width: "min(1040px, calc(100% - 60px))",
     height: "calc(100% - 92px)",
-    borderRadius: "0 0 12px 12px",
+    borderTopLeftRadius: "0",
+    borderTopRightRadius: "0",
+    borderBottomRightRadius: "12px",
+    borderBottomLeftRadius: "12px",
     backgroundColor: colors.window,
     boxShadow: shadows.window,
     transform: "translate(-50%, -105%)",
@@ -43,7 +46,10 @@ const styles = stylex.create({
     display: "flex",
     alignItems: "center",
     gap: 12,
-    padding: "16px 20px 10px",
+    paddingTop: "16px",
+    paddingRight: "20px",
+    paddingBottom: "10px",
+    paddingLeft: "20px",
   },
   heading: {
     margin: 0,
@@ -69,7 +75,10 @@ const styles = stylex.create({
     display: "flex",
     alignItems: "center",
     gap: 12,
-    padding: "0 20px 12px",
+    paddingTop: "0",
+    paddingRight: "20px",
+    paddingBottom: "12px",
+    paddingLeft: "20px",
     borderBottomWidth: 1,
     borderBottomStyle: "solid",
     borderBottomColor: colors.border,
@@ -81,7 +90,10 @@ const styles = stylex.create({
     display: "flex",
     alignItems: "center",
     gap: 10,
-    padding: "4px 6px 4px 10px",
+    paddingTop: "4px",
+    paddingRight: "6px",
+    paddingBottom: "4px",
+    paddingLeft: "10px",
     borderRadius: 8,
     backgroundColor: colors.surface2,
     opacity: 0.6,
@@ -91,13 +103,17 @@ const styles = stylex.create({
   },
   scroll: {
     overflowY: "auto",
-    padding: "14px 20px",
+    paddingBlock: "14px",
+    paddingInline: "20px",
   },
   notice: {
     color: colors.muted,
   },
   day: {
-    margin: "4px 0 8px",
+    marginTop: "4px",
+    marginRight: "0",
+    marginBottom: "8px",
+    marginLeft: "0",
     color: colors.muted,
     fontSize: 12,
     fontWeight: 600,
@@ -169,7 +185,10 @@ const styles = stylex.create({
       content: '""',
       width: 8,
       height: 4,
-      borderWidth: "0 0 2px 2px",
+      borderTopWidth: "0",
+      borderRightWidth: "0",
+      borderBottomWidth: "2px",
+      borderLeftWidth: "2px",
       borderStyle: "solid",
       borderColor: "#fff",
       transform: "translateY(-1px) rotate(-45deg)",
@@ -179,13 +198,14 @@ const styles = stylex.create({
     display: "flex",
     alignItems: "center",
     gap: 10,
-    padding: "12px 20px",
+    paddingBlock: "12px",
+    paddingInline: "20px",
     borderTopWidth: 1,
     borderTopStyle: "solid",
     borderTopColor: colors.border,
   },
   summary: {
-    flex: 1,
+    flex: "1",
     color: colors.muted,
   },
 });
@@ -237,7 +257,7 @@ export function PickerSheet({ open, library, thumbs, adding, error, onRefresh, o
     if (open && library.state === "ready") onLoadThumbs(library.items.filter(usable).map((i) => i.id));
   }, [open, library, onLoadThumbs]);
 
-  const items = library.state === "ready" ? library.items : [];
+  const items = useMemo(() => (library.state === "ready" ? library.items : []), [library]);
   const days = useMemo(() => {
     const groups: { label: string; items: MediaItem[] }[] = [];
     for (const item of items) {
@@ -272,10 +292,13 @@ export function PickerSheet({ open, library, thumbs, adding, error, onRefresh, o
     onAdd(ids);
   }
 
-  // Clear the selection once a batch has been added and the sheet closes.
-  useEffect(() => {
+  // Clear the selection when the sheet closes. Adjusting state during
+  // render (rather than in an effect) avoids an extra render pass.
+  const [wasOpen, setWasOpen] = useState(open);
+  if (open !== wasOpen) {
+    setWasOpen(open);
     if (!open) setChosen(new Set());
-  }, [open]);
+  }
 
   const busy = adding !== null;
   const count = library.state === "ready" ? library.items.length : null;

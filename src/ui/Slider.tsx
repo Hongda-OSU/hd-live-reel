@@ -4,7 +4,7 @@ import { ui } from "./styles";
 
 const styles = stylex.create({
   range: {
-    flex: 1,
+    flex: "1",
     accentColor: colors.accent,
   },
 });

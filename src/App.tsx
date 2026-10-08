@@ -63,7 +63,8 @@ const styles = stylex.create({
   },
   name: {
     width: 260,
-    padding: "1px 6px",
+    paddingBlock: "1px",
+    paddingInline: "6px",
     borderWidth: 0,
     borderRadius: 5,
     backgroundColor: {
@@ -87,7 +88,8 @@ const styles = stylex.create({
   sidebar: {
     ...frosted,
     overflowY: "auto",
-    padding: "12px 10px",
+    paddingBlock: "12px",
+    paddingInline: "10px",
     borderRightWidth: 1,
     borderRightStyle: "solid",
     borderRightColor: colors.border,
@@ -95,7 +97,10 @@ const styles = stylex.create({
   sectionTitle: {
     display: "flex",
     justifyContent: "space-between",
-    padding: "4px 8px 8px",
+    paddingTop: "4px",
+    paddingRight: "8px",
+    paddingBottom: "8px",
+    paddingLeft: "8px",
     fontSize: 11,
     fontWeight: 600,
     color: colors.muted,
@@ -156,16 +161,18 @@ function App() {
   }, [project]);
 
   // ---------- title PNG ----------
-  const titleKey = project ? titleImageKey(project.title) : null;
+  const title = project?.title ?? null;
+  const titleKey = title ? titleImageKey(title) : null;
   useEffect(() => {
-    if (!project || titleKey === imageKey) return;
-    if (!hasTitleText(project.title)) {
+    // Only the title's look matters; other title edits find the keys equal.
+    if (!title || titleKey === imageKey) return;
+    if (!hasTitleText(title)) {
       setImageKey(titleKey);
       return;
     }
     let cancelled = false;
     const timer = setTimeout(async () => {
-      const path = await saveTitleImage(await renderTitlePng(project.title));
+      const path = await saveTitleImage(await renderTitlePng(title));
       if (cancelled) return;
       dispatch({ type: "updateTitle", patch: { textImage: path } });
       setImageKey(titleKey);
@@ -174,8 +181,7 @@ function App() {
       cancelled = true;
       clearTimeout(timer);
     };
-    // Re-run only when the title's look changes.
-  }, [titleKey, imageKey]);
+  }, [title, titleKey, imageKey]);
 
   // ---------- preview ----------
   const key = project ? renderKey(project) : null;
@@ -205,10 +211,12 @@ function App() {
   }, [key, titleReady]);
 
   // ---------- thumbnails for the clip list ----------
-  const clipAssets = project?.clips.map((c) => c.assetId).filter((id): id is string => !!id) ?? [];
-  const clipAssetKey = clipAssets.join("|");
+  // Joined into one string so the effect runs only when the set changes;
+  // asset ids ("<folder>/<name>") never contain "|".
+  const clipAssetKey = project?.clips.map((c) => c.assetId ?? "").join("|") ?? "";
   useEffect(() => {
-    if (clipAssets.length) loadThumbs(clipAssets);
+    const ids = clipAssetKey.split("|").filter(Boolean);
+    if (ids.length) loadThumbs(ids);
   }, [clipAssetKey, loadThumbs]);
 
   // ---------- actions ----------

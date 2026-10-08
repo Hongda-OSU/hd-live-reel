@@ -49,6 +49,6 @@ export const ui = stylex.create({
     },
   },
   spacer: {
-    flex: 1,
+    flex: "1",
   },
 });

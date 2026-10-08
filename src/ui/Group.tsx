@@ -4,7 +4,10 @@ import { colors } from "../tokens.stylex";
 
 const styles = stylex.create({
   group: {
-    padding: "12px 16px 14px",
+    paddingTop: "12px",
+    paddingRight: "16px",
+    paddingBottom: "14px",
+    paddingLeft: "16px",
     borderBottomWidth: 1,
     borderBottomStyle: "solid",
     borderBottomColor: colors.border,
@@ -13,12 +16,16 @@ const styles = stylex.create({
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
-    margin: "0 0 10px",
+    marginTop: "0",
+    marginRight: "0",
+    marginBottom: "10px",
+    marginLeft: "0",
     fontSize: 12,
     fontWeight: 600,
   },
   badge: {
-    padding: "1px 6px",
+    paddingBlock: "1px",
+    paddingInline: "6px",
     borderRadius: 99,
     backgroundColor: colors.surface2,
     color: colors.muted,
