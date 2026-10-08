@@ -17,10 +17,10 @@ Personal macOS desktop app that stitches iPhone Live Photos into one MP4 with or
 | Install JS deps | `pnpm install` |
 | Fetch FFmpeg sidecar | `./scripts/fetch-ffmpeg.sh` |
 | Run the app | `pnpm tauri dev` |
-| Frontend types + build | `pnpm build` |
+| All checks (types, ESLint, Prettier, rustfmt, clippy, swift-format) | `pnpm check` |
+| Auto-format everything | `pnpm format` |
 | Rust tests | `cargo test --manifest-path src-tauri/Cargo.toml` |
 | Baseline vs compose.py (personal media) | `HD_LIVE_REEL_SAMPLES=<dir> cargo test --manifest-path src-tauri/Cargo.toml --test baseline -- --ignored` |
-| Rust format + lint | `cargo fmt --manifest-path src-tauri/Cargo.toml && cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets` |
 | Build Swift helper into `binaries/` | `pnpm helper` (also run by `pnpm tauri dev`) |
 | Run Swift helper | `./binaries/photos-helper-aarch64-apple-darwin list` |
 
@@ -38,6 +38,7 @@ Personal macOS desktop app that stitches iPhone Live Photos into one MP4 with or
 - Never commit photos or videos; they carry GPS data. Test media stays outside the repo.
 - Ask before adding a dependency.
 - Ask before changing the `project.json` schema.
+- Run `pnpm check` before every commit. Do not commit if it fails.
 - After any code change, run the tests for the affected area before saying it's done.
 - Commits: Conventional Commits, atomic, subject and body lines ≤ 72 chars, body explains only why.
 - When commands or config change, update `README.md` in the same commit.

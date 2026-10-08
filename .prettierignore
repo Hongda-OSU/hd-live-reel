@@ -1,0 +1,7 @@
+# Formatted by their own tools (rustfmt, swift-format) or generated.
+dist
+src-tauri
+photos-helper
+binaries
+docs/design
+pnpm-lock.yaml
