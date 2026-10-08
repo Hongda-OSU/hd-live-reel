@@ -1,6 +1,7 @@
 pub mod clips;
 pub mod ffmpeg;
 pub mod iphone;
+pub mod music;
 pub mod project;
 pub mod render;
 mod sidecar;
@@ -107,6 +108,13 @@ async fn crop_frame(app: AppHandle, clip: project::Clip) -> Result<PathBuf, Stri
     blocking(move || clips::crop_frame(&clip, &cache)).await
 }
 
+/// Normalizes a chosen music file into the cache; returns the cached path.
+#[tauri::command]
+async fn import_music(app: AppHandle, path: PathBuf) -> Result<PathBuf, String> {
+    let cache = cache_dir(&app)?;
+    blocking(move || music::import(&path, &cache)).await
+}
+
 /// Stores the title PNG the frontend laid out; returns its path.
 #[tauri::command]
 fn save_title_image(app: AppHandle, png: Vec<u8>) -> Result<PathBuf, String> {
@@ -160,6 +168,7 @@ async fn export_video(app: AppHandle, project: project::Project) -> Result<PathB
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .manage(CurrentProject(Mutex::new(None)))
         .manage(PreviewCounter(AtomicU64::new(0)))
@@ -171,6 +180,7 @@ pub fn run() {
             add_iphone_clips,
             crop_clip,
             crop_frame,
+            import_music,
             save_title_image,
             render_preview,
             export_video

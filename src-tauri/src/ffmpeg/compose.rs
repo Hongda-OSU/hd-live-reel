@@ -8,6 +8,9 @@ use super::{Error, Grade, Tool};
 
 /// Ceiling for the final limiter (about -1 dBFS).
 const LIMIT: f64 = 0.89;
+/// Music fades in briefly and out over the last seconds of the video.
+const MUSIC_FADE_IN: f64 = 0.3;
+const MUSIC_FADE_OUT: f64 = 2.0;
 
 /// A transparent PNG, sized like the output, laid over the first frames.
 #[derive(Debug, Clone, PartialEq)]
@@ -17,6 +20,19 @@ pub struct Title {
     pub show_for: f64,
     /// Seconds of fade at the end of `show_for`; 0 cuts it off.
     pub fade_out: f64,
+}
+
+/// A normalized music track laid under, or instead of, the clips' sound.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Music {
+    pub path: PathBuf,
+    /// Linear gain; 1 keeps the normalized level.
+    pub volume: f64,
+    /// Linear gain for the clips' own sound underneath; `None` drops it.
+    pub original: Option<f64>,
+    /// Length of the video in seconds, where the music fades out. The
+    /// track loops if it is shorter.
+    pub length: f64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -52,6 +68,7 @@ pub struct Composition {
     pub clips: Vec<Segment>,
     pub grade: Grade,
     pub title: Option<Title>,
+    pub music: Option<Music>,
 }
 
 pub fn compose(composition: &Composition, quality: Quality, out: &Path) -> Result<(), Error> {
@@ -78,6 +95,14 @@ fn args(composition: &Composition, quality: Quality, out: &Path) -> Vec<String> 
             title.show_for.to_string(),
             "-i".into(),
             title.image.to_string_lossy().into_owned(),
+        ]);
+    }
+    if let Some(music) = &composition.music {
+        args.extend([
+            "-stream_loop".into(),
+            "-1".into(),
+            "-i".into(),
+            music.path.to_string_lossy().into_owned(),
         ]);
     }
     args.extend(["-filter_complex".into(), filter_graph(composition, quality)]);
@@ -131,7 +156,26 @@ fn filter_graph(composition: &Composition, quality: Quality) -> String {
     }
 
     graph.push_str(&format!("[{video}]null[v];"));
-    graph.push_str(&format!("[a0]alimiter=limit={LIMIT}[a]"));
+
+    let mut audio = "a0";
+    if let Some(music) = &composition.music {
+        let input = n + usize::from(composition.title.is_some());
+        let fade = MUSIC_FADE_OUT.min(music.length / 2.0);
+        graph.push_str(&format!(
+            "[{input}:a]volume={:.3},afade=t=in:d={MUSIC_FADE_IN},\
+             afade=t=out:st={:.3}:d={fade:.3}[music];",
+            music.volume,
+            music.length - fade,
+        ));
+        // Silenced rather than dropped: the clips' track still sets the
+        // length, since the looped music never ends.
+        graph.push_str(&format!(
+            "[a0]volume={:.3}[orig];[orig][music]amix=inputs=2:duration=first:normalize=0[mixed];",
+            music.original.unwrap_or(0.0),
+        ));
+        audio = "mixed";
+    }
+    graph.push_str(&format!("[{audio}]alimiter=limit={LIMIT}[a]"));
     graph
 }
 
@@ -209,6 +253,7 @@ mod tests {
     fn composition(title: Option<Title>) -> Composition {
         Composition {
             grade: Grade::default(),
+            music: None,
             clips: vec![PathBuf::from("a.mov").into(), PathBuf::from("b.mov").into()],
             title,
         }
@@ -261,6 +306,7 @@ mod tests {
     fn trims_and_mutes_only_the_segments_that_ask() {
         let composition = Composition {
             grade: Grade::default(),
+            music: None,
             clips: vec![
                 Segment {
                     path: "a.mov".into(),
@@ -310,6 +356,47 @@ mod tests {
             "[joined]{eq}[graded];[2:v]format=rgba[title];[graded][title]overlay"
         )));
         assert!(filter_graph(&graded, Quality::Preview).contains(&format!("[small]{eq}[graded];")));
+    }
+
+    fn music(original: Option<f64>) -> Music {
+        Music {
+            path: "song.flac".into(),
+            volume: 0.8,
+            original,
+            length: 4.0,
+        }
+    }
+
+    #[test]
+    fn music_loops_after_the_title_input_and_fades_out() {
+        let mut with_music = composition(Some(title(0.0)));
+        with_music.music = Some(music(None));
+        let graph = filter_graph(&with_music, Quality::Export);
+        assert!(graph.ends_with(
+            "[3:a]volume=0.800,afade=t=in:d=0.3,afade=t=out:st=2.000:d=2.000[music];\
+             [a0]volume=0.000[orig];[orig][music]amix=inputs=2:duration=first:normalize=0[mixed];\
+             [mixed]alimiter=limit=0.89[a]"
+        ));
+        let args = args(&with_music, Quality::Export, "out.mp4".as_ref());
+        let input = args.iter().position(|a| a == "song.flac").unwrap();
+        assert_eq!(args[input - 3..input], ["-stream_loop", "-1", "-i"]);
+
+        // Without a title the music is the input right after the clips.
+        let mut mixed = composition(None);
+        mixed.music = Some(music(Some(1.5)));
+        let graph = filter_graph(&mixed, Quality::Export);
+        assert!(graph.contains("[2:a]volume=0.800"));
+        assert!(graph.contains("[a0]volume=1.500[orig]"));
+    }
+
+    #[test]
+    fn short_music_fades_over_half_the_video() {
+        let mut short = composition(None);
+        short.music = Some(Music {
+            length: 1.0,
+            ..music(None)
+        });
+        assert!(filter_graph(&short, Quality::Export).contains("afade=t=out:st=0.500:d=0.500"));
     }
 
     /// Per-frame PSNR of `a` against `b`; identical frames give infinity.
@@ -395,6 +482,7 @@ mod tests {
         let out = dir.join("out.mp4");
         let composition = Composition {
             grade: Grade::default(),
+            music: None,
             clips: vec![
                 Segment {
                     path: clips[0].clone(),
@@ -474,11 +562,13 @@ mod tests {
         let clips: Vec<Segment> = clips.into_iter().map(Segment::from).collect();
         let without = Composition {
             grade: Grade::default(),
+            music: None,
             clips: clips.clone(),
             title: None,
         };
         let with = Composition {
             grade: Grade::default(),
+            music: None,
             clips,
             title: Some(Title {
                 image: png,
@@ -507,5 +597,95 @@ mod tests {
         assert_eq!(psnr.len(), 120);
         assert!(psnr[..30].iter().all(|&p| p < 20.0), "{:?}", &psnr[..30]);
         assert!(psnr[30..].iter().all(|&p| p > 35.0), "{:?}", &psnr[30..]);
+    }
+
+    #[test]
+    fn mixes_looped_music_under_generated_clips() {
+        let dir =
+            std::env::temp_dir().join(format!("hd-live-reel-music-mix-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut clips = Vec::new();
+        for i in 0..2 {
+            let src = dir.join(format!("src{i}.mov"));
+            Tool::Ffmpeg
+                .run([
+                    "-y",
+                    "-v",
+                    "error",
+                    "-f",
+                    "lavfi",
+                    "-i",
+                    "testsrc2=size=640x480:rate=30:duration=2",
+                    "-f",
+                    "lavfi",
+                    "-i",
+                    "sine=frequency=440:duration=2,volume=-20dB",
+                    "-c:v",
+                    "libx264",
+                    "-c:a",
+                    "pcm_s16le",
+                    src.to_str().unwrap(),
+                ])
+                .unwrap();
+            let norm = dir.join(format!("norm{i}.mov"));
+            normalize(&src, &norm, 0.5).unwrap();
+            clips.push(Segment::from(norm));
+        }
+        // 1.5 s of music under 4 s of video: it has to loop.
+        let song = dir.join("song.wav");
+        Tool::Ffmpeg
+            .run([
+                "-y",
+                "-v",
+                "error",
+                "-f",
+                "lavfi",
+                "-i",
+                "sine=frequency=660:duration=1.5,volume=-6dB",
+                song.to_str().unwrap(),
+            ])
+            .unwrap();
+        let track = dir.join("song.flac");
+        crate::ffmpeg::normalize_music(&song, &track).unwrap();
+
+        let render = |original: Option<f64>, volume: f64, name: &str| {
+            let out = dir.join(name);
+            let composition = Composition {
+                clips: clips.clone(),
+                grade: Grade::default(),
+                title: None,
+                music: Some(Music {
+                    path: track.clone(),
+                    volume,
+                    original,
+                    length: 4.0,
+                }),
+            };
+            compose(&composition, Quality::Preview, &out).unwrap();
+            out
+        };
+        let only_music = render(None, 1.0, "music.mp4");
+        let only_clips = render(Some(1.0), 0.0, "clips.mp4");
+        let duration = crate::ffmpeg::probe(&only_music).unwrap().duration;
+        let middle = loudness_between(&only_music, 0.5, 1.5).unwrap();
+        let looped = loudness_between(&only_music, 2.0, 2.4).unwrap();
+        let tail = loudness_between(&only_music, 3.8, 4.0);
+        let clips_lufs = loudness_between(&only_clips, 0.5, 1.5).unwrap();
+        std::fs::remove_dir_all(&dir).unwrap();
+
+        assert!((duration - 4.0).abs() < 0.1, "{duration}");
+        assert!((middle - crate::ffmpeg::MUSIC_LUFS).abs() < 2.0, "{middle}");
+        assert!(
+            looped > middle - 6.0,
+            "music keeps playing after 1.5 s: {looped}"
+        );
+        assert!(
+            tail.is_none_or(|t| t < middle - 10.0),
+            "fades out: {tail:?}"
+        );
+        assert!(
+            clips_lufs < middle - 8.0,
+            "clips' own sound sits lower: {clips_lufs}"
+        );
     }
 }

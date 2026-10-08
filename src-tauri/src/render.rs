@@ -5,8 +5,8 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 
-use crate::ffmpeg::{self, Composition, Grade, Look, Quality, Segment, Title};
-use crate::project::{Filter, Preset, Project};
+use crate::ffmpeg::{self, Composition, Grade, Look, Music, Quality, Segment, Title};
+use crate::project::{Audio, AudioMode, Filter, Preset, Project};
 
 /// What FFmpeg should join for `project`.
 pub fn composition(project: &Project) -> Result<Composition, String> {
@@ -41,10 +41,31 @@ pub fn composition(project: &Project) -> Result<Composition, String> {
         }),
         _ => None,
     };
+    let length = project
+        .clips
+        .iter()
+        .map(|clip| clip.trim_end - clip.trim_start)
+        .sum();
     Ok(Composition {
         clips,
         grade: grade(&project.filter),
         title,
+        music: music(&project.audio, length),
+    })
+}
+
+/// The music track, if a music mode is on and a track has been chosen.
+fn music(audio: &Audio, length: f64) -> Option<Music> {
+    let original = match audio.mode {
+        AudioMode::Original => return None,
+        AudioMode::Music => None,
+        AudioMode::Mix => Some(audio.original_volume),
+    };
+    Some(Music {
+        path: audio.music_path.clone()?,
+        volume: audio.music_volume,
+        original,
+        length,
     })
 }
 
@@ -173,6 +194,30 @@ mod tests {
         let grade = composition(&project).unwrap().grade;
         assert_eq!(grade.look, Some(Look::River));
         assert_eq!(grade.contrast, 1.2);
+    }
+
+    #[test]
+    fn music_needs_a_mode_and_a_track() {
+        let mut project = Project {
+            clips: vec![clip((0.0, 2.0), false), clip((0.5, 1.5), false)],
+            ..Default::default()
+        };
+        project.audio.mode = AudioMode::Music;
+        assert_eq!(composition(&project).unwrap().music, None, "no track yet");
+
+        project.audio.music_path = Some("/c/music/song.flac".into());
+        let music = composition(&project).unwrap().music.unwrap();
+        assert_eq!((music.original, music.length), (None, 3.0));
+
+        project.audio.mode = AudioMode::Mix;
+        project.audio.original_volume = 1.5;
+        assert_eq!(
+            composition(&project).unwrap().music.unwrap().original,
+            Some(1.5)
+        );
+
+        project.audio.mode = AudioMode::Original;
+        assert_eq!(composition(&project).unwrap().music, None);
     }
 
     #[test]

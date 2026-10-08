@@ -61,6 +61,7 @@ fn matches_compose_py_baseline() {
             clips,
             grade: Grade::default(),
             title,
+            music: None,
         },
         Quality::Export,
         &out,
