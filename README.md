@@ -5,7 +5,7 @@ A macOS desktop app that stitches iPhone Live Photos into one short video, keepi
 ## Features
 
 - Pick Live Photos and videos straight from a USB-connected iPhone, with thumbnails grouped by day
-- Keep each clip's original sound, loudness-matched, with click-free joins
+- Keep each clip's original sound, loudness-matched, with click-free joins, or lay a music track under or over it
 - Reorder, trim, mute and re-crop clips; add a styled opening title and colour filters
 - Preview from the same FFmpeg pipeline as the export, refreshed after every edit
 - Export a 1080×1920 H.264/AAC MP4 that WeChat can send and play directly

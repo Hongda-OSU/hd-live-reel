@@ -75,13 +75,22 @@ export interface Filter {
   saturation: number;
 }
 
+export interface Audio {
+  mode: "original" | "music" | "mix";
+  /** The normalized copy in the app cache, not the file the user picked. */
+  musicPath?: string | null;
+  /** Linear gain; 1 keeps the normalized level. */
+  musicVolume: number;
+  originalVolume: number;
+}
+
 export interface Project {
   version: number;
   name: string;
   clips: Clip[];
   title: Title;
   filter: Filter;
-  audio: { mode: "original" | "music" | "mix"; musicPath?: string | null; musicVolume: number; originalVolume: number };
+  audio: Audio;
   transition: { type: "none" | "fade"; duration: number };
   selection: { mode: "manual" | "ai"; targetSeconds: number };
   output: { aspect: "9:16" | "16:9"; fill: "crop" | "black" | "blur"; height: number };
@@ -103,6 +112,8 @@ export const iphoneThumbnails = (ids: string[]) => invoke<Thumbnail[]>("iphone_t
 export const addIphoneClips = (ids: string[]) => invoke<Clip[]>("add_iphone_clips", { ids });
 export const cropClip = (clip: Clip, cropOffset: number) => invoke<Clip>("crop_clip", { clip, cropOffset });
 export const cropFrame = (clip: Clip) => invoke<string>("crop_frame", { clip });
+
+export const importMusic = (path: string) => invoke<string>("import_music", { path });
 
 export const saveTitleImage = (png: Uint8Array) => invoke<string>("save_title_image", { png: Array.from(png) });
 export const renderPreview = (project: Project) => invoke<string>("render_preview", { project });

@@ -1,8 +1,9 @@
 import * as stylex from "@stylexjs/stylex";
-import type { Filter, Title, TitlePosition, TitleTextStyle, TitleWeight } from "../api";
+import type { Audio, Filter, Title, TitlePosition, TitleTextStyle, TitleWeight } from "../api";
 import type { Action } from "../project";
 import { colors } from "../tokens.stylex";
 import { Button, Field, Group, Select, Seg, Slider, Swatches, ui } from "../ui";
+import { SoundGroup } from "./SoundGroup";
 
 /** Fade used by the "淡出" choice, in seconds. */
 const FADE = 0.3;
@@ -51,11 +52,12 @@ const signed = (value: number) =>
 
 interface Props {
   title: Title;
+  audio: Audio;
   filter: Filter;
   dispatch: (action: Action) => void;
 }
 
-export function Inspector({ title, filter, dispatch }: Props) {
+export function Inspector({ title, audio, filter, dispatch }: Props) {
   const set = (patch: Partial<Title>) => dispatch({ type: "updateTitle", patch });
   const setFilter = (patch: Partial<Filter>) => dispatch({ type: "updateFilter", patch });
   const adjusted =
@@ -169,20 +171,7 @@ export function Inspector({ title, filter, dispatch }: Props) {
         </Field>
       </Group>
 
-      <Group title="声音" badge="即将支持" dimmed>
-        <Field>
-          <Seg
-            options={[
-              ["original", "原声"],
-              ["music", "配乐"],
-              ["mix", "配乐 + 原声"],
-            ]}
-            value="original"
-            disabled
-          />
-        </Field>
-        <p {...stylex.props(ui.note)}>每段已自动拉齐响度，接缝处不爆音。</p>
-      </Group>
+      <SoundGroup audio={audio} dispatch={dispatch} />
 
       <Group title="滤镜">
         <Field>
