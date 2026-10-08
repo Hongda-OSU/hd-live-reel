@@ -355,6 +355,7 @@ function App() {
             clips={project.clips}
             selectedId={selectedId}
             thumbs={thumbs}
+            noOriginalSound={project.audio.mode === "music" && !!project.audio.musicPath}
             onSelect={selectClip}
             dispatch={dispatch}
           />

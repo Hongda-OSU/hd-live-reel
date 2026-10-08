@@ -13,7 +13,14 @@ const styles = stylex.create({
     borderColor: colors.border,
     borderRadius: 99,
     backgroundColor: colors.surface2,
-    cursor: "pointer",
+    cursor: {
+      default: "pointer",
+      ":disabled": "default",
+    },
+    opacity: {
+      default: 1,
+      ":disabled": 0.45,
+    },
     "::after": {
       content: '""',
       position: "absolute",
@@ -36,12 +43,23 @@ const styles = stylex.create({
   },
 });
 
-export function Switch({ on, onToggle, label }: { on: boolean; onToggle: () => void; label: string }) {
+export function Switch({
+  on,
+  onToggle,
+  label,
+  disabled,
+}: {
+  on: boolean;
+  onToggle: () => void;
+  label: string;
+  disabled?: boolean;
+}) {
   return (
     <button
       role="switch"
       aria-checked={on}
       aria-label={label}
+      disabled={disabled}
       onClick={onToggle}
       {...stylex.props(styles.track, on && styles.on)}
     />

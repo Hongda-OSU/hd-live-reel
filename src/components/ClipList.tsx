@@ -71,6 +71,9 @@ const styles = stylex.create({
   mutedLabel: {
     color: colors.muted,
   },
+  dimmed: {
+    color: colors.muted,
+  },
   sub: {
     fontSize: 11,
     color: colors.muted,
@@ -123,11 +126,14 @@ interface Props {
   clips: Clip[];
   selectedId: string | null;
   thumbs: Record<string, string>;
+  /** True when the music replaces every clip's own sound, so muting a
+   * clip would change nothing. */
+  noOriginalSound: boolean;
   onSelect: (id: string) => void;
   dispatch: (action: Action) => void;
 }
 
-export function ClipList({ clips, selectedId, thumbs, onSelect, dispatch }: Props) {
+export function ClipList({ clips, selectedId, thumbs, noOriginalSound, onSelect, dispatch }: Props) {
   // A small move threshold keeps plain clicks as clicks.
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
 
@@ -152,6 +158,7 @@ export function ClipList({ clips, selectedId, thumbs, onSelect, dispatch }: Prop
               index={index}
               selected={clip.id === selectedId}
               thumb={clip.assetId ? thumbs[clip.assetId] : undefined}
+              noOriginalSound={noOriginalSound}
               onSelect={() => onSelect(clip.id)}
               dispatch={dispatch}
             />
@@ -167,11 +174,12 @@ interface RowProps {
   index: number;
   selected: boolean;
   thumb?: string;
+  noOriginalSound: boolean;
   onSelect: () => void;
   dispatch: (action: Action) => void;
 }
 
-function ClipRow({ clip, index, selected, thumb, onSelect, dispatch }: RowProps) {
+function ClipRow({ clip, index, selected, thumb, noOriginalSound, onSelect, dispatch }: RowProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: clip.id });
   const thumbImage = thumb ? { backgroundImage: `url("${thumb}")` } : undefined;
 
@@ -207,13 +215,17 @@ function ClipRow({ clip, index, selected, thumb, onSelect, dispatch }: RowProps)
           </div>
           <TrimBar clip={clip} thumbImage={thumbImage} dispatch={dispatch} />
           <div {...stylex.props(styles.detailRow)}>
-            <span>静音这一段</span>
+            <span {...stylex.props(noOriginalSound && styles.dimmed)}>静音这一段</span>
             <Switch
               on={clip.muted}
               label="静音这一段"
+              disabled={noOriginalSound}
               onToggle={() => dispatch({ type: "updateClip", id: clip.id, patch: { muted: !clip.muted } })}
             />
           </div>
+          {noOriginalSound && (
+            <p {...stylex.props(ui.note)}>配乐模式下没有原声；切回「原声」或「配乐 + 原声」后生效。</p>
+          )}
           <div {...stylex.props(styles.detailRow)}>
             <span {...stylex.props(ui.note)}>裁切位置：在预览上左右拖动</span>
             <Button variant="danger" onClick={() => dispatch({ type: "removeClip", id: clip.id })}>
