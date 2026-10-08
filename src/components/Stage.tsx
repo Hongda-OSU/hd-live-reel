@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import * as stylex from "@stylexjs/stylex";
 import { colors, shadows } from "../tokens.stylex";
-import { Button, Icon, withStyle } from "./controls";
+import { Button, Icon, withStyle } from "../ui";
 
 const styles = stylex.create({
   area: {

@@ -6,7 +6,7 @@ import * as stylex from "@stylexjs/stylex";
 import type { Clip } from "../api";
 import { clipLabel, clipLength, type Action } from "../project";
 import { colors, shadows } from "../tokens.stylex";
-import { Button, Switch, ui, withStyle } from "./controls";
+import { Button, Switch, ui, withStyle } from "../ui";
 
 /** Shortest a trimmed clip may get, in seconds. */
 const MIN_LENGTH = 0.5;

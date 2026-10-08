@@ -1,9 +1,8 @@
-import type { ReactNode } from "react";
 import * as stylex from "@stylexjs/stylex";
 import type { Title, TitlePosition } from "../api";
 import type { Action } from "../project";
 import { colors } from "../tokens.stylex";
-import { Field, Seg, ui } from "./controls";
+import { Field, Group, Seg, Slider, ui } from "../ui";
 
 /** Fade used by the "淡出" choice, in seconds. */
 const FADE = 0.3;
@@ -17,75 +16,7 @@ const styles = stylex.create({
     borderLeftColor: colors.border,
     backgroundColor: colors.window,
   },
-  group: {
-    padding: "12px 16px 14px",
-    borderBottomWidth: 1,
-    borderBottomStyle: "solid",
-    borderBottomColor: colors.border,
-  },
-  heading: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    margin: "0 0 10px",
-    fontSize: 12,
-    fontWeight: 600,
-  },
-  soon: {
-    padding: "1px 6px",
-    borderRadius: 99,
-    backgroundColor: colors.surface2,
-    color: colors.muted,
-    fontSize: 10,
-    fontWeight: 500,
-  },
-  dimmed: {
-    opacity: 0.45,
-  },
 });
-
-function Group({ title, soon, children }: { title: string; soon?: boolean; children: ReactNode }) {
-  return (
-    <div {...stylex.props(styles.group)}>
-      <h3 {...stylex.props(styles.heading)}>
-        {title}
-        {soon && <span {...stylex.props(styles.soon)}>即将支持</span>}
-      </h3>
-      <div {...stylex.props(soon && styles.dimmed)}>{children}</div>
-    </div>
-  );
-}
-
-function Slider({
-  min,
-  max,
-  step,
-  value,
-  shown,
-  onChange,
-}: {
-  min: number;
-  max: number;
-  step: number;
-  value: number;
-  shown: string;
-  onChange: (value: number) => void;
-}) {
-  return (
-    <div {...stylex.props(ui.inline)}>
-      <input
-        type="range"
-        min={min}
-        max={max}
-        step={step}
-        value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-        {...stylex.props(ui.range)}
-      />
-      <span {...stylex.props(ui.value)}>{shown}</span>
-    </div>
-  );
-}
 
 interface Props {
   title: Title;
@@ -158,7 +89,7 @@ export function Inspector({ title, dispatch }: Props) {
         </Field>
       </Group>
 
-      <Group title="声音" soon>
+      <Group title="声音" badge="即将支持" dimmed>
         <Field>
           <Seg
             options={[
@@ -173,7 +104,7 @@ export function Inspector({ title, dispatch }: Props) {
         <p {...stylex.props(ui.note)}>每段已自动拉齐响度，接缝处不爆音。</p>
       </Group>
 
-      <Group title="滤镜" soon>
+      <Group title="滤镜" badge="即将支持" dimmed>
         <Seg
           options={[
             ["none", "原片"],
@@ -186,7 +117,7 @@ export function Inspector({ title, dispatch }: Props) {
         />
       </Group>
 
-      <Group title="画幅" soon>
+      <Group title="画幅" badge="即将支持" dimmed>
         <Field>
           <Seg
             options={[

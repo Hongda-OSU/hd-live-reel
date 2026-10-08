@@ -34,6 +34,7 @@ Personal macOS desktop app that stitches iPhone Live Photos into one MP4 with or
 - Normalize every clip on import to 1080×1920, 30 fps, BT.709 SDR, stereo 48 kHz; later stages assume this.
 - Lay out title text in a frontend Canvas and overlay it as a transparent PNG. Do not use FFmpeg `drawtext`.
 - Style components with StyleX; colours and sizes come from `src/tokens.stylex.ts`. Only document-level resets go in `src/global.css`.
+- `src/ui/` holds generic controls that know nothing about Live Photos or projects; app-specific components go in `src/components/`.
 - Never commit photos or videos; they carry GPS data. Test media stays outside the repo.
 - Ask before adding a dependency.
 - Ask before changing the `project.json` schema.

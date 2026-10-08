@@ -3,7 +3,7 @@ import * as stylex from "@stylexjs/stylex";
 import type { ClipsProgress, MediaItem } from "../api";
 import { colors, layout, shadows } from "../tokens.stylex";
 import type { Library } from "../useLibrary";
-import { Button, Seg, ui, withStyle } from "./controls";
+import { Button, Seg, ui, withStyle } from "../ui";
 
 type Filter = "all" | "live" | "video";
 

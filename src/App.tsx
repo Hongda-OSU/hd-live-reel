@@ -11,7 +11,6 @@ import {
   type ClipsProgress,
 } from "./api";
 import { ClipList } from "./components/ClipList";
-import { Button, Icon } from "./components/controls";
 import { ExportDialog } from "./components/ExportDialog";
 import { Inspector } from "./components/Inspector";
 import { PickerSheet } from "./components/PickerSheet";
@@ -19,6 +18,7 @@ import { Stage } from "./components/Stage";
 import { clipLength, hasTitleText, reducer, renderKey, titleImageKey, totalLength } from "./project";
 import { renderTitlePng } from "./title";
 import { colors, layout } from "./tokens.stylex";
+import { Button, Icon } from "./ui";
 import { useLibrary } from "./useLibrary";
 
 const frosted = {

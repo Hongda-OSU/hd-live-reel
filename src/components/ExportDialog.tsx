@@ -3,7 +3,7 @@ import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import * as stylex from "@stylexjs/stylex";
 import { exportVideo, type Project } from "../api";
 import { colors, shadows } from "../tokens.stylex";
-import { Button, ui } from "./controls";
+import { Button, ui } from "../ui";
 
 type Phase = { step: "form" } | { step: "running" } | { step: "done"; path: string } | { step: "error"; message: string };
 
