@@ -5,6 +5,8 @@ export { Field } from "./Field";
 export { Group } from "./Group";
 export { Icon } from "./Icon";
 export { Seg } from "./Seg";
+export { Select } from "./Select";
 export { Slider } from "./Slider";
+export { Swatches } from "./Swatches";
 export { Switch } from "./Switch";
 export { ui, withStyle } from "./styles";
