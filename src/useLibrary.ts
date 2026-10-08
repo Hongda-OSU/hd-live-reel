@@ -4,9 +4,7 @@ import { useCallback, useRef, useState } from "react";
 import { fileUrl, iphoneThumbnails, listIphoneMedia, type MediaItem } from "./api";
 
 export type Library =
-  | { state: "idle" | "loading" }
-  | { state: "error"; message: string }
-  | { state: "ready"; items: MediaItem[] };
+  { state: "idle" | "loading" } | { state: "error"; message: string } | { state: "ready"; items: MediaItem[] };
 
 /** Thumbnails requested per helper call; the phone answers ~40 ms each. */
 const BATCH = 100;

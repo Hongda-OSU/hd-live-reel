@@ -62,7 +62,8 @@ enum Downloader {
             throw HelperError("\(name): download timed out")
         }
 
-        let url = savedName.hasPrefix("/")
+        let url =
+            savedName.hasPrefix("/")
             ? URL(fileURLWithPath: savedName)
             : folder.appendingPathComponent(savedName)
         let size = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? NSNumber)?.int64Value

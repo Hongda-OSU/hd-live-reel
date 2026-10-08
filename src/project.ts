@@ -39,8 +39,7 @@ export function reducer(project: Project | null, action: Action): Project | null
 
 export const clipLength = (clip: Clip) => clip.trimEnd - clip.trimStart;
 
-export const totalLength = (project: Project) =>
-  project.clips.reduce((sum, clip) => sum + clipLength(clip), 0);
+export const totalLength = (project: Project) => project.clips.reduce((sum, clip) => sum + clipLength(clip), 0);
 
 /** "IMG_2388" from "202609_a/IMG_2388.HEIC". */
 export function clipLabel(clip: Clip): string {

@@ -13,16 +13,16 @@ A macOS desktop app that stitches iPhone Live Photos into one short video, keepi
 
 ### Installation
 
-~~~bash
+```bash
 git clone https://github.com/Hongda-OSU/hd-live-reel.git
 cd hd-live-reel
 pnpm install
 ./scripts/fetch-ffmpeg.sh
 pnpm helper
-~~~
+```
 
 ## Usage
 
-~~~bash
+```bash
 pnpm tauri dev
-~~~
+```

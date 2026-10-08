@@ -86,8 +86,7 @@ export const listIphoneMedia = () => invoke<MediaItem[]>("list_iphone_media");
 export const iphoneThumbnails = (ids: string[]) => invoke<Thumbnail[]>("iphone_thumbnails", { ids });
 export const addIphoneClips = (ids: string[]) => invoke<Clip[]>("add_iphone_clips", { ids });
 
-export const saveTitleImage = (png: Uint8Array) =>
-  invoke<string>("save_title_image", { png: Array.from(png) });
+export const saveTitleImage = (png: Uint8Array) => invoke<string>("save_title_image", { png: Array.from(png) });
 export const renderPreview = (project: Project) => invoke<string>("render_preview", { project });
 export const exportVideo = (project: Project) => invoke<string>("export_video", { project });
 

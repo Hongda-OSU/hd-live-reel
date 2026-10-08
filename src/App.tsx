@@ -212,25 +212,22 @@ function App() {
   }, [clipAssetKey, loadThumbs]);
 
   // ---------- actions ----------
-  const addClips = useCallback(
-    async (ids: string[]) => {
-      setAdding("starting");
-      setAddError(null);
-      const unlisten = await onClipsProgress(setAdding);
-      try {
-        const clips = await addIphoneClips(ids);
-        dispatch({ type: "addClips", clips });
-        setSelectedId((current) => current ?? clips[0]?.id ?? null);
-        setPickerOpen(false);
-      } catch (e) {
-        setAddError(String(e));
-      } finally {
-        unlisten();
-        setAdding(null);
-      }
-    },
-    [],
-  );
+  const addClips = useCallback(async (ids: string[]) => {
+    setAdding("starting");
+    setAddError(null);
+    const unlisten = await onClipsProgress(setAdding);
+    try {
+      const clips = await addIphoneClips(ids);
+      dispatch({ type: "addClips", clips });
+      setSelectedId((current) => current ?? clips[0]?.id ?? null);
+      setPickerOpen(false);
+    } catch (e) {
+      setAddError(String(e));
+    } finally {
+      unlisten();
+      setAdding(null);
+    }
+  }, []);
 
   function selectClip(id: string) {
     if (!project) return;

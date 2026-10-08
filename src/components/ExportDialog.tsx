@@ -5,7 +5,8 @@ import { exportVideo, type Project } from "../api";
 import { colors, shadows } from "../tokens.stylex";
 import { Button, ui } from "../ui";
 
-type Phase = { step: "form" } | { step: "running" } | { step: "done"; path: string } | { step: "error"; message: string };
+type Phase =
+  { step: "form" } | { step: "running" } | { step: "done"; path: string } | { step: "error"; message: string };
 
 const slide = stylex.keyframes({
   from: { transform: "translateX(-100%)" },

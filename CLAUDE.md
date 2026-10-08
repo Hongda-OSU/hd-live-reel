@@ -12,17 +12,17 @@ Personal macOS desktop app that stitches iPhone Live Photos into one MP4 with or
 
 ## Commands
 
-| Purpose | Command |
-|---|---|
-| Install JS deps | `pnpm install` |
-| Fetch FFmpeg sidecar | `./scripts/fetch-ffmpeg.sh` |
-| Run the app | `pnpm tauri dev` |
-| All checks (types, ESLint, Prettier, rustfmt, clippy, swift-format) | `pnpm check` |
-| Auto-format everything | `pnpm format` |
-| Rust tests | `cargo test --manifest-path src-tauri/Cargo.toml` |
-| Baseline vs compose.py (personal media) | `HD_LIVE_REEL_SAMPLES=<dir> cargo test --manifest-path src-tauri/Cargo.toml --test baseline -- --ignored` |
-| Build Swift helper into `binaries/` | `pnpm helper` (also run by `pnpm tauri dev`) |
-| Run Swift helper | `./binaries/photos-helper-aarch64-apple-darwin list` |
+| Purpose                                                             | Command                                                                                                   |
+| ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| Install JS deps                                                     | `pnpm install`                                                                                            |
+| Fetch FFmpeg sidecar                                                | `./scripts/fetch-ffmpeg.sh`                                                                               |
+| Run the app                                                         | `pnpm tauri dev`                                                                                          |
+| All checks (types, ESLint, Prettier, rustfmt, clippy, swift-format) | `pnpm check`                                                                                              |
+| Auto-format everything                                              | `pnpm format`                                                                                             |
+| Rust tests                                                          | `cargo test --manifest-path src-tauri/Cargo.toml`                                                         |
+| Baseline vs compose.py (personal media)                             | `HD_LIVE_REEL_SAMPLES=<dir> cargo test --manifest-path src-tauri/Cargo.toml --test baseline -- --ignored` |
+| Build Swift helper into `binaries/`                                 | `pnpm helper` (also run by `pnpm tauri dev`)                                                              |
+| Run Swift helper                                                    | `./binaries/photos-helper-aarch64-apple-darwin list`                                                      |
 
 - Package manager: **pnpm** (not npm, not yarn). Frontend is React + TypeScript (Vite), styled with StyleX.
 - `photos-helper` needs a USB-connected, unlocked iPhone for `list` / `download`.

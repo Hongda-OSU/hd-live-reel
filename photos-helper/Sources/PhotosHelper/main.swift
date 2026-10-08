@@ -52,11 +52,11 @@ func withSession(_ body: (CameraSession) -> Void) {
 }
 
 let usage = """
-usage: photos-helper list-devices
-       photos-helper list
-       photos-helper download <id>... --to <dir>
-       photos-helper thumbnails <id>... --to <dir> [--size <pixels>]
-"""
+    usage: photos-helper list-devices
+           photos-helper list
+           photos-helper download <id>... --to <dir>
+           photos-helper thumbnails <id>... --to <dir> [--size <pixels>]
+    """
 
 /// Splits "<id>... --to <dir> [--size <n>]" into its parts.
 func parseBatch(_ rest: [String]) -> (ids: [String], dir: URL, size: Int?) {
@@ -96,9 +96,10 @@ case "download":
 case "thumbnails":
     let batch = parseBatch(Array(args.dropFirst()))
     withSession { session in
-        printJSON(Thumbnails.fetch(
-            ids: batch.ids, from: session.files, to: batch.dir, maxPixels: batch.size ?? 320
-        ))
+        printJSON(
+            Thumbnails.fetch(
+                ids: batch.ids, from: session.files, to: batch.dir, maxPixels: batch.size ?? 320
+            ))
     }
 case "-h", "--help":
     print(usage)

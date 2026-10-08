@@ -5,7 +5,7 @@ let package = Package(
     name: "photos-helper",
     platforms: [.macOS(.v14)],
     products: [
-        .executable(name: "photos-helper", targets: ["PhotosHelper"]),
+        .executable(name: "photos-helper", targets: ["PhotosHelper"])
     ],
     targets: [
         .executableTarget(
@@ -13,8 +13,8 @@ let package = Package(
             path: "Sources/PhotosHelper",
             swiftSettings: [
                 // ImageCaptureCore delegates predate Sendable annotations.
-                .swiftLanguageMode(.v5),
+                .swiftLanguageMode(.v5)
             ]
-        ),
+        )
     ]
 )

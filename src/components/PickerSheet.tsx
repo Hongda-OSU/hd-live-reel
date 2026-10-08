@@ -242,7 +242,9 @@ export function PickerSheet({ open, library, thumbs, adding, error, onRefresh, o
     const groups: { label: string; items: MediaItem[] }[] = [];
     for (const item of items) {
       const keep =
-        filter === "all" || (filter === "live" && item.kind === "livePhoto") || (filter === "video" && item.kind === "video");
+        filter === "all" ||
+        (filter === "live" && item.kind === "livePhoto") ||
+        (filter === "video" && item.kind === "video");
       if (!keep) continue;
       const label = dayLabel(item.createdAt);
       const last = groups[groups.length - 1];
@@ -281,7 +283,12 @@ export function PickerSheet({ open, library, thumbs, adding, error, onRefresh, o
   return (
     <>
       {open && <div onClick={busy ? undefined : onClose} {...stylex.props(styles.scrim)} />}
-      <div role="dialog" aria-label="从 iPhone 选择" aria-hidden={!open} {...stylex.props(styles.sheet, open && styles.open)}>
+      <div
+        role="dialog"
+        aria-label="从 iPhone 选择"
+        aria-hidden={!open}
+        {...stylex.props(styles.sheet, open && styles.open)}
+      >
         <header {...stylex.props(styles.header)}>
           <h2 {...stylex.props(styles.heading)}>从 iPhone 选择</h2>
           <span {...stylex.props(styles.device)}>
