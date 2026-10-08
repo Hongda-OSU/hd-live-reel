@@ -1,4 +1,130 @@
 import { useEffect, useRef, useState } from "react";
+import * as stylex from "@stylexjs/stylex";
+import { colors, shadows } from "../tokens.stylex";
+import { Button, Icon, withStyle } from "./controls";
+
+const styles = stylex.create({
+  area: {
+    display: "grid",
+    gridTemplateRows: "1fr auto",
+    minHeight: 0,
+    minWidth: 0,
+    padding: "18px 18px 10px",
+    backgroundColor: colors.stage,
+  },
+  wrap: {
+    display: "grid",
+    placeItems: "center",
+    minHeight: 0,
+  },
+  // Height-bound: a 9:16 frame on a landscape window fills the height.
+  frame: {
+    position: "relative",
+    height: "100%",
+    maxWidth: "100%",
+    aspectRatio: "9 / 16",
+    borderRadius: 10,
+    overflow: "hidden",
+    backgroundColor: "#000",
+    boxShadow: shadows.stage,
+  },
+  video: {
+    display: "block",
+    width: "100%",
+    height: "100%",
+  },
+  empty: {
+    position: "absolute",
+    inset: 0,
+    display: "grid",
+    placeContent: "center",
+    justifyItems: "center",
+    gap: 4,
+    color: "#a1a1a6",
+  },
+  pill: {
+    position: "absolute",
+    left: "50%",
+    top: 14,
+    transform: "translateX(-50%)",
+    padding: "4px 12px",
+    borderRadius: 99,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    color: "#fff",
+    fontSize: 11,
+    whiteSpace: "nowrap",
+    pointerEvents: "none",
+  },
+  errorPill: {
+    maxWidth: "90%",
+    whiteSpace: "normal",
+    borderRadius: 8,
+    backgroundColor: "rgba(160, 20, 20, 0.85)",
+  },
+  transport: {
+    display: "grid",
+    gridTemplateColumns: "auto auto 1fr auto",
+    gap: 12,
+    alignItems: "center",
+    justifySelf: "center",
+    width: "100%",
+    maxWidth: 760,
+    paddingTop: 10,
+  },
+  play: {
+    display: "grid",
+    placeItems: "center",
+    width: 30,
+    height: 30,
+    borderWidth: 1,
+    borderStyle: "solid",
+    borderColor: colors.border,
+    borderRadius: "50%",
+    backgroundColor: colors.surface,
+    cursor: {
+      default: "pointer",
+      ":disabled": "default",
+    },
+    opacity: {
+      default: 1,
+      ":disabled": 0.45,
+    },
+  },
+  time: {
+    color: colors.muted,
+    fontSize: 12,
+    fontVariantNumeric: "tabular-nums",
+  },
+  scrub: {
+    position: "relative",
+    height: 20,
+  },
+  range: {
+    width: "100%",
+    margin: 0,
+    accentColor: colors.accent,
+  },
+  ticks: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 4,
+    pointerEvents: "none",
+  },
+  tick: {
+    position: "absolute",
+    top: 0,
+    width: 1,
+    height: 4,
+    backgroundColor: colors.muted,
+    opacity: 0.6,
+  },
+  quality: {
+    color: colors.muted,
+    fontSize: 11,
+  },
+});
 
 interface Props {
   /** Playable URL of the latest preview, or null before the first one. */
@@ -49,9 +175,9 @@ export function Stage({ src, lengths, seekTo, busy, error, empty, onAdd }: Props
   const ticks = lengths.slice(0, -1).map((len) => (acc += len) / total);
 
   return (
-    <section className="stage-area">
-      <div className="stage-wrap">
-        <div className="stage">
+    <section {...stylex.props(styles.area)}>
+      <div {...stylex.props(styles.wrap)}>
+        <div {...stylex.props(styles.frame)}>
           {src && (
             <video
               ref={video}
@@ -66,44 +192,43 @@ export function Stage({ src, lengths, seekTo, busy, error, empty, onAdd }: Props
               onPlay={() => setPlaying(true)}
               onPause={() => setPlaying(false)}
               onClick={(e) => (e.currentTarget.paused ? e.currentTarget.play() : e.currentTarget.pause())}
+              {...stylex.props(styles.video)}
             />
           )}
           {empty && (
-            <div className="stage-empty">
+            <div {...stylex.props(styles.empty)}>
               <p>预览会显示在这里</p>
-              <button className="btn primary" onClick={onAdd}>
+              <Button variant="primary" onClick={onAdd}>
                 添加照片
-              </button>
+              </Button>
             </div>
           )}
-          {busy && <div className="stage-busy">正在更新预览…</div>}
-          {error && !busy && <div className="stage-error">{error}</div>}
+          {busy && <div {...stylex.props(styles.pill)}>正在更新预览…</div>}
+          {error && !busy && <div {...stylex.props(styles.pill, styles.errorPill)}>{error}</div>}
         </div>
       </div>
-      <div className="transport">
+      <div {...stylex.props(styles.transport)}>
         <button
-          className="round"
           aria-label={playing ? "暂停" : "播放"}
           disabled={!src}
           onClick={() => (video.current?.paused ? video.current.play() : video.current?.pause())}
+          {...stylex.props(styles.play)}
         >
-          {playing ? (
-            <svg className="icon" viewBox="0 0 16 16">
+          <Icon>
+            {playing ? (
               <path d="M5 3.5v9M11 3.5v9" strokeWidth="2.2" />
-            </svg>
-          ) : (
-            <svg className="icon" viewBox="0 0 16 16">
+            ) : (
               <path d="M5 3.5v9l7-4.5z" fill="currentColor" stroke="none" />
-            </svg>
-          )}
+            )}
+          </Icon>
         </button>
-        <span className="time">
+        <span {...stylex.props(styles.time)}>
           {fmt(time)} / {fmt(duration || total)}
         </span>
-        <div className="scrub">
-          <div className="ticks">
+        <div {...stylex.props(styles.scrub)}>
+          <div {...stylex.props(styles.ticks)}>
             {ticks.map((t, i) => (
-              <i key={i} style={{ left: `${t * 100}%` }} />
+              <i key={i} {...withStyle(stylex.props(styles.tick), { left: `${t * 100}%` })} />
             ))}
           </div>
           <input
@@ -116,9 +241,10 @@ export function Stage({ src, lengths, seekTo, busy, error, empty, onAdd }: Props
             onChange={(e) => {
               if (video.current) video.current.currentTime = Number(e.target.value);
             }}
+            {...stylex.props(styles.range)}
           />
         </div>
-        <span className="quality">低清预览 · 与导出同一处理链</span>
+        <span {...stylex.props(styles.quality)}>低清预览 · 与导出同一处理链</span>
       </div>
     </section>
   );

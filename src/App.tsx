@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
+import * as stylex from "@stylexjs/stylex";
 import {
   addIphoneClips,
   fileUrl,
@@ -10,14 +11,96 @@ import {
   type ClipsProgress,
 } from "./api";
 import { ClipList } from "./components/ClipList";
+import { Button, Icon } from "./components/controls";
 import { ExportDialog } from "./components/ExportDialog";
 import { Inspector } from "./components/Inspector";
 import { PickerSheet } from "./components/PickerSheet";
 import { Stage } from "./components/Stage";
 import { clipLength, hasTitleText, reducer, renderKey, titleImageKey, totalLength } from "./project";
 import { renderTitlePng } from "./title";
+import { colors, layout } from "./tokens.stylex";
 import { useLibrary } from "./useLibrary";
-import "./App.css";
+
+const frosted = {
+  backgroundColor: colors.sidebar,
+  backdropFilter: "blur(30px) saturate(1.6)",
+} as const;
+
+const styles = stylex.create({
+  app: {
+    position: "relative",
+    display: "grid",
+    gridTemplateRows: `${layout.toolbarHeight} 1fr`,
+    height: "100%",
+    color: colors.text,
+    backgroundColor: colors.window,
+  },
+  fatal: {
+    padding: 40,
+    color: colors.danger,
+  },
+  // The macOS traffic lights overlay the toolbar's left edge.
+  toolbar: {
+    ...frosted,
+    display: "grid",
+    gridTemplateColumns: `${layout.sidebarWidth} 1fr ${layout.inspectorWidth}`,
+    alignItems: "center",
+    borderBottomWidth: 1,
+    borderBottomStyle: "solid",
+    borderBottomColor: colors.border,
+  },
+  toolbarLeft: {
+    paddingLeft: 84,
+  },
+  toolbarCenter: {
+    display: "grid",
+    justifyItems: "center",
+  },
+  toolbarRight: {
+    display: "flex",
+    justifyContent: "flex-end",
+    paddingRight: 14,
+  },
+  name: {
+    width: 260,
+    padding: "1px 6px",
+    borderWidth: 0,
+    borderRadius: 5,
+    backgroundColor: {
+      default: "transparent",
+      ":hover": colors.surface,
+      ":focus": colors.surface,
+    },
+    outline: "none",
+    textAlign: "center",
+    fontWeight: 600,
+  },
+  meta: {
+    fontSize: 11,
+    color: colors.muted,
+  },
+  body: {
+    display: "grid",
+    gridTemplateColumns: `${layout.sidebarWidth} 1fr ${layout.inspectorWidth}`,
+    minHeight: 0,
+  },
+  sidebar: {
+    ...frosted,
+    overflowY: "auto",
+    padding: "12px 10px",
+    borderRightWidth: 1,
+    borderRightStyle: "solid",
+    borderRightColor: colors.border,
+  },
+  sectionTitle: {
+    display: "flex",
+    justifyContent: "space-between",
+    padding: "4px 8px 8px",
+    fontSize: 11,
+    fontWeight: 600,
+    color: colors.muted,
+  },
+});
 
 /** Quiet time after an edit before saving / re-rendering, in ms. */
 const SAVE_DELAY = 400;
@@ -157,30 +240,30 @@ function App() {
     setSeekTo({ time: start + 0.01, nonce: Date.now() });
   }
 
-  if (loadError) return <p className="fatal">无法打开工程：{loadError}</p>;
+  if (loadError) return <p {...stylex.props(styles.fatal)}>无法打开工程：{loadError}</p>;
   if (!project) return null;
 
   const total = totalLength(project);
   return (
-    <div className="app">
-      <header className="toolbar" data-tauri-drag-region>
-        <div className="left" data-tauri-drag-region>
-          <button className="btn" onClick={() => setPickerOpen(true)}>
-            <svg className="icon" viewBox="0 0 16 16">
+    <div {...stylex.props(styles.app)}>
+      <header data-tauri-drag-region {...stylex.props(styles.toolbar)}>
+        <div data-tauri-drag-region {...stylex.props(styles.toolbarLeft)}>
+          <Button onClick={() => setPickerOpen(true)}>
+            <Icon>
               <path d="M8 3v10M3 8h10" />
-            </svg>
+            </Icon>
             添加照片
-          </button>
+          </Button>
         </div>
-        <div className="center" data-tauri-drag-region>
+        <div data-tauri-drag-region {...stylex.props(styles.toolbarCenter)}>
           <input
-            className="name"
             value={project.name}
             placeholder="未命名"
             aria-label="工程名称"
             onChange={(e) => dispatch({ type: "rename", name: e.target.value })}
+            {...stylex.props(styles.name)}
           />
-          <div className="meta" data-tauri-drag-region>
+          <div data-tauri-drag-region {...stylex.props(styles.meta)}>
             {saveError
               ? `保存失败：${saveError}`
               : project.clips.length
@@ -188,19 +271,19 @@ function App() {
                 : "空工程"}
           </div>
         </div>
-        <div className="right" data-tauri-drag-region>
-          <button className="btn primary" disabled={project.clips.length === 0} onClick={() => setExportOpen(true)}>
-            <svg className="icon" viewBox="0 0 16 16">
+        <div data-tauri-drag-region {...stylex.props(styles.toolbarRight)}>
+          <Button variant="primary" disabled={project.clips.length === 0} onClick={() => setExportOpen(true)}>
+            <Icon>
               <path d="M8 10V2.5M5 5.5 8 2.5l3 3M3 9.5v3.5h10V9.5" />
-            </svg>
+            </Icon>
             导出
-          </button>
+          </Button>
         </div>
       </header>
 
-      <main className="body">
-        <aside className="sidebar">
-          <div className="section-title">
+      <main {...stylex.props(styles.body)}>
+        <aside {...stylex.props(styles.sidebar)}>
+          <div {...stylex.props(styles.sectionTitle)}>
             <span>片段</span>
             <span>{project.clips.length || ""}</span>
           </div>

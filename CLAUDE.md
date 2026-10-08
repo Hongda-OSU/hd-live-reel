@@ -24,7 +24,7 @@ Personal macOS desktop app that stitches iPhone Live Photos into one MP4 with or
 | Build Swift helper into `binaries/` | `pnpm helper` (also run by `pnpm tauri dev`) |
 | Run Swift helper | `./binaries/photos-helper-aarch64-apple-darwin list` |
 
-- Package manager: **pnpm** (not npm, not yarn). Frontend is React + TypeScript (Vite).
+- Package manager: **pnpm** (not npm, not yarn). Frontend is React + TypeScript (Vite), styled with StyleX.
 - `photos-helper` needs a USB-connected, unlocked iPhone for `list` / `download`.
 
 ## Rules
@@ -33,6 +33,7 @@ Personal macOS desktop app that stitches iPhone Live Photos into one MP4 with or
 - Treat originals as read-only. Write intermediates only to `~/Library/Caches/<App>/`.
 - Normalize every clip on import to 1080×1920, 30 fps, BT.709 SDR, stereo 48 kHz; later stages assume this.
 - Lay out title text in a frontend Canvas and overlay it as a transparent PNG. Do not use FFmpeg `drawtext`.
+- Style components with StyleX; colours and sizes come from `src/tokens.stylex.ts`. Only document-level resets go in `src/global.css`.
 - Never commit photos or videos; they carry GPS data. Test media stays outside the repo.
 - Ask before adding a dependency.
 - Ask before changing the `project.json` schema.

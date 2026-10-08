@@ -1,12 +1,121 @@
-import { useRef } from "react";
+import { useRef, type CSSProperties } from "react";
 import { DndContext, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import * as stylex from "@stylexjs/stylex";
 import type { Clip } from "../api";
 import { clipLabel, clipLength, type Action } from "../project";
+import { colors, shadows } from "../tokens.stylex";
+import { Button, Switch, ui, withStyle } from "./controls";
 
 /** Shortest a trimmed clip may get, in seconds. */
 const MIN_LENGTH = 0.5;
+
+const styles = stylex.create({
+  list: {
+    display: "grid",
+    gap: 2,
+    margin: 0,
+    padding: 0,
+    listStyle: "none",
+  },
+  empty: {
+    padding: 8,
+    color: colors.muted,
+    fontSize: 12,
+    lineHeight: 1.6,
+  },
+  row: {
+    display: "grid",
+    gridTemplateColumns: "16px 30px 1fr auto",
+    gap: 8,
+    alignItems: "center",
+    padding: "6px 8px",
+    borderRadius: 8,
+    backgroundColor: {
+      default: "transparent",
+      ":hover": colors.hover,
+    },
+  },
+  selected: {
+    backgroundColor: {
+      default: colors.accentSoft,
+      ":hover": colors.accentSoft,
+    },
+  },
+  dragging: {
+    position: "relative",
+    zIndex: 2,
+    backgroundColor: colors.surface,
+    boxShadow: shadows.lifted,
+  },
+  grip: {
+    color: colors.muted,
+    cursor: "grab",
+    fontSize: 11,
+    textAlign: "center",
+    touchAction: "none",
+  },
+  thumb: {
+    width: 30,
+    height: 40,
+    borderRadius: 4,
+    backgroundColor: colors.surface2,
+    backgroundPosition: "center",
+    backgroundSize: "cover",
+  },
+  label: {
+    fontWeight: 500,
+  },
+  mutedLabel: {
+    color: colors.muted,
+  },
+  sub: {
+    fontSize: 11,
+    color: colors.muted,
+  },
+  detail: {
+    gridColumn: "1 / -1",
+    display: "grid",
+    gap: 8,
+    marginTop: 6,
+    padding: 8,
+    borderRadius: 6,
+    backgroundColor: colors.surface,
+    fontSize: 12,
+  },
+  detailRow: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 8,
+  },
+  trim: {
+    position: "relative",
+    height: 26,
+    borderRadius: 4,
+    backgroundColor: colors.surface2,
+    backgroundPosition: "center",
+    backgroundSize: "cover",
+  },
+  shade: {
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0, 0, 0, 0.55)",
+  },
+  handle: {
+    position: "absolute",
+    top: -2,
+    bottom: -2,
+    width: 8,
+    marginLeft: -4,
+    borderRadius: 3,
+    backgroundColor: colors.trimHandle,
+    cursor: "ew-resize",
+    touchAction: "none",
+  },
+});
 
 interface Props {
   clips: Clip[];
@@ -28,12 +137,12 @@ export function ClipList({ clips, selectedId, thumbs, onSelect, dispatch }: Prop
   }
 
   if (clips.length === 0) {
-    return <p className="empty-list">还没有片段。点「添加照片」从 iPhone 挑选 Live Photo。</p>;
+    return <p {...stylex.props(styles.empty)}>还没有片段。点「添加照片」从 iPhone 挑选 Live Photo。</p>;
   }
   return (
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
       <SortableContext items={clips.map((c) => c.id)} strategy={verticalListSortingStrategy}>
-        <ul className="clips">
+        <ul {...stylex.props(styles.list)}>
           {clips.map((clip, index) => (
             <ClipRow
               key={clip.id}
@@ -62,54 +171,52 @@ interface RowProps {
 
 function ClipRow({ clip, index, selected, thumb, onSelect, dispatch }: RowProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: clip.id });
-  const style = { transform: CSS.Transform.toString(transform), transition };
-  const thumbStyle = thumb ? { backgroundImage: `url("${thumb}")` } : undefined;
+  const thumbImage = thumb ? { backgroundImage: `url("${thumb}")` } : undefined;
 
   return (
     <li
       ref={setNodeRef}
-      style={style}
-      className={["clip", selected && "selected", clip.muted && "is-muted", isDragging && "dragging"]
-        .filter(Boolean)
-        .join(" ")}
       onClick={onSelect}
+      {...withStyle(stylex.props(styles.row, selected && styles.selected, isDragging && styles.dragging), {
+        transform: CSS.Transform.toString(transform),
+        transition,
+      })}
     >
-      <span className="grip" {...attributes} {...listeners} aria-label="拖动排序">
+      <span {...attributes} {...listeners} aria-label="拖动排序" {...stylex.props(styles.grip)}>
         ⋮⋮
       </span>
-      <span className="thumb" style={thumbStyle} />
+      <span {...withStyle(stylex.props(styles.thumb), thumbImage)} />
       <span>
-        <div className="label">
+        <div {...stylex.props(styles.label, clip.muted && styles.mutedLabel)}>
           {index + 1}. {clipLabel(clip)}
         </div>
-        <div className="sub">
+        <div {...stylex.props(styles.sub)}>
           {clipLength(clip).toFixed(1)} 秒{clip.kind === "video" ? " · 视频" : ""}
         </div>
       </span>
-      <span className="muted-flag">{clip.muted ? "🔇" : ""}</span>
+      <span {...stylex.props(styles.sub)}>{clip.muted ? "🔇" : ""}</span>
       {selected && (
-        <div className="clip-detail" onClick={(e) => e.stopPropagation()}>
-          <div className="row">
+        <div onClick={(e) => e.stopPropagation()} {...stylex.props(styles.detail)}>
+          <div {...stylex.props(styles.detailRow)}>
             <span>截取</span>
-            <span className="note">
+            <span {...stylex.props(ui.note)}>
               {clip.trimStart.toFixed(1)}s – {clip.trimEnd.toFixed(1)}s
             </span>
           </div>
-          <TrimBar clip={clip} thumbStyle={thumbStyle} dispatch={dispatch} />
-          <div className="row">
+          <TrimBar clip={clip} thumbImage={thumbImage} dispatch={dispatch} />
+          <div {...stylex.props(styles.detailRow)}>
             <span>静音这一段</span>
-            <button
-              className={clip.muted ? "switch on" : "switch"}
-              role="switch"
-              aria-checked={clip.muted}
-              onClick={() => dispatch({ type: "updateClip", id: clip.id, patch: { muted: !clip.muted } })}
+            <Switch
+              on={clip.muted}
+              label="静音这一段"
+              onToggle={() => dispatch({ type: "updateClip", id: clip.id, patch: { muted: !clip.muted } })}
             />
           </div>
-          <div className="row">
-            <span className="note">裁切位置：下一版支持在预览上拖动</span>
-            <button className="btn ghost danger" onClick={() => dispatch({ type: "removeClip", id: clip.id })}>
+          <div {...stylex.props(styles.detailRow)}>
+            <span {...stylex.props(ui.note)}>裁切位置：下一版支持在预览上拖动</span>
+            <Button variant="danger" onClick={() => dispatch({ type: "removeClip", id: clip.id })}>
               移除
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -119,11 +226,11 @@ function ClipRow({ clip, index, selected, thumb, onSelect, dispatch }: RowProps)
 
 function TrimBar({
   clip,
-  thumbStyle,
+  thumbImage,
   dispatch,
 }: {
   clip: Clip;
-  thumbStyle?: React.CSSProperties;
+  thumbImage?: CSSProperties;
   dispatch: (action: Action) => void;
 }) {
   const bar = useRef<HTMLDivElement>(null);
@@ -141,11 +248,8 @@ function TrimBar({
         const rounded = Math.round(t * 10) / 10;
         const patch =
           handle === "start"
-            ? { trimStart: Math.min(rounded, clip.trimEnd - MIN_LENGTH) }
-            : { trimEnd: Math.max(rounded, clip.trimStart + MIN_LENGTH) };
-        // Keep within the clip even after rounding.
-        if (patch.trimStart !== undefined) patch.trimStart = Math.max(0, patch.trimStart);
-        if (patch.trimEnd !== undefined) patch.trimEnd = Math.min(clip.duration, patch.trimEnd);
+            ? { trimStart: Math.max(0, Math.min(rounded, clip.trimEnd - MIN_LENGTH)) }
+            : { trimEnd: Math.min(clip.duration, Math.max(rounded, clip.trimStart + MIN_LENGTH)) };
         dispatch({ type: "updateClip", id: clip.id, patch });
       };
       target.onpointerup = () => {
@@ -155,11 +259,11 @@ function TrimBar({
   }
 
   return (
-    <div className="trim" ref={bar} style={thumbStyle}>
-      <div className="shade" style={{ left: 0, width: `${left}%` }} />
-      <div className="shade" style={{ left: `${right}%`, right: 0 }} />
-      <div className="handle" style={{ left: `${left}%` }} onPointerDown={drag("start")} />
-      <div className="handle" style={{ left: `${right}%` }} onPointerDown={drag("end")} />
+    <div ref={bar} {...withStyle(stylex.props(styles.trim), thumbImage)}>
+      <div {...withStyle(stylex.props(styles.shade), { left: 0, width: `${left}%` })} />
+      <div {...withStyle(stylex.props(styles.shade), { left: `${right}%`, right: 0 })} />
+      <div {...withStyle(stylex.props(styles.handle), { left: `${left}%` })} onPointerDown={drag("start")} />
+      <div {...withStyle(stylex.props(styles.handle), { left: `${right}%` })} onPointerDown={drag("end")} />
     </div>
   );
 }
