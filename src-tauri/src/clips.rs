@@ -243,6 +243,11 @@ struct Item {
     taken_at: Option<String>,
 }
 
+/// Videos longer than this start trimmed to their first `DEFAULT_SLICE`
+/// seconds, so one long video doesn't fill the reel by itself.
+const LONG_VIDEO: f64 = 10.0;
+const DEFAULT_SLICE: f64 = 5.0;
+
 /// Normalizes `item` under the cache id `id` and describes it, reporting
 /// the share done through `on_share`.
 fn prepare(
@@ -259,6 +264,11 @@ fn prepare(
     } else {
         ClipKind::Video
     };
+    let trim_end = if kind == ClipKind::Video && duration > LONG_VIDEO {
+        DEFAULT_SLICE
+    } else {
+        duration
+    };
     Ok(Clip {
         id: unique,
         source,
@@ -270,7 +280,7 @@ fn prepare(
         taken_at: item.taken_at,
         duration,
         trim_start: 0.0,
-        trim_end: duration,
+        trim_end,
         muted: false,
         crop_offset: 0.5,
         ai_score: None,
@@ -604,6 +614,19 @@ mod tests {
         assert!(reports.iter().any(|&share| share > 0.0), "{reports:?}");
         assert!(reports.windows(2).all(|w| w[0] <= w[1]), "{reports:?}");
         assert_eq!(leftovers, ["long.full.norm.mov"]);
+    }
+
+    #[test]
+    fn long_videos_start_as_a_short_slice() {
+        let dir = std::env::temp_dir().join(format!("hd-live-reel-long-{}", std::process::id()));
+        let video = long_video(&dir.join("src"));
+
+        let added = add_from_files(&[video], &dir.join("cache"), |_| {}).unwrap();
+        std::fs::remove_dir_all(&dir).unwrap();
+
+        let clip = &added.clips[0];
+        assert_eq!(clip.duration, 12.0);
+        assert_eq!((clip.trim_start, clip.trim_end), (0.0, DEFAULT_SLICE));
     }
 
     #[test]
