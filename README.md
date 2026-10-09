@@ -45,7 +45,7 @@ Connect the iPhone with a cable, unlock it, then start the app:
 pnpm tauri dev
 ```
 
-Exports are saved to `~/Movies/HD Live Reel/` unless another folder is chosen in the Export section.
+Exports are saved to `~/Movies/HD Live Reel/` unless another folder is chosen in the 导出 (Export) section.
 
 Before committing:
 
