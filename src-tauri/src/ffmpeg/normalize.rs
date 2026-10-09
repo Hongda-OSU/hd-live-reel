@@ -155,9 +155,23 @@ fn plan(info: &MediaInfo, lufs: Option<f64>, crop_offset: f64) -> Result<Plan, E
     })
 }
 
-/// Converts any SDR source to limited-range BT.709 yuv420p.
+/// Converts any source to limited-range BT.709 SDR yuv420p.
 fn colour_filter(video: &VideoInfo) -> String {
     let range_in = if video.full_range { "full" } else { "limited" };
+    // Regular iPhone videos are HDR (HLG, BT.2020). Read as SDR they look
+    // washed out, so decode to linear light and tone-map the highlights
+    // down with hable, which kept skies and foliage closest to normal.
+    if let Some(transfer) = video
+        .transfer
+        .as_deref()
+        .filter(|t| matches!(*t, "arib-std-b67" | "smpte2084"))
+    {
+        return format!(
+            "zscale=rin={range_in}:pin=bt2020:tin={transfer}:min=bt2020nc:t=linear:npl=100,\
+             format=gbrpf32le,zscale=p=bt709,tonemap=tonemap=hable:desat=0,\
+             zscale=t=bt709:m=bt709:r=limited,format=yuv420p"
+        );
+    }
     let primaries_in = video
         .primaries
         .as_deref()
@@ -250,6 +264,34 @@ mod tests {
             "aresample=48000,aformat=channel_layouts=stereo,volume=18.0dB,\
              apad,atrim=0:1.9667,afade=t=in:d=0.03,afade=t=out:st=1.9367:d=0.03"
         );
+    }
+
+    fn iphone_hdr_video() -> MediaInfo {
+        MediaInfo {
+            duration: 1.765,
+            creation_time: None,
+            video: Some(VideoInfo {
+                width: 1920,
+                height: 1080,
+                pix_fmt: "yuv420p10le".into(),
+                full_range: false,
+                primaries: Some("bt2020".into()),
+                transfer: Some("arib-std-b67".into()),
+            }),
+            has_audio: true,
+        }
+    }
+
+    #[test]
+    fn hdr_video_is_tone_mapped_and_sdr_is_not() {
+        let hdr = plan(&iphone_hdr_video(), None, 0.5).unwrap().video_filter;
+        assert!(
+            hdr.starts_with("zscale=rin=limited:pin=bt2020:tin=arib-std-b67:min=bt2020nc:t=linear"),
+            "{hdr}"
+        );
+        assert!(hdr.contains("tonemap=tonemap=hable"), "{hdr}");
+        let sdr = plan(&live_photo(), None, 0.5).unwrap().video_filter;
+        assert!(!sdr.contains("tonemap"), "{sdr}");
     }
 
     #[test]
@@ -381,5 +423,79 @@ mod tests {
 
         // 640×480 scaled to cover 540×960: the full 4:3 width survives.
         assert!(summary.contains("width=1280|height=960"), "{summary}");
+    }
+
+    /// First-frame signalstats value, e.g. "SATAVG".
+    fn first_frame_stat(path: &Path, key: &str) -> f64 {
+        let output = Tool::Ffmpeg
+            .run([
+                "-hide_banner".to_string(),
+                "-i".into(),
+                path.to_string_lossy().into_owned(),
+                "-vf".into(),
+                format!("signalstats,metadata=print:key=lavfi.signalstats.{key}"),
+                "-frames:v".into(),
+                "1".into(),
+                "-f".into(),
+                "null".into(),
+                "-".into(),
+            ])
+            .unwrap();
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        stderr
+            .lines()
+            .find_map(|line| line.split(&format!("{key}=")).nth(1))
+            .and_then(|v| v.trim().parse().ok())
+            .unwrap_or_else(|| panic!("no {key} in: {stderr}"))
+    }
+
+    #[test]
+    fn tone_maps_bright_hlg_without_clipping() {
+        let dir = std::env::temp_dir().join(format!("hd-live-reel-hdr-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        // A test pattern lifted 8x in linear light, so its highlights reach
+        // far past SDR white as a sunny iPhone HDR shot does.
+        let src = dir.join("hlg.mov");
+        let gain = "colorchannelmixer=rr=2:gg=2:bb=2";
+        Tool::Ffmpeg
+            .run([
+                "-y".to_string(),
+                "-v".into(),
+                "error".into(),
+                "-f".into(),
+                "lavfi".into(),
+                "-i".into(),
+                "testsrc2=size=640x480:rate=30:duration=1".into(),
+                "-vf".into(),
+                format!(
+                    "zscale=tin=bt709:pin=bt709:min=bt709:t=linear:p=bt2020:npl=100,\
+                     format=gbrpf32le,{gain},{gain},{gain},\
+                     zscale=t=arib-std-b67:m=bt2020nc:npl=100,format=yuv420p10le"
+                ),
+                "-c:v".into(),
+                "libx264".into(),
+                "-profile:v".into(),
+                "high10".into(),
+                "-color_trc".into(),
+                "arib-std-b67".into(),
+                "-color_primaries".into(),
+                "bt2020".into(),
+                "-colorspace".into(),
+                "bt2020nc".into(),
+                src.to_string_lossy().into_owned(),
+            ])
+            .unwrap();
+        let dst = dir.join("out.mov");
+        normalize(&src, &dst, 0.5).unwrap();
+        let summary = stream_summary(&dst);
+        let saturation = first_frame_stat(&dst, "SATAVG");
+        let brightest = first_frame_stat(&dst, "YHIGH");
+        std::fs::remove_dir_all(&dir).unwrap();
+
+        assert!(summary.contains("color_primaries=bt709"), "{summary}");
+        // Read as SDR the colours fall to ~60; tone-mapped they come back
+        // near the pattern's own ~113, without blowing highlights out.
+        assert!(saturation > 90.0, "{saturation}");
+        assert!(brightest < 235.0, "{brightest}");
     }
 }
