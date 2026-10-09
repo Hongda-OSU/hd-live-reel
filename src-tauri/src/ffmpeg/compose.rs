@@ -29,10 +29,8 @@ pub struct Music {
     /// Linear gain; 1 keeps the normalized level.
     pub volume: f64,
     /// Linear gain for the clips' own sound underneath; `None` drops it.
+    /// The track loops if it is shorter than the video.
     pub original: Option<f64>,
-    /// Length of the video in seconds, where the music fades out. The
-    /// track loops if it is shorter.
-    pub length: f64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -47,17 +45,29 @@ pub enum Quality {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Segment {
     pub path: PathBuf,
+    /// Untrimmed length of the normalized clip, in seconds.
+    pub duration: f64,
     /// Start and end, in seconds into the clip; `None` keeps all of it.
     pub trim: Option<(f64, f64)>,
     pub muted: bool,
 }
 
-impl From<PathBuf> for Segment {
-    fn from(path: PathBuf) -> Self {
+impl Segment {
+    /// All of a clip, with its own sound.
+    pub fn whole(path: PathBuf, duration: f64) -> Self {
         Self {
             path,
+            duration,
             trim: None,
             muted: false,
+        }
+    }
+
+    /// Seconds this segment plays for, after snapping trims to frames.
+    pub fn length(&self) -> f64 {
+        match self.trim {
+            Some((start, end)) => snap(end) - snap(start),
+            None => self.duration,
         }
     }
 }
@@ -66,9 +76,33 @@ impl From<PathBuf> for Segment {
 pub struct Composition {
     /// Normalized clips in playback order.
     pub clips: Vec<Segment>,
+    /// Seconds each join cross-dissolves over; 0 is a hard cut.
+    pub transition: f64,
     pub grade: Grade,
     pub title: Option<Title>,
     pub music: Option<Music>,
+}
+
+impl Composition {
+    /// The cross-dissolve actually used: whole frames, and never more than
+    /// half the shortest segment, so no segment is consumed by its fades.
+    pub fn crossfade(&self) -> f64 {
+        if self.clips.len() < 2 || self.transition <= 0.0 {
+            return 0.0;
+        }
+        let shortest = self
+            .clips
+            .iter()
+            .map(Segment::length)
+            .fold(f64::INFINITY, f64::min);
+        snap_down(self.transition.min(shortest / 2.0))
+    }
+
+    /// Length of the result; each join overlaps two segments.
+    pub fn length(&self) -> f64 {
+        let sum: f64 = self.clips.iter().map(Segment::length).sum();
+        sum - self.crossfade() * self.clips.len().saturating_sub(1) as f64
+    }
 }
 
 pub fn compose(composition: &Composition, quality: Quality, out: &Path) -> Result<(), Error> {
@@ -115,12 +149,19 @@ fn args(composition: &Composition, quality: Quality, out: &Path) -> Vec<String> 
 fn filter_graph(composition: &Composition, quality: Quality) -> String {
     let n = composition.clips.len();
     let mut graph = String::new();
-    let mut inputs = String::new();
-    for (i, segment) in composition.clips.iter().enumerate() {
-        let (video, audio) = segment_filters(i, segment, &mut graph);
-        inputs.push_str(&format!("[{video}][{audio}]"));
+    let labels: Vec<(String, String)> = composition
+        .clips
+        .iter()
+        .enumerate()
+        .map(|(i, segment)| segment_filters(i, segment, &mut graph))
+        .collect();
+    let crossfade = composition.crossfade();
+    if crossfade > 0.0 {
+        join_with_crossfades(&composition.clips, &labels, crossfade, &mut graph);
+    } else {
+        let inputs: String = labels.iter().map(|(v, a)| format!("[{v}][{a}]")).collect();
+        graph.push_str(&format!("{inputs}concat=n={n}:v=1:a=1[joined][a0];"));
     }
-    graph.push_str(&format!("{inputs}concat=n={n}:v=1:a=1[joined][a0];"));
 
     let mut video = "joined".to_string();
     // The preview shrinks first so grading touches a quarter of the pixels;
@@ -160,12 +201,13 @@ fn filter_graph(composition: &Composition, quality: Quality) -> String {
     let mut audio = "a0";
     if let Some(music) = &composition.music {
         let input = n + usize::from(composition.title.is_some());
-        let fade = MUSIC_FADE_OUT.min(music.length / 2.0);
+        let length = composition.length();
+        let fade = MUSIC_FADE_OUT.min(length / 2.0);
         graph.push_str(&format!(
             "[{input}:a]volume={:.3},afade=t=in:d={MUSIC_FADE_IN},\
              afade=t=out:st={:.3}:d={fade:.3}[music];",
             music.volume,
-            music.length - fade,
+            length - fade,
         ));
         // Silenced rather than dropped: the clips' track still sets the
         // length, since the looped music never ends.
@@ -177,6 +219,35 @@ fn filter_graph(composition: &Composition, quality: Quality) -> String {
     }
     graph.push_str(&format!("[{audio}]alimiter=limit={LIMIT}[a]"));
     graph
+}
+
+/// Chains the segments pairwise: each one dissolves into the next over
+/// `crossfade` seconds, picture with xfade and sound with acrossfade.
+/// Leaves `[joined]` and `[a0]` like concat does.
+fn join_with_crossfades(
+    segments: &[Segment],
+    labels: &[(String, String)],
+    crossfade: f64,
+    graph: &mut String,
+) {
+    let last = labels.len() - 1;
+    let (mut video, mut audio) = labels[0].clone();
+    let mut length = segments[0].length();
+    for (i, (next_video, next_audio)) in labels.iter().enumerate().skip(1) {
+        let (out_video, out_audio) = if i == last {
+            ("joined".to_string(), "a0".to_string())
+        } else {
+            (format!("x{i}v"), format!("x{i}a"))
+        };
+        // The offset is where the dissolve starts on the joined timeline.
+        graph.push_str(&format!(
+            "[{video}][{next_video}]xfade=transition=fade:duration={crossfade:.4}:offset={:.4}[{out_video}];\
+             [{audio}][{next_audio}]acrossfade=d={crossfade:.4}[{out_audio}];",
+            length - crossfade,
+        ));
+        length += segments[i].length() - crossfade;
+        (video, audio) = (out_video, out_audio);
+    }
 }
 
 /// Adds trim / mute chains for input `i` to `graph` and returns the labels
@@ -210,6 +281,10 @@ fn segment_filters(i: usize, segment: &Segment, graph: &mut String) -> (String, 
 
 fn snap(seconds: f64) -> f64 {
     (seconds * FPS as f64).round() / FPS as f64
+}
+
+fn snap_down(seconds: f64) -> f64 {
+    (seconds * FPS as f64 + 1e-6).floor() / FPS as f64
 }
 
 fn encoder_args(quality: Quality) -> Vec<String> {
@@ -253,8 +328,12 @@ mod tests {
     fn composition(title: Option<Title>) -> Composition {
         Composition {
             grade: Grade::default(),
+            transition: 0.0,
             music: None,
-            clips: vec![PathBuf::from("a.mov").into(), PathBuf::from("b.mov").into()],
+            clips: vec![
+                Segment::whole("a.mov".into(), 2.0),
+                Segment::whole("b.mov".into(), 2.0),
+            ],
             title,
         }
     }
@@ -306,16 +385,19 @@ mod tests {
     fn trims_and_mutes_only_the_segments_that_ask() {
         let composition = Composition {
             grade: Grade::default(),
+            transition: 0.0,
             music: None,
             clips: vec![
                 Segment {
                     path: "a.mov".into(),
+                    duration: 2.0,
                     trim: Some((0.51, 1.5)),
                     muted: false,
                 },
-                PathBuf::from("b.mov").into(),
+                Segment::whole("b.mov".into(), 2.0),
                 Segment {
                     path: "c.mov".into(),
+                    duration: 2.0,
                     trim: None,
                     muted: true,
                 },
@@ -358,12 +440,40 @@ mod tests {
         assert!(filter_graph(&graded, Quality::Preview).contains(&format!("[small]{eq}[graded];")));
     }
 
+    #[test]
+    fn crossfades_chain_each_join() {
+        let mut three = composition(None);
+        three.clips.push(Segment::whole("c.mov".into(), 2.0));
+        three.transition = 0.3;
+        assert_eq!(
+            filter_graph(&three, Quality::Export),
+            "[0:v][1:v]xfade=transition=fade:duration=0.3000:offset=1.7000[x1v];\
+             [0:a][1:a]acrossfade=d=0.3000[x1a];\
+             [x1v][2:v]xfade=transition=fade:duration=0.3000:offset=3.4000[joined];\
+             [x1a][2:a]acrossfade=d=0.3000[a0];\
+             [joined]null[v];[a0]alimiter=limit=0.89[a]"
+        );
+        assert!((three.length() - 5.4).abs() < 1e-9);
+    }
+
+    #[test]
+    fn crossfade_is_whole_frames_and_at_most_half_the_shortest_clip() {
+        let mut short = composition(None);
+        short.transition = 0.8;
+        short.clips[1].trim = Some((0.0, 0.5));
+        // Half of 0.5 s is 7.5 frames; it rounds down to 7.
+        assert!((short.crossfade() - 7.0 / 30.0).abs() < 1e-9);
+        short.transition = 0.11;
+        assert!((short.crossfade() - 0.1).abs() < 1e-9, "3 frames");
+        short.clips.truncate(1);
+        assert_eq!(short.crossfade(), 0.0, "nothing to join");
+    }
+
     fn music(original: Option<f64>) -> Music {
         Music {
             path: "song.flac".into(),
             volume: 0.8,
             original,
-            length: 4.0,
         }
     }
 
@@ -392,10 +502,10 @@ mod tests {
     #[test]
     fn short_music_fades_over_half_the_video() {
         let mut short = composition(None);
-        short.music = Some(Music {
-            length: 1.0,
-            ..music(None)
-        });
+        for clip in &mut short.clips {
+            clip.trim = Some((0.0, 0.5));
+        }
+        short.music = Some(music(None));
         assert!(filter_graph(&short, Quality::Export).contains("afade=t=out:st=0.500:d=0.500"));
     }
 
@@ -482,15 +592,18 @@ mod tests {
         let out = dir.join("out.mp4");
         let composition = Composition {
             grade: Grade::default(),
+            transition: 0.0,
             music: None,
             clips: vec![
                 Segment {
                     path: clips[0].clone(),
+                    duration: 2.0,
                     trim: Some((0.5, 1.5)),
                     muted: false,
                 },
                 Segment {
                     path: clips[1].clone(),
+                    duration: 2.0,
                     trim: None,
                     muted: true,
                 },
@@ -559,15 +672,20 @@ mod tests {
         let plain = dir.join("plain.mp4");
         let titled = dir.join("titled.mp4");
         let preview = dir.join("preview.mp4");
-        let clips: Vec<Segment> = clips.into_iter().map(Segment::from).collect();
+        let clips: Vec<Segment> = clips
+            .into_iter()
+            .map(|clip| Segment::whole(clip, 2.0))
+            .collect();
         let without = Composition {
             grade: Grade::default(),
+            transition: 0.0,
             music: None,
             clips: clips.clone(),
             title: None,
         };
         let with = Composition {
             grade: Grade::default(),
+            transition: 0.0,
             music: None,
             clips,
             title: Some(Title {
@@ -629,7 +747,7 @@ mod tests {
                 .unwrap();
             let norm = dir.join(format!("norm{i}.mov"));
             normalize(&src, &norm, 0.5).unwrap();
-            clips.push(Segment::from(norm));
+            clips.push(Segment::whole(norm, 2.0));
         }
         // 1.5 s of music under 4 s of video: it has to loop.
         let song = dir.join("song.wav");
@@ -653,12 +771,12 @@ mod tests {
             let composition = Composition {
                 clips: clips.clone(),
                 grade: Grade::default(),
+                transition: 0.0,
                 title: None,
                 music: Some(Music {
                     path: track.clone(),
                     volume,
                     original,
-                    length: 4.0,
                 }),
             };
             compose(&composition, Quality::Preview, &out).unwrap();
@@ -687,5 +805,72 @@ mod tests {
             clips_lufs < middle - 8.0,
             "clips' own sound sits lower: {clips_lufs}"
         );
+    }
+
+    #[test]
+    fn crossfaded_output_keeps_sound_and_picture_together() {
+        let dir = std::env::temp_dir().join(format!("hd-live-reel-xfade-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut clips = Vec::new();
+        for i in 0..3 {
+            let src = dir.join(format!("src{i}.mov"));
+            Tool::Ffmpeg
+                .run([
+                    "-y",
+                    "-v",
+                    "error",
+                    "-f",
+                    "lavfi",
+                    "-i",
+                    "testsrc2=size=640x480:rate=30:duration=2",
+                    "-f",
+                    "lavfi",
+                    "-i",
+                    "sine=duration=2",
+                    "-c:v",
+                    "libx264",
+                    "-c:a",
+                    "pcm_s16le",
+                    src.to_str().unwrap(),
+                ])
+                .unwrap();
+            let norm = dir.join(format!("norm{i}.mov"));
+            normalize(&src, &norm, 0.5).unwrap();
+            clips.push(Segment::whole(norm, 2.0));
+        }
+        clips[1].trim = Some((0.5, 1.5));
+        let composition = Composition {
+            clips,
+            transition: 0.3,
+            grade: Grade::default(),
+            title: None,
+            music: None,
+        };
+        let out = dir.join("out.mp4");
+        compose(&composition, Quality::Preview, &out).unwrap();
+        let streams = Tool::Ffprobe
+            .run([
+                "-v".as_ref(),
+                "error".as_ref(),
+                "-show_entries".as_ref(),
+                "stream=codec_type,duration".as_ref(),
+                "-of".as_ref(),
+                "csv=p=0".as_ref(),
+                out.as_os_str(),
+            ] as [&std::ffi::OsStr; 7])
+            .unwrap();
+        std::fs::remove_dir_all(&dir).unwrap();
+
+        // 2 + 1 + 2 seconds with two 0.3 s overlaps.
+        let expected = composition.length();
+        assert!((expected - 4.4).abs() < 1e-9);
+        let durations: Vec<f64> = String::from_utf8_lossy(&streams.stdout)
+            .lines()
+            .filter_map(|line| line.split(',').nth(1)?.parse().ok())
+            .collect();
+        assert_eq!(durations.len(), 2, "video and audio");
+        for d in durations {
+            assert!((d - expected).abs() < 0.05, "{d} vs {expected}");
+        }
     }
 }

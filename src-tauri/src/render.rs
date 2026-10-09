@@ -6,7 +6,7 @@ use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 
 use crate::ffmpeg::{self, Composition, Grade, Look, Music, Quality, Segment, Title};
-use crate::project::{Audio, AudioMode, Filter, Preset, Project};
+use crate::project::{Audio, AudioMode, Filter, Preset, Project, TransitionKind};
 
 /// What FFmpeg should join for `project`.
 pub fn composition(project: &Project) -> Result<Composition, String> {
@@ -25,6 +25,7 @@ pub fn composition(project: &Project) -> Result<Composition, String> {
             let whole = clip.trim_start <= 0.0 && clip.trim_end >= clip.duration - 1e-6;
             Ok(Segment {
                 path,
+                duration: clip.duration,
                 trim: (!whole).then_some((clip.trim_start, clip.trim_end)),
                 muted: clip.muted,
             })
@@ -41,21 +42,21 @@ pub fn composition(project: &Project) -> Result<Composition, String> {
         }),
         _ => None,
     };
-    let length = project
-        .clips
-        .iter()
-        .map(|clip| clip.trim_end - clip.trim_start)
-        .sum();
+    let transition = match project.transition.kind {
+        TransitionKind::None => 0.0,
+        TransitionKind::Fade => project.transition.duration,
+    };
     Ok(Composition {
         clips,
+        transition,
         grade: grade(&project.filter),
         title,
-        music: music(&project.audio, length),
+        music: music(&project.audio),
     })
 }
 
 /// The music track, if a music mode is on and a track has been chosen.
-fn music(audio: &Audio, length: f64) -> Option<Music> {
+fn music(audio: &Audio) -> Option<Music> {
     let original = match audio.mode {
         AudioMode::Original => return None,
         AudioMode::Music => None,
@@ -65,7 +66,6 @@ fn music(audio: &Audio, length: f64) -> Option<Music> {
         path: audio.music_path.clone()?,
         volume: audio.music_volume,
         original,
-        length,
     })
 }
 
@@ -206,8 +206,7 @@ mod tests {
         assert_eq!(composition(&project).unwrap().music, None, "no track yet");
 
         project.audio.music_path = Some("/c/music/song.flac".into());
-        let music = composition(&project).unwrap().music.unwrap();
-        assert_eq!((music.original, music.length), (None, 3.0));
+        assert_eq!(composition(&project).unwrap().music.unwrap().original, None);
 
         project.audio.mode = AudioMode::Mix;
         project.audio.original_volume = 1.5;
@@ -218,6 +217,21 @@ mod tests {
 
         project.audio.mode = AudioMode::Original;
         assert_eq!(composition(&project).unwrap().music, None);
+    }
+
+    #[test]
+    fn fade_transition_cross_dissolves_the_joins() {
+        let mut project = Project {
+            clips: vec![clip((0.0, 2.0), false), clip((0.0, 2.0), false)],
+            ..Default::default()
+        };
+        project.transition.duration = 0.3;
+        assert_eq!(composition(&project).unwrap().transition, 0.0, "type none");
+
+        project.transition.kind = TransitionKind::Fade;
+        let composition = composition(&project).unwrap();
+        assert_eq!(composition.transition, 0.3);
+        assert!((composition.length() - 3.7).abs() < 1e-9);
     }
 
     #[test]

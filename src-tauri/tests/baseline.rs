@@ -45,8 +45,8 @@ fn matches_compose_py_baseline() {
             let dst = work
                 .join(src.file_stem().unwrap())
                 .with_extension("norm.mov");
-            normalize(src, &dst, 0.5).unwrap();
-            dst.into()
+            let duration = normalize(src, &dst, 0.5).unwrap().duration;
+            Segment::whole(dst, duration)
         })
         .collect();
     let title = std::env::var("HD_LIVE_REEL_TITLE").ok().map(|image| Title {
@@ -59,6 +59,7 @@ fn matches_compose_py_baseline() {
     compose(
         &Composition {
             clips,
+            transition: 0.0,
             grade: Grade::default(),
             title,
             music: None,

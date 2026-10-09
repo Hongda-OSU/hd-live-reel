@@ -321,6 +321,9 @@ impl Project {
         if self.title.fade_out > self.title.show_for {
             return Err("title fade is longer than the time it is shown".into());
         }
+        if self.transition.duration < 0.0 {
+            return Err("transition cannot be negative".into());
+        }
         if self.title.line_gap < 0.0 {
             return Err("title line gap cannot be negative".into());
         }
@@ -535,6 +538,9 @@ mod tests {
         project.title.fade_out = 0.0;
         project.title.line_gap = -1.0;
         assert!(project.validate().unwrap_err().contains("line gap"));
+        project.title.line_gap = 0.0;
+        project.transition.duration = -0.1;
+        assert!(project.validate().unwrap_err().contains("transition"));
     }
 
     #[test]
