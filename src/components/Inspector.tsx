@@ -1,8 +1,9 @@
 import * as stylex from "@stylexjs/stylex";
-import type { Audio, Filter, Title, TitlePosition, TitleTextStyle, TitleWeight, Transition } from "../api";
+import type { Audio, Filter, Output, Title, TitlePosition, TitleTextStyle, TitleWeight, Transition } from "../api";
 import type { Action } from "../project";
 import { colors } from "../tokens.stylex";
 import { Button, Field, Group, Select, Seg, Slider, Swatches, ui } from "../ui";
+import { ExportGroup } from "./ExportGroup";
 import { SoundGroup } from "./SoundGroup";
 
 /** Fade used by the "淡出" choice, in seconds. */
@@ -57,10 +58,11 @@ interface Props {
   audio: Audio;
   filter: Filter;
   transition: Transition;
+  output: Output;
   dispatch: (action: Action) => void;
 }
 
-export function Inspector({ title, audio, filter, transition, dispatch }: Props) {
+export function Inspector({ title, audio, filter, transition, output, dispatch }: Props) {
   const set = (patch: Partial<Title>) => dispatch({ type: "updateTitle", patch });
   const setFilter = (patch: Partial<Filter>) => dispatch({ type: "updateFilter", patch });
   const setTransition = (patch: Partial<Transition>) => dispatch({ type: "updateTransition", patch });
@@ -269,6 +271,8 @@ export function Inspector({ title, audio, filter, transition, dispatch }: Props)
           />
         </Field>
       </Group>
+
+      <ExportGroup output={output} dispatch={dispatch} />
     </aside>
   );
 }

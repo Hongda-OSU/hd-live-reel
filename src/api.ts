@@ -90,6 +90,14 @@ export interface Transition {
   duration: number;
 }
 
+export interface Output {
+  aspect: "9:16" | "16:9";
+  fill: "crop" | "black" | "blur";
+  height: number;
+  /** Folder exports are saved in; empty means Movies › HD Live Reel. */
+  folder?: string | null;
+}
+
 export interface Project {
   version: number;
   name: string;
@@ -99,7 +107,7 @@ export interface Project {
   audio: Audio;
   transition: Transition;
   selection: { mode: "manual" | "ai"; targetSeconds: number };
-  output: { aspect: "9:16" | "16:9"; fill: "crop" | "black" | "blur"; height: number };
+  output: Output;
 }
 
 export interface ClipsProgress {

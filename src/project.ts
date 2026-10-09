@@ -1,6 +1,6 @@
 // Edits to the open project. The reducer is the only place the project
 // changes; App persists every new state.
-import type { Audio, Clip, Filter, Project, Title, Transition } from "./api";
+import type { Audio, Clip, Filter, Output, Project, Title, Transition } from "./api";
 
 export type Action =
   | { type: "load"; project: Project }
@@ -12,7 +12,8 @@ export type Action =
   | { type: "updateTitle"; patch: Partial<Title> }
   | { type: "updateFilter"; patch: Partial<Filter> }
   | { type: "updateAudio"; patch: Partial<Audio> }
-  | { type: "updateTransition"; patch: Partial<Transition> };
+  | { type: "updateTransition"; patch: Partial<Transition> }
+  | { type: "updateOutput"; patch: Partial<Output> };
 
 export function reducer(project: Project | null, action: Action): Project | null {
   if (action.type === "load") return action.project;
@@ -43,6 +44,8 @@ export function reducer(project: Project | null, action: Action): Project | null
       return { ...project, audio: { ...project.audio, ...action.patch } };
     case "updateTransition":
       return { ...project, transition: { ...project.transition, ...action.patch } };
+    case "updateOutput":
+      return { ...project, output: { ...project.output, ...action.patch } };
   }
 }
 
@@ -79,6 +82,16 @@ export function clipLabel(clip: Clip): string {
 export function titleImageKey(title: Title): string {
   const { text, subtitle, font, fontSize, color, position, lineGap, weight, textStyle } = title;
   return JSON.stringify({ text, subtitle, font, fontSize, color, position, lineGap, weight, textStyle });
+}
+
+/** Shown in place of an empty project name, and used as the file name. */
+export const UNTITLED = "Untitled";
+
+/** "影片 › HD Live Reel" for the default, else the folder's last two
+ * levels, like "Desktop › Trips". */
+export function folderLabel(folder?: string | null): string {
+  if (!folder) return "影片 › HD Live Reel";
+  return folder.split("/").filter(Boolean).slice(-2).join(" › ");
 }
 
 /** "Elegy of Ashes" from "<cache>/music/Elegy of Ashes-<hash>.flac". */

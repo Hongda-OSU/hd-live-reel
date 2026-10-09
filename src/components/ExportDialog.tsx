@@ -3,7 +3,8 @@ import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import * as stylex from "@stylexjs/stylex";
 import { cancelExport, EXPORT_CANCELLED, exportVideo, onExportProgress, type Project } from "../api";
 import { colors, shadows } from "../tokens.stylex";
-import { Button, ui, withStyle } from "../ui";
+import { folderLabel, UNTITLED, type Action } from "../project";
+import { Button, Field, ui, withStyle } from "../ui";
 
 type Phase =
   | { step: "form"; cancelled: boolean }
@@ -24,6 +25,13 @@ function estimateRemaining(progress: number, startedAt: number): number | null {
   const elapsed = (Date.now() - startedAt) / 1000;
   if (progress < MIN_FOR_ESTIMATE.share || elapsed < MIN_FOR_ESTIMATE.seconds) return null;
   return (elapsed * (1 - progress)) / progress;
+}
+
+/** Friendlier wording for failures the user can fix themselves. */
+function explain(message: string) {
+  return message.startsWith("export folder not found")
+    ? "导出位置不可用（文件夹被移走，或外接硬盘没有接上）。请在右侧「导出」里更改位置。"
+    : message;
 }
 
 function formatRemaining(seconds: number) {
@@ -80,6 +88,15 @@ const styles = stylex.create({
     backgroundColor: colors.accent,
     transition: "width 0.2s linear",
   },
+  nameRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 6,
+  },
+  nameInput: {
+    flex: "1",
+    minWidth: 0,
+  },
   status: {
     display: "flex",
     justifyContent: "space-between",
@@ -111,6 +128,7 @@ const styles = stylex.create({
 interface Props {
   open: boolean;
   project: Project;
+  dispatch: (action: Action) => void;
   onClose: () => void;
 }
 
@@ -119,7 +137,7 @@ export function ExportDialog({ open, ...rest }: Props) {
   return open ? <DialogBody {...rest} /> : null;
 }
 
-function DialogBody({ project, onClose }: Omit<Props, "open">) {
+function DialogBody({ project, dispatch, onClose }: Omit<Props, "open">) {
   const [phase, setPhase] = useState<Phase>({ step: "form", cancelled: false });
 
   async function run() {
@@ -134,7 +152,9 @@ function DialogBody({ project, onClose }: Omit<Props, "open">) {
       setPhase({ step: "done", path: await exportVideo(project) });
     } catch (e) {
       setPhase(
-        String(e) === EXPORT_CANCELLED ? { step: "form", cancelled: true } : { step: "error", message: String(e) },
+        String(e) === EXPORT_CANCELLED
+          ? { step: "form", cancelled: true }
+          : { step: "error", message: explain(String(e)) },
       );
     } finally {
       unlisten();
@@ -154,10 +174,25 @@ function DialogBody({ project, onClose }: Omit<Props, "open">) {
         {(phase.step === "form" || phase.step === "error") && (
           <>
             <h2 {...stylex.props(styles.heading)}>导出视频</h2>
+            <Field label="文件名">
+              <div {...stylex.props(styles.nameRow)}>
+                {/* Edits the project name, so the toolbar and the file agree. */}
+                <input
+                  autoFocus
+                  value={project.name}
+                  placeholder={UNTITLED}
+                  aria-label="文件名"
+                  onChange={(e) => dispatch({ type: "rename", name: e.target.value })}
+                  onKeyDown={(e) => e.key === "Enter" && run()}
+                  {...stylex.props(ui.textInput, styles.nameInput)}
+                />
+                <span {...stylex.props(ui.note)}>.mp4</span>
+              </div>
+            </Field>
             <p {...stylex.props(ui.note)}>
-              1080 × 1920 竖屏 · MP4（H.264 + AAC），微信可以直接发送和播放。
+              保存到「{folderLabel(project.output.folder)}」，重名会自动加编号。
               <br />
-              保存到「影片 › HD Live Reel」。
+              1080 × 1920 竖屏 · MP4（H.264 + AAC），微信可以直接发送和播放。
             </p>
             {phase.step === "form" && phase.cancelled && <p {...stylex.props(ui.note)}>已取消，没有保存任何文件。</p>}
             {phase.step === "error" && <p {...stylex.props(ui.error)}>{phase.message}</p>}

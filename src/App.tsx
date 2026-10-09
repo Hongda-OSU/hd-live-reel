@@ -17,7 +17,16 @@ import { ExportDialog } from "./components/ExportDialog";
 import { Inspector } from "./components/Inspector";
 import { PickerSheet } from "./components/PickerSheet";
 import { Stage, type CropView } from "./components/Stage";
-import { clipSpans, crossfade, hasTitleText, reducer, renderKey, titleImageKey, totalLength } from "./project";
+import {
+  clipSpans,
+  crossfade,
+  hasTitleText,
+  reducer,
+  renderKey,
+  titleImageKey,
+  totalLength,
+  UNTITLED,
+} from "./project";
 import { renderTitlePng } from "./title";
 import { colors, layout } from "./tokens.stylex";
 import { Button, Icon } from "./ui";
@@ -327,7 +336,7 @@ function App() {
         <div data-tauri-drag-region {...stylex.props(styles.toolbarCenter)}>
           <input
             value={project.name}
-            placeholder="未命名"
+            placeholder={UNTITLED}
             aria-label="工程名称"
             onChange={(e) => dispatch({ type: "rename", name: e.target.value })}
             {...stylex.props(styles.name)}
@@ -383,6 +392,7 @@ function App() {
           audio={project.audio}
           filter={project.filter}
           transition={project.transition}
+          output={project.output}
           dispatch={dispatch}
         />
       </main>
@@ -398,7 +408,7 @@ function App() {
         onAdd={addClips}
         onClose={() => setPickerOpen(false)}
       />
-      <ExportDialog open={exportOpen} project={project} onClose={() => setExportOpen(false)} />
+      <ExportDialog open={exportOpen} project={project} dispatch={dispatch} onClose={() => setExportOpen(false)} />
     </div>
   );
 }
