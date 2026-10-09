@@ -352,9 +352,14 @@ fn normalize_cached(cache: &Path, id: &str, video_path: &Path) -> Result<(PathBu
             .duration
     } else {
         std::fs::create_dir_all(normalized.parent().unwrap()).map_err(|e| e.to_string())?;
-        ffmpeg::normalize(video_path, &normalized)
+        // Write beside the target first: a long video cut off half way
+        // (the app quit) must not pass for a finished intermediate.
+        let partial = normalized.with_extension("partial.mov");
+        let duration = ffmpeg::normalize(video_path, &partial)
             .map_err(|e| format!("{id}: {e}"))?
-            .duration
+            .duration;
+        std::fs::rename(&partial, &normalized).map_err(|e| e.to_string())?;
+        duration
     };
     Ok((normalized, duration))
 }
