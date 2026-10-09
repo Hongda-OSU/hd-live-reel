@@ -139,6 +139,20 @@ pub fn save_title_image(png: &[u8], cache: &Path) -> Result<PathBuf, String> {
     Ok(path)
 }
 
+/// Where exports go: the project's chosen folder, which must still exist
+/// (an unplugged drive should fail rather than save somewhere else), or
+/// `default`, created if needed.
+pub fn export_dir(chosen: Option<&Path>, default: &Path) -> Result<PathBuf, String> {
+    match chosen {
+        Some(dir) if dir.is_dir() => Ok(dir.to_path_buf()),
+        Some(dir) => Err(format!("export folder not found: {}", dir.display())),
+        None => {
+            std::fs::create_dir_all(default).map_err(|e| e.to_string())?;
+            Ok(default.to_path_buf())
+        }
+    }
+}
+
 /// `<dir>/<name>.mp4`, or `<name> 2.mp4` and so on if taken.
 pub fn export_path(dir: &Path, name: &str) -> PathBuf {
     let cleaned: String = name
@@ -147,7 +161,7 @@ pub fn export_path(dir: &Path, name: &str) -> PathBuf {
         .map(|c| if matches!(c, '/' | ':') { '-' } else { c })
         .collect();
     let stem = if cleaned.is_empty() {
-        "HD Live Reel".to_string()
+        "Untitled".to_string()
     } else {
         cleaned
     };
@@ -304,7 +318,7 @@ mod tests {
         std::fs::remove_dir_all(&dir).unwrap();
         assert_eq!(first.file_name().unwrap(), "Turkey Run.mp4");
         assert_eq!(second.file_name().unwrap(), "Turkey Run 2.mp4");
-        assert_eq!(unnamed.file_name().unwrap(), "HD Live Reel.mp4");
+        assert_eq!(unnamed.file_name().unwrap(), "Untitled.mp4");
         assert_eq!(slashed.file_name().unwrap(), "9-28- Lake.mp4");
     }
 
@@ -349,6 +363,24 @@ mod tests {
             .collect();
         names.sort();
         names
+    }
+
+    #[test]
+    fn chosen_folder_must_exist_but_the_default_is_created() {
+        let dir = std::env::temp_dir().join(format!("hd-live-reel-dirs-{}", std::process::id()));
+        let default = dir.join("Movies/HD Live Reel");
+        let chosen = dir.join("Trips");
+        let missing = export_dir(Some(&chosen), &default);
+        std::fs::create_dir_all(&chosen).unwrap();
+        let found = export_dir(Some(&chosen), &default);
+        let created = export_dir(None, &default);
+        let default_exists = default.is_dir();
+        std::fs::remove_dir_all(&dir).unwrap();
+
+        assert!(missing.unwrap_err().contains("not found"));
+        assert_eq!(found.unwrap(), chosen);
+        assert_eq!(created.unwrap(), default);
+        assert!(default_exists);
     }
 
     #[test]

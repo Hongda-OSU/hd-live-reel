@@ -155,7 +155,8 @@ async fn render_preview(
     .await
 }
 
-/// Renders the full-quality MP4 into `~/Movies/HD Live Reel/`, emitting
+/// Renders the full-quality MP4 into the project's export folder (by
+/// default `~/Movies/HD Live Reel/`), emitting
 /// `export-progress` (0 to 1). A cancelled export fails with
 /// `render::CANCELLED`.
 #[tauri::command]
@@ -164,7 +165,7 @@ async fn export_video(
     cancel: State<'_, ExportCancel>,
     project: project::Project,
 ) -> Result<PathBuf, String> {
-    let dir = app
+    let default = app
         .path()
         .video_dir()
         .map_err(|e| e.to_string())?
@@ -172,7 +173,7 @@ async fn export_video(
     let cancel = cancel.0.clone();
     cancel.store(false, Ordering::SeqCst);
     blocking(move || {
-        std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+        let dir = render::export_dir(project.output.folder.as_deref(), &default)?;
         let out = render::export_path(&dir, &project.name);
         let mut last = Instant::now();
         render::export(&project, &out, &cancel, |progress| {

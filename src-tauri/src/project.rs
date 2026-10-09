@@ -288,6 +288,8 @@ pub struct Output {
     pub aspect: Aspect,
     pub fill: Fill,
     pub height: u32,
+    /// Folder exports are saved in; `None` is the default under Movies.
+    pub folder: Option<PathBuf>,
 }
 
 impl Default for Output {
@@ -296,6 +298,7 @@ impl Default for Output {
             aspect: Aspect::Portrait,
             fill: Fill::Crop,
             height: 1080,
+            folder: None,
         }
     }
 }
@@ -496,6 +499,7 @@ mod tests {
         assert_eq!(project.title.line_gap, 18.0, "older titles keep their look");
         assert_eq!(project.title.weight, Weight::Regular);
         assert_eq!(project.title.text_style, TextStyle::Outline);
+        assert_eq!(project.output.folder, None, "default export folder");
         project.validate().unwrap();
     }
 
