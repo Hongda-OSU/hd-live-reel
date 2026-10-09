@@ -4,6 +4,7 @@
 //! the aspect, fill or crop never re-encodes a clip.
 
 use std::path::Path;
+use std::sync::atomic::AtomicBool;
 
 use super::{probe, Error, MediaInfo, Tool, VideoInfo};
 
@@ -28,6 +29,16 @@ pub struct Normalized {
 
 /// Normalizes `src` into `dst` (a `.mov`; audio is kept as PCM).
 pub fn normalize(src: &Path, dst: &Path) -> Result<Normalized, Error> {
+    normalize_with_progress(src, dst, |_| {})
+}
+
+/// `normalize`, calling `on_share` with the share encoded so far (0 to 1);
+/// a long video takes about a third of its length.
+pub fn normalize_with_progress(
+    src: &Path,
+    dst: &Path,
+    mut on_share: impl FnMut(f64),
+) -> Result<Normalized, Error> {
     let info = probe(src)?;
     let lufs = if info.has_audio { loudness(src)? } else { None };
     let plan = plan(&info, lufs)?;
@@ -68,7 +79,10 @@ pub fn normalize(src: &Path, dst: &Path) -> Result<Normalized, Error> {
         .map(String::from),
     );
     args.push(dst.to_string_lossy().into_owned());
-    Tool::Ffmpeg.run(&args)?;
+    let never = AtomicBool::new(false);
+    Tool::Ffmpeg.run_with_progress(&args, &never, |seconds| {
+        on_share((seconds / plan.duration).clamp(0.0, 1.0))
+    })?;
 
     Ok(Normalized {
         duration: plan.duration,

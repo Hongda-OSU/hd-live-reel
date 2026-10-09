@@ -25,6 +25,9 @@ pub struct Progress {
     pub stage: Stage,
     pub done: usize,
     pub total: usize,
+    /// Share of item `done` normalized so far, 0 to 1; long videos take a
+    /// while.
+    pub current: f64,
 }
 
 /// Downloads `ids` from the phone and returns ready-to-edit clips in the
@@ -42,40 +45,42 @@ pub fn add_from_iphone(
         stage: Stage::Downloading,
         done: 0,
         total,
+        current: 0.0,
     });
     let downloads = iphone::download(ids, &cache.join("originals")).map_err(|e| e.to_string())?;
 
     let stamp = stamp()?;
     let mut clips = Vec::with_capacity(total);
     for (done, (id, download)) in ids.iter().zip(&downloads).enumerate() {
-        report(Progress {
-            stage: Stage::Normalizing,
-            done,
-            total,
-        });
+        let progress = |current| {
+            report(Progress {
+                stage: Stage::Normalizing,
+                done,
+                total,
+                current,
+            })
+        };
+        progress(0.0);
         if let Some(error) = &download.error {
             return Err(format!("{id}: {error}"));
         }
         // A Live Photo's motion is its paired video; a video is the item itself.
-        let (still_path, video_path) = match (&download.path, &download.video_path) {
+        let (still, video) = match (&download.path, &download.video_path) {
             (Some(still), Some(video)) => (Some(still.clone()), video.clone()),
             (Some(video), None) => (None, video.clone()),
             _ => return Err(format!("{id}: nothing downloaded")),
         };
-        let taken_at = ffmpeg::probe(&video_path)
+        let taken_at = ffmpeg::probe(&video)
             .ok()
             .and_then(|info| info.creation_time);
+        let item = Item {
+            still,
+            video,
+            taken_at,
+        };
         // Unique even if the same photo is added twice.
         let unique = format!("{id}@{stamp}-{done}");
-        clips.push(prepare(
-            cache,
-            unique,
-            Source::Iphone,
-            id,
-            still_path,
-            video_path,
-            taken_at,
-        )?);
+        clips.push(prepare(cache, unique, Source::Iphone, id, item, progress)?);
     }
     Ok(clips)
 }
@@ -122,14 +127,23 @@ pub fn add_from_files(
     let total = dated.len();
     let mut clips = Vec::with_capacity(total);
     for (done, (taken_at, still, video)) in dated.into_iter().enumerate() {
-        report(Progress {
-            stage: Stage::Normalizing,
-            done,
-            total,
-        });
+        let progress = |current| {
+            report(Progress {
+                stage: Stage::Normalizing,
+                done,
+                total,
+                current,
+            })
+        };
+        progress(0.0);
         let id = file_id(&video)?;
         let unique = format!("{id}@{stamp}-{done}");
-        let clip = prepare(cache, unique, Source::File, &id, still, video, taken_at)?;
+        let item = Item {
+            still,
+            video,
+            taken_at,
+        };
+        let clip = prepare(cache, unique, Source::File, &id, item, progress)?;
         let thumb = thumbnail_path(cache, &id);
         if !thumb.is_file() {
             std::fs::create_dir_all(thumb.parent().unwrap()).map_err(|e| e.to_string())?;
@@ -222,30 +236,38 @@ fn stamp() -> Result<u128, String> {
         .as_millis())
 }
 
-/// Normalizes `video_path` under the cache id `id` and describes it.
+/// A Live Photo (photo + video) or a video, ready to prepare.
+struct Item {
+    still: Option<PathBuf>,
+    video: PathBuf,
+    taken_at: Option<String>,
+}
+
+/// Normalizes `item` under the cache id `id` and describes it, reporting
+/// the share done through `on_share`.
 fn prepare(
     cache: &Path,
     unique: String,
     source: Source,
     id: &str,
-    still_path: Option<PathBuf>,
-    video_path: PathBuf,
-    taken_at: Option<String>,
+    item: Item,
+    on_share: impl FnMut(f64),
 ) -> Result<Clip, String> {
-    let (normalized, duration) = normalize_cached(cache, id, &video_path)?;
+    let (normalized, duration) = normalize_cached(cache, id, &item.video, on_share)?;
+    let kind = if item.still.is_some() {
+        ClipKind::LivePhoto
+    } else {
+        ClipKind::Video
+    };
     Ok(Clip {
         id: unique,
         source,
-        kind: if still_path.is_some() {
-            ClipKind::LivePhoto
-        } else {
-            ClipKind::Video
-        },
+        kind,
         asset_id: Some(id.to_string()),
-        still_path,
-        video_path,
+        still_path: item.still,
+        video_path: item.video,
         normalized_path: Some(normalized),
-        taken_at,
+        taken_at: item.taken_at,
         duration,
         trim_start: 0.0,
         trim_end: duration,
@@ -306,7 +328,7 @@ pub fn upgrade(clips: &mut [Clip], cache: &Path) -> Result<bool, String> {
         if current || !clip.video_path.is_file() {
             continue;
         }
-        let (normalized, _) = normalize_cached(cache, &id, &clip.video_path)?;
+        let (normalized, _) = normalize_cached(cache, &id, &clip.video_path, |_| {})?;
         clip.normalized_path = Some(normalized);
         changed = true;
     }
@@ -344,7 +366,12 @@ const CROP_FRAME_SIDE: u32 = 960;
 
 /// The normalized file for `id` and its duration, reusing the cached file
 /// when there is one.
-fn normalize_cached(cache: &Path, id: &str, video_path: &Path) -> Result<(PathBuf, f64), String> {
+fn normalize_cached(
+    cache: &Path,
+    id: &str,
+    video_path: &Path,
+    on_share: impl FnMut(f64),
+) -> Result<(PathBuf, f64), String> {
     let normalized = normalized_path(cache, id);
     let duration = if normalized.is_file() {
         ffmpeg::probe(&normalized)
@@ -355,7 +382,7 @@ fn normalize_cached(cache: &Path, id: &str, video_path: &Path) -> Result<(PathBu
         // Write beside the target first: a long video cut off half way
         // (the app quit) must not pass for a finished intermediate.
         let partial = normalized.with_extension("partial.mov");
-        let duration = ffmpeg::normalize(video_path, &partial)
+        let duration = ffmpeg::normalize_with_progress(video_path, &partial, on_share)
             .map_err(|e| format!("{id}: {e}"))?
             .duration;
         std::fs::rename(&partial, &normalized).map_err(|e| e.to_string())?;
@@ -530,6 +557,55 @@ mod tests {
         assert_ne!(repeat.id, clip.id);
     }
 
+    /// A 12 s test pattern at `dir/long.mov`.
+    fn long_video(dir: &Path) -> PathBuf {
+        std::fs::create_dir_all(dir).unwrap();
+        let video = dir.join("long.mov");
+        crate::ffmpeg::Tool::Ffmpeg
+            .run([
+                "-y",
+                "-v",
+                "error",
+                "-f",
+                "lavfi",
+                "-i",
+                "testsrc2=size=320x240:rate=30:duration=12",
+                "-c:v",
+                "libx264",
+                "-pix_fmt",
+                "yuv420p",
+                video.to_str().unwrap(),
+            ])
+            .unwrap();
+        video
+    }
+
+    #[test]
+    fn reports_progress_within_a_clip_and_leaves_no_partial_file() {
+        let dir =
+            std::env::temp_dir().join(format!("hd-live-reel-progress-{}", std::process::id()));
+        let video = long_video(&dir.join("src"));
+        let cache = dir.join("cache");
+
+        let reports = std::cell::RefCell::new(Vec::new());
+        add_from_files(std::slice::from_ref(&video), &cache, |p| {
+            reports.borrow_mut().push(p.current)
+        })
+        .unwrap();
+        let leftovers: Vec<_> = std::fs::read_dir(cache.join("clips/files"))
+            .unwrap()
+            .flat_map(|d| std::fs::read_dir(d.unwrap().path()).unwrap())
+            .map(|f| f.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        std::fs::remove_dir_all(&dir).unwrap();
+
+        let reports = reports.into_inner();
+        assert_eq!(reports[0], 0.0);
+        assert!(reports.iter().any(|&share| share > 0.0), "{reports:?}");
+        assert!(reports.windows(2).all(|w| w[0] <= w[1]), "{reports:?}");
+        assert_eq!(leftovers, ["long.full.norm.mov"]);
+    }
+
     #[test]
     fn nothing_to_add_is_not_an_error() {
         assert_eq!(add_from_iphone(&[], Path::new("/c"), |_| {}), Ok(vec![]));
@@ -541,11 +617,12 @@ mod tests {
             stage: Stage::Normalizing,
             done: 2,
             total: 9,
+            current: 0.5,
         })
         .unwrap();
         assert_eq!(
             json,
-            serde_json::json!({"stage": "normalizing", "done": 2, "total": 9})
+            serde_json::json!({"stage": "normalizing", "done": 2, "total": 9, "current": 0.5})
         );
     }
 }

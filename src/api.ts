@@ -114,6 +114,8 @@ export interface ClipsProgress {
   stage: "downloading" | "normalizing";
   done: number;
   total: number;
+  /** Share of item `done` normalized so far, 0 to 1. */
+  current: number;
 }
 
 export interface AddedFiles {

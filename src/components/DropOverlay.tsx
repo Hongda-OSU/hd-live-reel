@@ -1,5 +1,6 @@
 import * as stylex from "@stylexjs/stylex";
 import type { ClipsProgress } from "../api";
+import { normalizingLabel } from "../project";
 import { colors, shadows } from "../tokens.stylex";
 import { Button, ui, withStyle } from "../ui";
 
@@ -94,12 +95,10 @@ export function DropOverlay({ drop, onDismiss }: Props) {
 }
 
 function Adding({ progress }: { progress: ClipsProgress | null }) {
-  const share = progress && progress.total ? progress.done / progress.total : 0;
+  const share = progress && progress.total ? (progress.done + progress.current) / progress.total : 0;
   return (
     <>
-      <h2 {...stylex.props(styles.heading)}>
-        {progress ? `正在处理第 ${progress.done + 1} / ${progress.total} 段…` : "正在查找视频…"}
-      </h2>
+      <h2 {...stylex.props(styles.heading)}>{progress ? normalizingLabel(progress) : "正在查找视频…"}</h2>
       <div {...stylex.props(styles.track)}>
         <span {...withStyle(stylex.props(styles.fill), { width: `${share * 100}%` })} />
       </div>

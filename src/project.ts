@@ -1,6 +1,6 @@
 // Edits to the open project. The reducer is the only place the project
 // changes; App persists every new state.
-import type { Audio, Clip, Filter, Output, Project, Title, Transition } from "./api";
+import type { Audio, Clip, ClipsProgress, Filter, Output, Project, Title, Transition } from "./api";
 
 type Aspect = Output["aspect"];
 
@@ -128,4 +128,10 @@ export function renderKey(project: Project): string {
     audio,
     transition,
   });
+}
+
+/** "正在处理第 2 / 9 段… 40%"; the percentage only once there is one. */
+export function normalizingLabel({ done, total, current }: ClipsProgress): string {
+  const share = current > 0 ? ` ${Math.round(current * 100)}%` : "";
+  return `正在处理第 ${done + 1} / ${total} 段…${share}`;
 }

@@ -12,6 +12,6 @@ pub use compose::{
 };
 pub use grade::{Grade, Look};
 pub use music::{normalize_music, MUSIC_LUFS};
-pub use normalize::{loudness, normalize, still_frame, Normalized, FPS};
+pub use normalize::{loudness, normalize, normalize_with_progress, still_frame, Normalized, FPS};
 pub use probe::{probe, MediaInfo, VideoInfo};
 pub use tool::{Error, Tool};

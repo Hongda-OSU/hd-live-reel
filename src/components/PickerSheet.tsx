@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import * as stylex from "@stylexjs/stylex";
 import type { ClipsProgress, MediaItem } from "../api";
+import { normalizingLabel } from "../project";
 import { colors, layout, shadows } from "../tokens.stylex";
 import type { Library } from "../useLibrary";
 import { Button, Seg, ui, withStyle } from "../ui";
@@ -241,9 +242,7 @@ const usable = (item: MediaItem) => item.kind !== "photo";
 function progressLabel(adding: Props["adding"]): string {
   if (adding === "starting") return "正在准备…";
   if (!adding) return "";
-  return adding.stage === "downloading"
-    ? `正在从 iPhone 复制 ${adding.total} 项…`
-    : `正在处理第 ${adding.done + 1} / ${adding.total} 段…`;
+  return adding.stage === "downloading" ? `正在从 iPhone 复制 ${adding.total} 项…` : normalizingLabel(adding);
 }
 
 export function PickerSheet({
