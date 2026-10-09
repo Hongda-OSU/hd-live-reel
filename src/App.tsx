@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
+import { ask } from "@tauri-apps/plugin-dialog";
 import * as stylex from "@stylexjs/stylex";
 import {
   addIphoneClips,
@@ -115,6 +116,17 @@ const styles = stylex.create({
     fontSize: 11,
     fontWeight: 600,
     color: colors.muted,
+  },
+  clear: {
+    padding: 0,
+    borderWidth: 0,
+    backgroundColor: "transparent",
+    color: {
+      default: colors.muted,
+      ":hover": colors.danger,
+    },
+    fontSize: 11,
+    cursor: "pointer",
   },
 });
 
@@ -262,6 +274,19 @@ function App() {
     }
   }, []);
 
+  async function clearClips() {
+    if (!project) return;
+    const confirmed = await ask(`清空全部 ${project.clips.length} 个片段？手机上的原片不受影响。`, {
+      title: "清空片段",
+      kind: "warning",
+      okLabel: "清空",
+      cancelLabel: "取消",
+    });
+    if (!confirmed) return;
+    dispatch({ type: "clearClips" });
+    setSelectedId(null);
+  }
+
   function selectClip(id: string) {
     if (!project) return;
     setSelectedId(id);
@@ -362,8 +387,12 @@ function App() {
       <main {...stylex.props(styles.body)}>
         <aside {...stylex.props(styles.sidebar)}>
           <div {...stylex.props(styles.sectionTitle)}>
-            <span>片段</span>
-            <span>{project.clips.length || ""}</span>
+            <span>片段 {project.clips.length || ""}</span>
+            {project.clips.length > 0 && (
+              <button onClick={clearClips} {...stylex.props(styles.clear)}>
+                清空
+              </button>
+            )}
           </div>
           <ClipList
             clips={project.clips}
