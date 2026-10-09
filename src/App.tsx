@@ -17,7 +17,7 @@ import { ExportDialog } from "./components/ExportDialog";
 import { Inspector } from "./components/Inspector";
 import { PickerSheet } from "./components/PickerSheet";
 import { Stage, type CropView } from "./components/Stage";
-import { clipLength, hasTitleText, reducer, renderKey, titleImageKey, totalLength } from "./project";
+import { clipSpans, crossfade, hasTitleText, reducer, renderKey, titleImageKey, totalLength } from "./project";
 import { renderTitlePng } from "./title";
 import { colors, layout } from "./tokens.stylex";
 import { Button, Icon } from "./ui";
@@ -257,18 +257,23 @@ function App() {
     if (!project) return;
     setSelectedId(id);
     const index = project.clips.findIndex((c) => c.id === id);
-    const start = project.clips.slice(0, index).reduce((sum, c) => sum + clipLength(c), 0);
-    setSeekTo({ time: start + 0.01, nonce: Date.now() });
+    const spanStart = clipSpans(project)
+      .slice(0, index)
+      .reduce((sum, span) => sum + span, 0);
+    // Past the dissolve into it, where the clip is fully on screen.
+    const settled = index > 0 ? crossfade(project) / 2 : 0;
+    setSeekTo({ time: spanStart + settled + 0.01, nonce: Date.now() });
   }
 
   // ---------- crop ----------
   function startCrop(time: number) {
     if (!project) return;
-    let start = 0;
+    const spans = clipSpans(project);
+    let end = 0;
     const clip =
-      project.clips.find((c) => {
-        start += clipLength(c);
-        return time < start;
+      project.clips.find((_, i) => {
+        end += spans[i];
+        return time < end;
       }) ?? project.clips[project.clips.length - 1];
     if (!clip) return;
     setSelectedId(clip.id);
@@ -362,7 +367,7 @@ function App() {
         </aside>
         <Stage
           src={preview.url}
-          lengths={project.clips.map(clipLength)}
+          lengths={clipSpans(project)}
           seekTo={seekTo}
           busy={preview.busy}
           error={preview.error}
@@ -373,7 +378,13 @@ function App() {
           onCropEnd={endCrop}
           onAdd={() => setPickerOpen(true)}
         />
-        <Inspector title={project.title} audio={project.audio} filter={project.filter} dispatch={dispatch} />
+        <Inspector
+          title={project.title}
+          audio={project.audio}
+          filter={project.filter}
+          transition={project.transition}
+          dispatch={dispatch}
+        />
       </main>
 
       <PickerSheet

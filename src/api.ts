@@ -84,6 +84,12 @@ export interface Audio {
   originalVolume: number;
 }
 
+export interface Transition {
+  type: "none" | "fade";
+  /** Seconds each join cross-dissolves over. */
+  duration: number;
+}
+
 export interface Project {
   version: number;
   name: string;
@@ -91,7 +97,7 @@ export interface Project {
   title: Title;
   filter: Filter;
   audio: Audio;
-  transition: { type: "none" | "fade"; duration: number };
+  transition: Transition;
   selection: { mode: "manual" | "ai"; targetSeconds: number };
   output: { aspect: "9:16" | "16:9"; fill: "crop" | "black" | "blur"; height: number };
 }

@@ -1,5 +1,5 @@
 import * as stylex from "@stylexjs/stylex";
-import type { Audio, Filter, Title, TitlePosition, TitleTextStyle, TitleWeight } from "../api";
+import type { Audio, Filter, Title, TitlePosition, TitleTextStyle, TitleWeight, Transition } from "../api";
 import type { Action } from "../project";
 import { colors } from "../tokens.stylex";
 import { Button, Field, Group, Select, Seg, Slider, Swatches, ui } from "../ui";
@@ -7,6 +7,8 @@ import { SoundGroup } from "./SoundGroup";
 
 /** Fade used by the "淡出" choice, in seconds. */
 const FADE = 0.3;
+/** Cross-dissolve length when "淡入淡出" is first picked, in seconds. */
+const DISSOLVE = 0.3;
 
 /** Title fonts that ship with macOS. */
 const FONTS: [string, string][] = [
@@ -54,12 +56,14 @@ interface Props {
   title: Title;
   audio: Audio;
   filter: Filter;
+  transition: Transition;
   dispatch: (action: Action) => void;
 }
 
-export function Inspector({ title, audio, filter, dispatch }: Props) {
+export function Inspector({ title, audio, filter, transition, dispatch }: Props) {
   const set = (patch: Partial<Title>) => dispatch({ type: "updateTitle", patch });
   const setFilter = (patch: Partial<Filter>) => dispatch({ type: "updateFilter", patch });
+  const setTransition = (patch: Partial<Transition>) => dispatch({ type: "updateTransition", patch });
   const adjusted =
     filter.brightness !== NEUTRAL.brightness ||
     filter.contrast !== NEUTRAL.contrast ||
@@ -223,6 +227,36 @@ export function Inspector({ title, audio, filter, dispatch }: Props) {
         )}
       </Group>
 
+      <Group title="转场">
+        <Field>
+          <Seg<Transition["type"]>
+            options={[
+              ["none", "硬切"],
+              ["fade", "淡入淡出"],
+            ]}
+            value={transition.type}
+            onChange={(type) =>
+              setTransition(type === "fade" && transition.duration <= 0 ? { type, duration: DISSOLVE } : { type })
+            }
+          />
+        </Field>
+        {transition.type === "fade" && (
+          <Field label="时长">
+            <Slider
+              min={0.2}
+              max={0.8}
+              step={0.1}
+              value={transition.duration}
+              shown={`${transition.duration.toFixed(1)} 秒`}
+              onChange={(duration) => setTransition({ duration })}
+            />
+          </Field>
+        )}
+        <p {...stylex.props(ui.note)}>
+          {transition.type === "fade" ? "相邻两段画面和声音交叠过渡，总长会相应变短。" : "片段之间直接切换。"}
+        </p>
+      </Group>
+
       <Group title="画幅" badge="即将支持" dimmed>
         <Field>
           <Seg
@@ -231,16 +265,6 @@ export function Inspector({ title, audio, filter, dispatch }: Props) {
               ["16:9", "16:9 横屏"],
             ]}
             value="9:16"
-            disabled
-          />
-        </Field>
-        <Field label="转场">
-          <Seg
-            options={[
-              ["none", "硬切"],
-              ["fade", "淡入淡出"],
-            ]}
-            value="none"
             disabled
           />
         </Field>
