@@ -4,12 +4,9 @@ import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-
 import { CSS } from "@dnd-kit/utilities";
 import * as stylex from "@stylexjs/stylex";
 import type { Clip } from "../api";
-import { clipLabel, clipLength, type Action } from "../project";
+import { clipLabel, clipLength, formatTime, trimPatch, type Action } from "../project";
 import { colors, shadows } from "../tokens.stylex";
 import { Button, Switch, ui, withStyle } from "../ui";
-
-/** Shortest a trimmed clip may get, in seconds. */
-const MIN_LENGTH = 0.5;
 
 const styles = stylex.create({
   list: {
@@ -130,10 +127,12 @@ interface Props {
    * clip would change nothing. */
   noOriginalSound: boolean;
   onSelect: (id: string) => void;
+  /** Opens the large trim view for a clip. */
+  onTrim: (id: string) => void;
   dispatch: (action: Action) => void;
 }
 
-export function ClipList({ clips, selectedId, thumbs, noOriginalSound, onSelect, dispatch }: Props) {
+export function ClipList({ clips, selectedId, thumbs, noOriginalSound, onSelect, onTrim, dispatch }: Props) {
   // A small move threshold keeps plain clicks as clicks.
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
 
@@ -145,7 +144,7 @@ export function ClipList({ clips, selectedId, thumbs, noOriginalSound, onSelect,
   }
 
   if (clips.length === 0) {
-    return <p {...stylex.props(styles.empty)}>还没有片段。点「添加照片」从 iPhone 挑选 Live Photo。</p>;
+    return <p {...stylex.props(styles.empty)}>还没有片段。点「添加照片」从 iPhone 挑选，或把文件拖进窗口。</p>;
   }
   return (
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
@@ -160,6 +159,7 @@ export function ClipList({ clips, selectedId, thumbs, noOriginalSound, onSelect,
               thumb={clip.assetId ? thumbs[clip.assetId] : undefined}
               noOriginalSound={noOriginalSound}
               onSelect={() => onSelect(clip.id)}
+              onTrim={() => onTrim(clip.id)}
               dispatch={dispatch}
             />
           ))}
@@ -176,10 +176,11 @@ interface RowProps {
   thumb?: string;
   noOriginalSound: boolean;
   onSelect: () => void;
+  onTrim: () => void;
   dispatch: (action: Action) => void;
 }
 
-function ClipRow({ clip, index, selected, thumb, noOriginalSound, onSelect, dispatch }: RowProps) {
+function ClipRow({ clip, index, selected, thumb, noOriginalSound, onSelect, onTrim, dispatch }: RowProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: clip.id });
   const thumbImage = thumb ? { backgroundImage: `url("${thumb}")` } : undefined;
 
@@ -209,10 +210,11 @@ function ClipRow({ clip, index, selected, thumb, noOriginalSound, onSelect, disp
           <div {...stylex.props(styles.detailRow)}>
             <span>截取</span>
             <span {...stylex.props(ui.note)}>
-              {clip.trimStart.toFixed(1)}s – {clip.trimEnd.toFixed(1)}s
+              {formatTime(clip.trimStart)} – {formatTime(clip.trimEnd)}（共 {formatTime(clip.duration)}）
             </span>
           </div>
           <TrimBar clip={clip} thumbImage={thumbImage} dispatch={dispatch} />
+          <Button onClick={onTrim}>精确剪辑…</Button>
           <div {...stylex.props(styles.detailRow)}>
             <span {...stylex.props(noOriginalSound && styles.dimmed)}>静音这一段</span>
             <Switch
@@ -258,12 +260,7 @@ function TrimBar({
       const rect = bar.current!.getBoundingClientRect();
       target.onpointermove = (move) => {
         const t = Math.min(1, Math.max(0, (move.clientX - rect.left) / rect.width)) * clip.duration;
-        const rounded = Math.round(t * 10) / 10;
-        const patch =
-          handle === "start"
-            ? { trimStart: Math.max(0, Math.min(rounded, clip.trimEnd - MIN_LENGTH)) }
-            : { trimEnd: Math.min(clip.duration, Math.max(rounded, clip.trimStart + MIN_LENGTH)) };
-        dispatch({ type: "updateClip", id: clip.id, patch });
+        dispatch({ type: "updateClip", id: clip.id, patch: trimPatch(clip, handle, t) });
       };
       target.onpointerup = () => {
         target.onpointermove = null;

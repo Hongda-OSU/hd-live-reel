@@ -21,6 +21,7 @@ import { ExportDialog } from "./components/ExportDialog";
 import { Inspector } from "./components/Inspector";
 import { PickerSheet } from "./components/PickerSheet";
 import { Stage, type CropView } from "./components/Stage";
+import { TrimEditor } from "./components/TrimEditor";
 import {
   clipSpans,
   clipStart,
@@ -165,6 +166,8 @@ function App() {
   const [preview, setPreview] = useState<Preview>({ url: null, busy: false, error: null });
   const [seekTo, setSeekTo] = useState<{ time: number; nonce: number } | null>(null);
   const [crop, setCrop] = useState<Crop | null>(null);
+  /** Clip open in the large trim view, which takes the preview's place. */
+  const [trimming, setTrimming] = useState<string | null>(null);
   const { library, thumbs, refresh, loadThumbs } = useLibrary();
 
   // ---------- load + autosave ----------
@@ -228,6 +231,10 @@ function App() {
   latest.current = project;
   const latestCrop = useRef(crop);
   latestCrop.current = crop;
+  /** Clip to show once the preview in the works arrives. */
+  const seekAfterRender = useRef<string | null>(null);
+  /** `renderKey` of the preview on screen. */
+  const shownKey = useRef<string | null>(null);
   const renderSeq = useRef(0);
   useEffect(() => {
     const current = latest.current;
@@ -240,15 +247,17 @@ function App() {
     const timer = setTimeout(async () => {
       setPreview((p) => ({ ...p, busy: true }));
       try {
-        const path = await renderPreview(latest.current!);
+        const rendered = latest.current!;
+        const path = await renderPreview(rendered);
         if (seq === renderSeq.current) {
           setPreview({ url: fileUrl(path), busy: false, error: null });
+          shownKey.current = renderKey(rendered);
           const applied = latestCrop.current;
-          if (applied?.phase === "rendering") {
-            setCrop(null);
-            // Show the clip that was just cropped, not the start.
-            setSeekTo({ time: clipStart(latest.current!, applied.clipId), nonce: Date.now() });
-          }
+          if (applied?.phase === "rendering") setCrop(null);
+          // Show the clip that was just cropped or trimmed, not the start.
+          const clipId = applied?.phase === "rendering" ? applied.clipId : seekAfterRender.current;
+          seekAfterRender.current = null;
+          if (clipId) setSeekTo({ time: clipStart(latest.current!, clipId), nonce: Date.now() });
         }
       } catch (e) {
         if (seq === renderSeq.current) {
@@ -343,6 +352,7 @@ function App() {
   function selectClip(id: string) {
     if (!project) return;
     setSelectedId(id);
+    setTrimming((open) => open && id);
     setSeekTo({ time: clipStart(project, id), nonce: Date.now() });
   }
 
@@ -382,10 +392,21 @@ function App() {
     setCrop({ ...crop, offset, phase: "rendering" });
   }
 
+  function finishTrim() {
+    const id = trimming;
+    setTrimming(null);
+    if (!id || !project) return;
+    // Back on the preview at the trimmed clip, once it shows the new trim.
+    if (shownKey.current === renderKey(project)) setSeekTo({ time: clipStart(project, id), nonce: Date.now() });
+    else seekAfterRender.current = id;
+  }
+
   if (loadError) return <p {...stylex.props(styles.fatal)}>无法打开工程：{loadError}</p>;
   if (!project) return null;
 
   const total = totalLength(project);
+  // Gone if the clip was removed while open.
+  const trimClip = trimming ? project.clips.find((c) => c.id === trimming) : undefined;
   return (
     <div {...stylex.props(styles.app)}>
       <header data-tauri-drag-region {...stylex.props(styles.toolbar)}>
@@ -439,24 +460,32 @@ function App() {
             thumbs={thumbs}
             noOriginalSound={project.audio.mode === "music" && !!project.audio.musicPath}
             onSelect={selectClip}
+            onTrim={(id) => {
+              setCrop(null);
+              setTrimming(id);
+            }}
             dispatch={dispatch}
           />
         </aside>
-        <Stage
-          src={preview.url}
-          aspect={project.output.aspect}
-          croppable={project.output.fill === "crop"}
-          lengths={clipSpans(project)}
-          seekTo={seekTo}
-          busy={preview.busy}
-          error={preview.error}
-          empty={project.clips.length === 0}
-          crop={crop && { ...crop, applying: crop.phase !== "drag" }}
-          onCropStart={startCrop}
-          onCropChange={(offset) => setCrop((c) => c && { ...c, offset })}
-          onCropEnd={endCrop}
-          onAdd={() => setPickerOpen(true)}
-        />
+        {trimClip ? (
+          <TrimEditor key={trimClip.id} clip={trimClip} dispatch={dispatch} onDone={finishTrim} />
+        ) : (
+          <Stage
+            src={preview.url}
+            aspect={project.output.aspect}
+            croppable={project.output.fill === "crop"}
+            lengths={clipSpans(project)}
+            seekTo={seekTo}
+            busy={preview.busy}
+            error={preview.error}
+            empty={project.clips.length === 0}
+            crop={crop && { ...crop, applying: crop.phase !== "drag" }}
+            onCropStart={startCrop}
+            onCropChange={(offset) => setCrop((c) => c && { ...c, offset })}
+            onCropEnd={endCrop}
+            onAdd={() => setPickerOpen(true)}
+          />
+        )}
         <Inspector
           title={project.title}
           audio={project.audio}

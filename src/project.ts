@@ -56,6 +56,30 @@ export function reducer(project: Project | null, action: Action): Project | null
 
 export const clipLength = (clip: Clip) => clip.trimEnd - clip.trimStart;
 
+/** Shortest a trimmed clip may get, in seconds. */
+export const MIN_CLIP_LENGTH = 0.5;
+
+/** Moves one end of `clip`'s trim to `t`, to the nearest 0.1 s, keeping
+ * at least `MIN_CLIP_LENGTH` between the ends. */
+export function trimPatch(clip: Clip, edge: "start" | "end", t: number): Partial<Clip> {
+  const rounded = Math.round(t * 10) / 10;
+  return edge === "start"
+    ? { trimStart: Math.max(0, Math.min(rounded, clip.trimEnd - MIN_CLIP_LENGTH)) }
+    : { trimEnd: Math.min(clip.duration, Math.max(rounded, clip.trimStart + MIN_CLIP_LENGTH)) };
+}
+
+/** "1:02.5" */
+export const formatTime = (t: number) => `${Math.floor(t / 60)}:${(t % 60).toFixed(1).padStart(4, "0")}`;
+
+/** Reads "1:02.5" or "62.5" as seconds; null if it is neither. */
+export function parseTime(text: string): number | null {
+  const match = /^\s*(?:(\d+):)?(\d+(?:\.\d*)?)\s*$/.exec(text);
+  if (!match) return null;
+  const seconds = Number(match[2]);
+  if (match[1] !== undefined && seconds >= 60) return null;
+  return Number(match[1] ?? 0) * 60 + seconds;
+}
+
 const FPS = 30;
 
 /** Seconds each join cross-dissolves over, computed as the Rust side does:

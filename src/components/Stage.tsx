@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type PointerEvent } from "react";
 import * as stylex from "@stylexjs/stylex";
 import { colors, shadows } from "../tokens.stylex";
 import { Button, Icon, ui, withStyle } from "../ui";
+import { formatTime } from "../project";
 import { CropLayer, fillFactor } from "./CropLayer";
 
 const styles = stylex.create({
@@ -194,8 +195,6 @@ const CROP_SLACK = 0.01;
 
 const clamp01 = (n: number) => Math.min(1, Math.max(0, n));
 
-const fmt = (t: number) => `${Math.floor(t / 60)}:${(t % 60).toFixed(1).padStart(4, "0")}`;
-
 export function Stage(props: Props) {
   const { src, aspect, croppable, lengths, seekTo, busy, error, empty, crop, onAdd } = props;
   const frameAspect = aspect === "16:9" ? 16 / 9 : 9 / 16;
@@ -292,10 +291,11 @@ export function Stage(props: Props) {
               src={src}
               playsInline
               onLoadedMetadata={(e) => {
-                // A new preview waits, paused at the start. The replaced
-                // <video> fired no pause event, so reset the button here.
+                // A new preview waits, paused at the start (or where a seek
+                // made while it loaded put it). The replaced <video> fired
+                // no pause event, so reset the button here.
                 setDuration(e.currentTarget.duration);
-                setTime(0);
+                setTime(e.currentTarget.currentTime);
                 setPlaying(false);
               }}
               onTimeUpdate={(e) => setTime(e.currentTarget.currentTime)}
@@ -352,7 +352,7 @@ export function Stage(props: Props) {
           </Icon>
         </button>
         <span {...stylex.props(styles.time)}>
-          {fmt(time)} / {fmt(duration || total)}
+          {formatTime(time)} / {formatTime(duration || total)}
         </span>
         <div {...stylex.props(styles.scrub)}>
           <div {...stylex.props(styles.ticks)}>
