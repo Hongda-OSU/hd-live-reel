@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type PointerEvent } from "react";
 import * as stylex from "@stylexjs/stylex";
 import { colors, shadows } from "../tokens.stylex";
-import { Button, Icon, withStyle } from "../ui";
+import { Button, Icon, ui, withStyle } from "../ui";
 import { CropLayer, fillFactor } from "./CropLayer";
 
 const styles = stylex.create({
@@ -310,6 +310,7 @@ export function Stage(props: Props) {
               <Button variant="primary" onClick={onAdd}>
                 添加照片
               </Button>
+              <p {...stylex.props(ui.note)}>也可以把视频或 Live Photo 拖进窗口</p>
             </div>
           )}
           {crop?.frame && (

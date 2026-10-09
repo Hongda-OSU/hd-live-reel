@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
-import { ask } from "@tauri-apps/plugin-dialog";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
+import { ask, open } from "@tauri-apps/plugin-dialog";
 import * as stylex from "@stylexjs/stylex";
 import {
+  addFileClips,
   addIphoneClips,
   cropFrame,
   fileUrl,
@@ -10,9 +12,11 @@ import {
   renderPreview,
   saveProject,
   saveTitleImage,
+  MEDIA_EXTENSIONS,
   type ClipsProgress,
 } from "./api";
 import { ClipList } from "./components/ClipList";
+import { DropOverlay, type Drop } from "./components/DropOverlay";
 import { ExportDialog } from "./components/ExportDialog";
 import { Inspector } from "./components/Inspector";
 import { PickerSheet } from "./components/PickerSheet";
@@ -157,6 +161,7 @@ function App() {
   const [exportOpen, setExportOpen] = useState(false);
   const [adding, setAdding] = useState<ClipsProgress | "starting" | null>(null);
   const [addError, setAddError] = useState<string | null>(null);
+  const [drop, setDrop] = useState<Drop | null>(null);
   const [preview, setPreview] = useState<Preview>({ url: null, busy: false, error: null });
   const [seekTo, setSeekTo] = useState<{ time: number; nonce: number } | null>(null);
   const [crop, setCrop] = useState<Crop | null>(null);
@@ -282,9 +287,49 @@ function App() {
     }
   }, []);
 
+  const addFiles = useCallback(async (paths: string[]) => {
+    setDrop({ step: "adding", progress: null });
+    const unlisten = await onClipsProgress((progress) => setDrop({ step: "adding", progress }));
+    try {
+      const { clips, skippedStills } = await addFileClips(paths);
+      dispatch({ type: "addClips", clips });
+      setSelectedId((current) => current ?? clips[0]?.id ?? null);
+      if (clips.length) setPickerOpen(false);
+      const skipped = skippedStills ? `跳过了 ${skippedStills} 张没有配对视频的静态照片。` : "";
+      if (clips.length === 0) setDrop({ step: "message", text: skipped || "没有找到视频或 Live Photo。" });
+      else setDrop(skipped ? { step: "message", text: `已添加 ${clips.length} 段，${skipped}` } : null);
+    } catch (e) {
+      setDrop({ step: "message", text: `添加失败：${e}` });
+    } finally {
+      unlisten();
+    }
+  }, []);
+
+  async function pickFiles() {
+    const picked = await open({
+      multiple: true,
+      filters: [{ name: "视频和 Live Photo", extensions: MEDIA_EXTENSIONS }],
+    });
+    if (picked?.length) void addFiles(picked);
+  }
+
+  // Files dragged from Finder anywhere onto the window.
+  const busyAdding = useRef(false);
+  busyAdding.current = adding !== null || drop?.step === "adding";
+  useEffect(() => {
+    const stop = getCurrentWebview().onDragDropEvent(({ payload }) => {
+      if (busyAdding.current) return;
+      if (payload.type === "leave") setDrop((d) => (d?.step === "hover" ? null : d));
+      else if (payload.type !== "drop") setDrop((d) => (d?.step === "hover" ? d : { step: "hover" }));
+      else if (payload.paths.length) void addFiles(payload.paths);
+      else setDrop(null);
+    });
+    return () => void stop.then((unlisten) => unlisten());
+  }, [addFiles]);
+
   async function clearClips() {
     if (!project) return;
-    const confirmed = await ask(`清空全部 ${project.clips.length} 个片段？手机上的原片不受影响。`, {
+    const confirmed = await ask(`清空全部 ${project.clips.length} 个片段？手机和 Mac 上的原片不受影响。`, {
       title: "清空片段",
       kind: "warning",
       okLabel: "清空",
@@ -431,9 +476,11 @@ function App() {
         onRefresh={refresh}
         onLoadThumbs={loadThumbs}
         onAdd={addClips}
+        onPickFiles={pickFiles}
         onClose={() => setPickerOpen(false)}
       />
       <ExportDialog open={exportOpen} project={project} dispatch={dispatch} onClose={() => setExportOpen(false)} />
+      <DropOverlay drop={drop} onDismiss={() => setDrop(null)} />
     </div>
   );
 }

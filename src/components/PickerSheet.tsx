@@ -219,6 +219,8 @@ interface Props {
   onRefresh: () => void;
   onLoadThumbs: (ids: string[]) => void;
   onAdd: (ids: string[]) => void;
+  /** Opens a file dialog to add from the Mac instead. */
+  onPickFiles: () => void;
   onClose: () => void;
 }
 
@@ -244,7 +246,18 @@ function progressLabel(adding: Props["adding"]): string {
     : `正在处理第 ${adding.done + 1} / ${adding.total} 段…`;
 }
 
-export function PickerSheet({ open, library, thumbs, adding, error, onRefresh, onLoadThumbs, onAdd, onClose }: Props) {
+export function PickerSheet({
+  open,
+  library,
+  thumbs,
+  adding,
+  error,
+  onRefresh,
+  onLoadThumbs,
+  onAdd,
+  onPickFiles,
+  onClose,
+}: Props) {
   const [filter, setFilter] = useState<Filter>("live");
   const [chosen, setChosen] = useState<Set<string>>(new Set());
 
@@ -321,6 +334,9 @@ export function PickerSheet({ open, library, thumbs, adding, error, onRefresh, o
             {library.state === "error" && "未连接"}
           </span>
           <span {...stylex.props(ui.spacer)} />
+          <Button onClick={onPickFiles} disabled={busy}>
+            从 Mac 选择…
+          </Button>
           <Button onClick={onRefresh} disabled={busy || library.state === "loading"}>
             刷新
           </Button>
@@ -348,6 +364,7 @@ export function PickerSheet({ open, library, thumbs, adding, error, onRefresh, o
             <div {...stylex.props(styles.notice)}>
               <p>{library.message}</p>
               <p {...stylex.props(ui.note)}>用数据线连接 iPhone 并解锁，然后点「刷新」。</p>
+              <p {...stylex.props(ui.note)}>文件已经在 Mac 上：点「从 Mac 选择…」，或直接把文件、文件夹拖进窗口。</p>
             </div>
           )}
           {library.state === "loading" && <p {...stylex.props(styles.notice)}>正在读取 iPhone…</p>}

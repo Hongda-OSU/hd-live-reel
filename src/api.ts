@@ -122,6 +122,9 @@ export interface AddedFiles {
   skippedStills: number;
 }
 
+/** What the "从 Mac 选择" dialog offers; a Live Photo is its photo and MOV. */
+export const MEDIA_EXTENSIONS = ["mov", "mp4", "m4v", "heic", "heif", "jpg", "jpeg"];
+
 // ---------- commands ----------
 
 export const loadProject = () => invoke<Project>("load_project");

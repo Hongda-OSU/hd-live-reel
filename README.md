@@ -5,6 +5,7 @@ A macOS desktop app that stitches iPhone Live Photos into one short video, keepi
 ## Features
 
 - Pick Live Photos and videos straight from a USB-connected iPhone, with thumbnails grouped by day
+- Or drag videos, Live Photo pairs (photo + MOV of the same name) and folders in from Finder
 - Keep each clip's original sound, loudness-matched, with click-free joins, or lay a music track under or over it
 - Reorder, trim, mute and re-crop clips; add a styled opening title and colour filters
 - Preview from the same FFmpeg pipeline as the export, refreshed after every edit
@@ -39,7 +40,7 @@ pnpm helper
 
 ## Usage
 
-Connect the iPhone with a cable, unlock it, then start the app:
+Connect the iPhone with a cable and unlock it (or skip this and drag files in), then start the app:
 
 ```bash
 pnpm tauri dev
