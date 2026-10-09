@@ -1,6 +1,9 @@
-//! Brings iPhone media into a project: download, normalize once, and
-//! describe each item as a `Clip`.
+//! Brings iPhone media and files from the Mac into a project: normalize
+//! once and describe each item as a `Clip`.
 
+use std::collections::hash_map::DefaultHasher;
+use std::collections::{BTreeSet, HashMap};
+use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -42,10 +45,7 @@ pub fn add_from_iphone(
     });
     let downloads = iphone::download(ids, &cache.join("originals")).map_err(|e| e.to_string())?;
 
-    let stamp = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_err(|e| e.to_string())?
-        .as_millis();
+    let stamp = stamp()?;
     let mut clips = Vec::with_capacity(total);
     for (done, (id, download)) in ids.iter().zip(&downloads).enumerate() {
         report(Progress {
@@ -57,37 +57,237 @@ pub fn add_from_iphone(
             return Err(format!("{id}: {error}"));
         }
         // A Live Photo's motion is its paired video; a video is the item itself.
-        let (kind, still_path, video_path) = match (&download.path, &download.video_path) {
-            (Some(still), Some(video)) => (ClipKind::LivePhoto, Some(still.clone()), video.clone()),
-            (Some(video), None) => (ClipKind::Video, None, video.clone()),
+        let (still_path, video_path) = match (&download.path, &download.video_path) {
+            (Some(still), Some(video)) => (Some(still.clone()), video.clone()),
+            (Some(video), None) => (None, video.clone()),
             _ => return Err(format!("{id}: nothing downloaded")),
         };
-
-        let (normalized, duration) = normalize_cached(cache, id, &video_path)?;
         let taken_at = ffmpeg::probe(&video_path)
             .ok()
             .and_then(|info| info.creation_time);
-
-        clips.push(Clip {
-            // Unique even if the same photo is added twice.
-            id: format!("{id}@{stamp}-{done}"),
-            source: Source::Iphone,
-            kind,
-            asset_id: Some(id.clone()),
+        // Unique even if the same photo is added twice.
+        let unique = format!("{id}@{stamp}-{done}");
+        clips.push(prepare(
+            cache,
+            unique,
+            Source::Iphone,
+            id,
             still_path,
             video_path,
-            normalized_path: Some(normalized),
             taken_at,
-            duration,
-            trim_start: 0.0,
-            trim_end: duration,
-            muted: false,
-            crop_offset: 0.5,
-            ai_score: None,
-            ai_reason: None,
-        });
+        )?);
     }
     Ok(clips)
+}
+
+/// What `add_from_files` brought in.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Added {
+    pub clips: Vec<Clip>,
+    /// Photos without a video beside them, which have no motion to use.
+    pub skipped_stills: usize,
+}
+
+const VIDEO_EXTENSIONS: [&str; 3] = ["mov", "mp4", "m4v"];
+const STILL_EXTENSIONS: [&str; 4] = ["heic", "heif", "jpg", "jpeg"];
+
+/// Starts the cache id of a file from the Mac; iPhone ids are
+/// "<device folder>/<name>".
+const FILE_PREFIX: &str = "files/";
+
+/// Prepares files and folders dropped or picked on the Mac, oldest first.
+/// A photo and a video with the same name in one folder (how Photos
+/// exports a Live Photo) become one Live Photo. Originals stay where they
+/// are; only their normalized copies go into the cache.
+pub fn add_from_files(
+    paths: &[PathBuf],
+    cache: &Path,
+    report: impl Fn(Progress),
+) -> Result<Added, String> {
+    let (pairs, skipped_stills) = pair(&scan(paths)?);
+    let mut dated: Vec<_> = pairs
+        .into_iter()
+        .map(|(still, video)| {
+            let taken_at = ffmpeg::probe(&video)
+                .map_err(|e| format!("{}: {e}", video.display()))?
+                .creation_time;
+            Ok((taken_at, still, video))
+        })
+        .collect::<Result<_, String>>()?;
+    // Undated files go last, in name order.
+    dated.sort_by(|a, b| (a.0.is_none(), &a.0, &a.2).cmp(&(b.0.is_none(), &b.0, &b.2)));
+
+    let stamp = stamp()?;
+    let total = dated.len();
+    let mut clips = Vec::with_capacity(total);
+    for (done, (taken_at, still, video)) in dated.into_iter().enumerate() {
+        report(Progress {
+            stage: Stage::Normalizing,
+            done,
+            total,
+        });
+        let id = file_id(&video)?;
+        let unique = format!("{id}@{stamp}-{done}");
+        let clip = prepare(cache, unique, Source::File, &id, still, video, taken_at)?;
+        let thumb = thumbnail_path(cache, &id);
+        if !thumb.is_file() {
+            std::fs::create_dir_all(thumb.parent().unwrap()).map_err(|e| e.to_string())?;
+            ffmpeg::still_frame(
+                clip.normalized_path.as_deref().unwrap(),
+                &thumb,
+                clip.duration / 2.0,
+                THUMBNAIL_SIDE,
+            )
+            .map_err(|e| format!("{id}: {e}"))?;
+        }
+        clips.push(clip);
+    }
+    Ok(Added {
+        clips,
+        skipped_stills,
+    })
+}
+
+/// Every file under `paths`, looking inside folders and skipping hidden
+/// names such as `.DS_Store`.
+fn scan(paths: &[PathBuf]) -> Result<BTreeSet<PathBuf>, String> {
+    let mut found = BTreeSet::new();
+    let mut todo: Vec<PathBuf> = paths.to_vec();
+    while let Some(path) = todo.pop() {
+        let hidden = path
+            .file_name()
+            .is_some_and(|name| name.to_string_lossy().starts_with('.'));
+        if hidden {
+            continue;
+        }
+        if path.is_dir() {
+            for entry in std::fs::read_dir(&path).map_err(|e| format!("{}: {e}", path.display()))? {
+                todo.push(entry.map_err(|e| e.to_string())?.path());
+            }
+        } else if path.is_file() {
+            found.insert(path);
+        }
+    }
+    Ok(found)
+}
+
+/// Videos with the photo of the same name beside them, if any, and how
+/// many photos had no video. Other files are ignored.
+fn pair(files: &BTreeSet<PathBuf>) -> (Vec<(Option<PathBuf>, PathBuf)>, usize) {
+    let extension = |path: &Path| {
+        path.extension()
+            .map(|ext| ext.to_string_lossy().to_lowercase())
+            .unwrap_or_default()
+    };
+    let key = |path: &Path| path.with_extension("");
+    let mut stills: HashMap<_, PathBuf> = files
+        .iter()
+        .filter(|path| STILL_EXTENSIONS.contains(&extension(path).as_str()))
+        .map(|path| (key(path), path.clone()))
+        .collect();
+    let pairs = files
+        .iter()
+        .filter(|path| VIDEO_EXTENSIONS.contains(&extension(path).as_str()))
+        .map(|video| (stills.remove(&key(video)), video.clone()))
+        .collect();
+    (pairs, stills.len())
+}
+
+/// `files/<hash>/<name>`: stable for one file, distinct for files that
+/// share a name, and kept apart from iPhone ids.
+fn file_id(path: &Path) -> Result<String, String> {
+    let canonical = path
+        .canonicalize()
+        .map_err(|e| format!("{}: {e}", path.display()))?;
+    let meta = std::fs::metadata(&canonical).map_err(|e| e.to_string())?;
+    let mut hasher = DefaultHasher::new();
+    // Path, size and time instead of contents: videos can be gigabytes.
+    canonical.hash(&mut hasher);
+    meta.len().hash(&mut hasher);
+    meta.modified().ok().hash(&mut hasher);
+    // The frontend joins ids with "|".
+    let name = canonical
+        .file_name()
+        .map(|name| name.to_string_lossy().replace('|', "_"))
+        .unwrap_or_default();
+    Ok(format!("{FILE_PREFIX}{:016x}/{name}", hasher.finish()))
+}
+
+/// Milliseconds since 1970, to keep clip ids unique.
+fn stamp() -> Result<u128, String> {
+    Ok(SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|e| e.to_string())?
+        .as_millis())
+}
+
+/// Normalizes `video_path` under the cache id `id` and describes it.
+fn prepare(
+    cache: &Path,
+    unique: String,
+    source: Source,
+    id: &str,
+    still_path: Option<PathBuf>,
+    video_path: PathBuf,
+    taken_at: Option<String>,
+) -> Result<Clip, String> {
+    let (normalized, duration) = normalize_cached(cache, id, &video_path)?;
+    Ok(Clip {
+        id: unique,
+        source,
+        kind: if still_path.is_some() {
+            ClipKind::LivePhoto
+        } else {
+            ClipKind::Video
+        },
+        asset_id: Some(id.to_string()),
+        still_path,
+        video_path,
+        normalized_path: Some(normalized),
+        taken_at,
+        duration,
+        trim_start: 0.0,
+        trim_end: duration,
+        muted: false,
+        crop_offset: 0.5,
+        ai_score: None,
+        ai_reason: None,
+    })
+}
+
+/// Longest side of clip and picker thumbnails, in pixels.
+pub const THUMBNAIL_SIDE: u32 = 320;
+
+/// Thumbnails for iPhone items and added files, in no particular order.
+/// iPhone ones come from the phone the first time; a file's was made when
+/// it was added.
+pub fn thumbnails(ids: &[String], cache: &Path) -> Result<Vec<iphone::Thumbnail>, String> {
+    let (files, phone): (Vec<String>, Vec<String>) = ids
+        .iter()
+        .cloned()
+        .partition(|id| id.starts_with(FILE_PREFIX));
+    let mut found = if phone.is_empty() {
+        Vec::new()
+    } else {
+        iphone::thumbnails(&phone, &cache.join("thumbs"), THUMBNAIL_SIDE)
+            .map_err(|e| e.to_string())?
+    };
+    found.extend(files.into_iter().map(|id| {
+        let path = thumbnail_path(cache, &id);
+        let (path, error) = if path.is_file() {
+            (Some(path), None)
+        } else {
+            (None, Some("no thumbnail".into()))
+        };
+        iphone::Thumbnail { id, path, error }
+    }));
+    Ok(found)
+}
+
+/// Where the phone helper caches thumbnails, used for files too.
+fn thumbnail_path(cache: &Path, id: &str) -> PathBuf {
+    cache.join("thumbs").join(format!("{id}.jpg"))
 }
 
 /// Clips prepared before intermediates kept their own shape point at
@@ -133,10 +333,14 @@ pub fn crop_frame(clip: &Clip, at: f64, cache: &Path) -> Result<PathBuf, String>
         .with_extension(format!("{millis}.jpg"));
     if !path.is_file() {
         std::fs::create_dir_all(path.parent().unwrap()).map_err(|e| e.to_string())?;
-        ffmpeg::still_frame(source, &path, at).map_err(|e| format!("{id}: {e}"))?;
+        ffmpeg::still_frame(source, &path, at, CROP_FRAME_SIDE)
+            .map_err(|e| format!("{id}: {e}"))?;
     }
     Ok(path)
 }
+
+/// Longest side of the crop picker's still, in pixels.
+const CROP_FRAME_SIDE: u32 = 960;
 
 /// The normalized file for `id` and its duration, reusing the cached file
 /// when there is one.
@@ -249,6 +453,76 @@ mod tests {
         );
         assert!(!again, "already current");
         assert!(frame.ends_with("frames/dev/IMG_0001.300.jpg"), "{frame:?}");
+    }
+
+    #[test]
+    fn pairs_live_photos_and_counts_lone_stills() {
+        let dir = std::env::temp_dir().join(format!("hd-live-reel-pair-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("trip")).unwrap();
+        for name in [
+            "IMG_0001.HEIC",
+            "IMG_0001.MOV",
+            "IMG_0002.mov",
+            "IMG_0003.JPG",
+            ".hidden.mov",
+            "notes.txt",
+            "trip/IMG_0004.MP4",
+        ] {
+            std::fs::write(dir.join(name), b"").unwrap();
+        }
+        // The same file twice, alone and inside its folder.
+        let found = scan(&[dir.clone(), dir.join("IMG_0002.mov")]).unwrap();
+        let (pairs, skipped) = pair(&found);
+        std::fs::remove_dir_all(&dir).unwrap();
+
+        assert_eq!(
+            pairs,
+            vec![
+                (Some(dir.join("IMG_0001.HEIC")), dir.join("IMG_0001.MOV")),
+                (None, dir.join("IMG_0002.mov")),
+                (None, dir.join("trip/IMG_0004.MP4")),
+            ]
+        );
+        assert_eq!(skipped, 1, "IMG_0003.JPG has no motion");
+    }
+
+    #[test]
+    fn adds_files_once_with_thumbnails() {
+        let dir = std::env::temp_dir().join(format!("hd-live-reel-files-{}", std::process::id()));
+        let (src, cache) = (dir.join("src"), dir.join("cache"));
+        std::fs::create_dir_all(&src).unwrap();
+        let video = landscape_clip(&src).video_path;
+        let moved = src.join("IMG_0001.MOV");
+        std::fs::rename(&video, &moved).unwrap();
+        std::fs::write(src.join("IMG_0001.HEIC"), b"").unwrap();
+
+        let first = add_from_files(std::slice::from_ref(&src), &cache, |_| {}).unwrap();
+        let again = add_from_files(std::slice::from_ref(&moved), &cache, |_| {}).unwrap();
+        let clip = &first.clips[0];
+        let id = clip.asset_id.clone().unwrap();
+        let thumbs = thumbnails(std::slice::from_ref(&id), &cache).unwrap();
+        let thumb = crate::ffmpeg::probe(thumbs[0].path.as_ref().unwrap())
+            .unwrap()
+            .video
+            .unwrap();
+        std::fs::remove_dir_all(&dir).unwrap();
+
+        assert_eq!(first.skipped_stills, 0);
+        assert_eq!(
+            (clip.source, clip.kind),
+            (Source::File, ClipKind::LivePhoto)
+        );
+        assert_eq!(clip.video_path, moved, "original used in place");
+        assert!(
+            id.starts_with(FILE_PREFIX) && id.ends_with("/IMG_0001.MOV"),
+            "{id}"
+        );
+        assert!(clip.normalized_path.as_ref().unwrap().starts_with(&cache));
+        assert_eq!((thumb.width, thumb.height), (320, 240));
+        let repeat = &again.clips[0];
+        assert_eq!(repeat.asset_id, clip.asset_id, "same file, same cache");
+        assert_eq!(repeat.kind, ClipKind::Video, "photo not dropped this time");
+        assert_ne!(repeat.id, clip.id);
     }
 
     #[test]

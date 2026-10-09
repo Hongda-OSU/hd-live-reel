@@ -190,9 +190,9 @@ fn fit_within(side: u32) -> String {
 }
 
 /// Writes the frame of the normalized intermediate `src` shown at `at`
-/// seconds as a JPEG, whole and at most 960 on a side, so the crop picker
-/// shows what the crop leaves out of exactly that moment.
-pub fn still_frame(src: &Path, dst: &Path, at: f64) -> Result<(), Error> {
+/// seconds as a JPEG, whole and at most `side` pixels on a side, so the
+/// crop picker shows what the crop leaves out of exactly that moment.
+pub fn still_frame(src: &Path, dst: &Path, at: f64, side: u32) -> Result<(), Error> {
     Tool::Ffmpeg.run([
         "-y".to_string(),
         "-v".into(),
@@ -202,7 +202,7 @@ pub fn still_frame(src: &Path, dst: &Path, at: f64) -> Result<(), Error> {
         "-i".into(),
         src.to_string_lossy().into_owned(),
         "-vf".into(),
-        format!("{},setsar=1", fit_within(MAX_SIDE / 2)),
+        format!("{},setsar=1", fit_within(side)),
         "-frames:v".into(),
         "1".into(),
         "-q:v".into(),
@@ -392,12 +392,15 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let src = generated_clip(&dir, false);
         let dst = dir.join("frame.jpg");
-        still_frame(&src, &dst, 0.5).unwrap();
-        let summary = stream_summary(&dst);
+        still_frame(&src, &dst, 0.5, 960).unwrap();
+        let whole = stream_summary(&dst);
+        still_frame(&src, &dst, 0.5, 320).unwrap();
+        let small = stream_summary(&dst);
         std::fs::remove_dir_all(&dir).unwrap();
 
         // Already within 960 on a side, so kept as it is.
-        assert!(summary.contains("width=640|height=480"), "{summary}");
+        assert!(whole.contains("width=640|height=480"), "{whole}");
+        assert!(small.contains("width=320|height=240"), "{small}");
     }
 
     /// First-frame signalstats value, e.g. "SATAVG".

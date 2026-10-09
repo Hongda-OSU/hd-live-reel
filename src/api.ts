@@ -116,14 +116,23 @@ export interface ClipsProgress {
   total: number;
 }
 
+export interface AddedFiles {
+  clips: Clip[];
+  /** Photos without a same-named video, which have no motion. */
+  skippedStills: number;
+}
+
 // ---------- commands ----------
 
 export const loadProject = () => invoke<Project>("load_project");
 export const saveProject = (project: Project) => invoke<void>("save_project", { project });
 
 export const listIphoneMedia = () => invoke<MediaItem[]>("list_iphone_media");
-export const iphoneThumbnails = (ids: string[]) => invoke<Thumbnail[]>("iphone_thumbnails", { ids });
+/** Thumbnails for iPhone item ids and the asset ids of clips. */
+export const thumbnails = (ids: string[]) => invoke<Thumbnail[]>("thumbnails", { ids });
 export const addIphoneClips = (ids: string[]) => invoke<Clip[]>("add_iphone_clips", { ids });
+/** Videos, Live Photo pairs and folders on the Mac, oldest first. */
+export const addFileClips = (paths: string[]) => invoke<AddedFiles>("add_file_clips", { paths });
 /** The uncropped picture of `clip` at `at` seconds into its normalized file. */
 export const cropFrame = (clip: Clip, at: number) => invoke<string>("crop_frame", { clip, at });
 

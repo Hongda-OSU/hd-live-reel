@@ -82,18 +82,12 @@ async fn list_iphone_media() -> Result<Vec<iphone::MediaItem>, String> {
     blocking(|| iphone::list().map_err(|e| e.to_string())).await
 }
 
-/// Longest side of picker thumbnails, in pixels.
-const THUMBNAIL_SIZE: u32 = 320;
-
-/// JPEG thumbnails for `ids`, cached under the app cache dir.
+/// JPEG thumbnails for iPhone items and added files, cached under the app
+/// cache dir.
 #[tauri::command]
-async fn iphone_thumbnails(
-    app: AppHandle,
-    ids: Vec<String>,
-) -> Result<Vec<iphone::Thumbnail>, String> {
-    let dir = cache_dir(&app)?.join("thumbs");
-    blocking(move || iphone::thumbnails(&ids, &dir, THUMBNAIL_SIZE).map_err(|e| e.to_string()))
-        .await
+async fn thumbnails(app: AppHandle, ids: Vec<String>) -> Result<Vec<iphone::Thumbnail>, String> {
+    let cache = cache_dir(&app)?;
+    blocking(move || clips::thumbnails(&ids, &cache)).await
 }
 
 /// Downloads and prepares iPhone items as clips. Emits `clips-progress`.
@@ -102,6 +96,19 @@ async fn add_iphone_clips(app: AppHandle, ids: Vec<String>) -> Result<Vec<projec
     let cache = cache_dir(&app)?;
     blocking(move || {
         clips::add_from_iphone(&ids, &cache, |progress| {
+            let _ = app.emit("clips-progress", progress);
+        })
+    })
+    .await
+}
+
+/// Prepares video files, Live Photo pairs and folders from the Mac as
+/// clips. Emits `clips-progress`.
+#[tauri::command]
+async fn add_file_clips(app: AppHandle, paths: Vec<PathBuf>) -> Result<clips::Added, String> {
+    let cache = cache_dir(&app)?;
+    blocking(move || {
+        clips::add_from_files(&paths, &cache, |progress| {
             let _ = app.emit("clips-progress", progress);
         })
     })
@@ -206,8 +213,9 @@ pub fn run() {
             load_project,
             save_project,
             list_iphone_media,
-            iphone_thumbnails,
+            thumbnails,
             add_iphone_clips,
+            add_file_clips,
             crop_frame,
             import_music,
             save_title_image,

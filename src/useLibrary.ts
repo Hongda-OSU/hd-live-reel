@@ -1,7 +1,7 @@
 // What is on the connected iPhone, plus thumbnails as they arrive. Kept
 // above the picker so reopening it is instant.
 import { useCallback, useRef, useState } from "react";
-import { fileUrl, iphoneThumbnails, listIphoneMedia, type MediaItem } from "./api";
+import { fileUrl, listIphoneMedia, thumbnails, type MediaItem } from "./api";
 
 export type Library =
   { state: "idle" | "loading" } | { state: "error"; message: string } | { state: "ready"; items: MediaItem[] };
@@ -31,7 +31,7 @@ export function useLibrary() {
     for (let i = 0; i < todo.length; i += BATCH) {
       const batch = todo.slice(i, i + BATCH);
       try {
-        const results = await iphoneThumbnails(batch);
+        const results = await thumbnails(batch);
         setThumbs((current) => {
           const next = { ...current };
           for (const t of results) if (t.path) next[t.id] = fileUrl(t.path);
