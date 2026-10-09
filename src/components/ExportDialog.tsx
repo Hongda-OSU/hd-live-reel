@@ -1,17 +1,35 @@
 import { useState } from "react";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import * as stylex from "@stylexjs/stylex";
-import { exportVideo, type Project } from "../api";
+import { cancelExport, EXPORT_CANCELLED, exportVideo, onExportProgress, type Project } from "../api";
 import { colors, shadows } from "../tokens.stylex";
-import { Button, ui } from "../ui";
+import { Button, ui, withStyle } from "../ui";
 
 type Phase =
-  { step: "form" } | { step: "running" } | { step: "done"; path: string } | { step: "error"; message: string };
+  | { step: "form"; cancelled: boolean }
+  | {
+      step: "running";
+      progress: number;
+      /** Seconds left, once enough is done to estimate it. */
+      remaining: number | null;
+      cancelling: boolean;
+    }
+  | { step: "done"; path: string }
+  | { step: "error"; message: string };
 
-const slide = stylex.keyframes({
-  from: { transform: "translateX(-100%)" },
-  to: { transform: "translateX(290%)" },
-});
+/** The rate is too noisy to extrapolate before this much is done. */
+const MIN_FOR_ESTIMATE = { share: 0.05, seconds: 2 };
+
+function estimateRemaining(progress: number, startedAt: number): number | null {
+  const elapsed = (Date.now() - startedAt) / 1000;
+  if (progress < MIN_FOR_ESTIMATE.share || elapsed < MIN_FOR_ESTIMATE.seconds) return null;
+  return (elapsed * (1 - progress)) / progress;
+}
+
+function formatRemaining(seconds: number) {
+  const s = Math.max(1, Math.ceil(seconds));
+  return s < 60 ? `约剩 ${s} 秒` : `约剩 ${Math.floor(s / 60)} 分 ${s % 60} 秒`;
+}
 
 const styles = stylex.create({
   scrim: {
@@ -55,17 +73,17 @@ const styles = stylex.create({
     backgroundColor: colors.surface2,
     overflow: "hidden",
   },
-  // No real percentage yet, so an indeterminate sweep.
-  sweep: {
+  fill: {
     display: "block",
-    width: "35%",
     height: "100%",
     borderRadius: 99,
     backgroundColor: colors.accent,
-    animationName: slide,
-    animationDuration: "1.1s",
-    animationTimingFunction: "ease-in-out",
-    animationIterationCount: "infinite",
+    transition: "width 0.2s linear",
+  },
+  status: {
+    display: "flex",
+    justifyContent: "space-between",
+    fontVariantNumeric: "tabular-nums",
   },
   done: {
     display: "grid",
@@ -102,15 +120,30 @@ export function ExportDialog({ open, ...rest }: Props) {
 }
 
 function DialogBody({ project, onClose }: Omit<Props, "open">) {
-  const [phase, setPhase] = useState<Phase>({ step: "form" });
+  const [phase, setPhase] = useState<Phase>({ step: "form", cancelled: false });
 
   async function run() {
-    setPhase({ step: "running" });
+    const startedAt = Date.now();
+    setPhase({ step: "running", progress: 0, remaining: null, cancelling: false });
+    const unlisten = await onExportProgress((progress) =>
+      setPhase((p) =>
+        p.step === "running" ? { ...p, progress, remaining: estimateRemaining(progress, startedAt) } : p,
+      ),
+    );
     try {
       setPhase({ step: "done", path: await exportVideo(project) });
     } catch (e) {
-      setPhase({ step: "error", message: String(e) });
+      setPhase(
+        String(e) === EXPORT_CANCELLED ? { step: "form", cancelled: true } : { step: "error", message: String(e) },
+      );
+    } finally {
+      unlisten();
     }
+  }
+
+  function cancel() {
+    setPhase((p) => (p.step === "running" ? { ...p, cancelling: true } : p));
+    void cancelExport();
   }
 
   const running = phase.step === "running";
@@ -126,6 +159,7 @@ function DialogBody({ project, onClose }: Omit<Props, "open">) {
               <br />
               保存到「影片 › HD Live Reel」。
             </p>
+            {phase.step === "form" && phase.cancelled && <p {...stylex.props(ui.note)}>已取消，没有保存任何文件。</p>}
             {phase.step === "error" && <p {...stylex.props(ui.error)}>{phase.message}</p>}
             <div {...stylex.props(styles.actions)}>
               <Button onClick={onClose}>取消</Button>
@@ -135,13 +169,21 @@ function DialogBody({ project, onClose }: Omit<Props, "open">) {
             </div>
           </>
         )}
-        {running && (
+        {phase.step === "running" && (
           <>
-            <h2 {...stylex.props(styles.heading)}>正在导出…</h2>
+            <h2 {...stylex.props(styles.heading)}>{phase.cancelling ? "正在取消…" : "正在导出…"}</h2>
             <div {...stylex.props(styles.track)}>
-              <i {...stylex.props(styles.sweep)} />
+              <i {...withStyle(stylex.props(styles.fill), { width: `${phase.progress * 100}%` })} />
             </div>
-            <p {...stylex.props(ui.note)}>全画质编码，请稍候。</p>
+            <div {...stylex.props(ui.note, styles.status)}>
+              <span>{Math.floor(phase.progress * 100)}%</span>
+              <span>{phase.remaining === null ? "全画质编码，请稍候" : formatRemaining(phase.remaining)}</span>
+            </div>
+            <div {...stylex.props(styles.actions)}>
+              <Button disabled={phase.cancelling} onClick={cancel}>
+                取消
+              </Button>
+            </div>
           </>
         )}
         {phase.step === "done" && (

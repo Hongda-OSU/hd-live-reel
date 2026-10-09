@@ -124,6 +124,14 @@ export const importMusic = (path: string) => invoke<string>("import_music", { pa
 export const saveTitleImage = (png: Uint8Array) => invoke<string>("save_title_image", { png: Array.from(png) });
 export const renderPreview = (project: Project) => invoke<string>("render_preview", { project });
 export const exportVideo = (project: Project) => invoke<string>("export_video", { project });
+export const cancelExport = () => invoke<void>("cancel_export");
+/** What `exportVideo` rejects with after `cancelExport`. */
+export const EXPORT_CANCELLED = "cancelled";
+
+/** Share of the export done so far, 0 to 1. */
+export function onExportProgress(handler: (progress: number) => void): Promise<UnlistenFn> {
+  return listen<number>("export-progress", (event) => handler(event.payload));
+}
 
 export function onClipsProgress(handler: (progress: ClipsProgress) => void): Promise<UnlistenFn> {
   return listen<ClipsProgress>("clips-progress", (event) => handler(event.payload));
