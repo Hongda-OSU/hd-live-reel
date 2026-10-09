@@ -7,8 +7,9 @@ pub mod render;
 mod sidecar;
 
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use tauri::{AppHandle, Emitter, Manager, State};
 
@@ -18,6 +19,12 @@ struct CurrentProject(Mutex<Option<PathBuf>>);
 /// Numbers preview files so a slow, stale render never overwrites or
 /// deletes a newer one.
 struct PreviewCounter(AtomicU64);
+
+/// Set by `cancel_export` to stop the export in progress.
+struct ExportCancel(Arc<AtomicBool>);
+
+/// Least time between `export-progress` events.
+const PROGRESS_INTERVAL: Duration = Duration::from_millis(100);
 
 fn project_store(app: &AppHandle) -> Result<project::Store, String> {
     let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
@@ -148,21 +155,41 @@ async fn render_preview(
     .await
 }
 
-/// Renders the full-quality MP4 into `~/Movies/HD Live Reel/`.
+/// Renders the full-quality MP4 into `~/Movies/HD Live Reel/`, emitting
+/// `export-progress` (0 to 1). A cancelled export fails with
+/// `render::CANCELLED`.
 #[tauri::command]
-async fn export_video(app: AppHandle, project: project::Project) -> Result<PathBuf, String> {
+async fn export_video(
+    app: AppHandle,
+    cancel: State<'_, ExportCancel>,
+    project: project::Project,
+) -> Result<PathBuf, String> {
     let dir = app
         .path()
         .video_dir()
         .map_err(|e| e.to_string())?
         .join("HD Live Reel");
+    let cancel = cancel.0.clone();
+    cancel.store(false, Ordering::SeqCst);
     blocking(move || {
         std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
         let out = render::export_path(&dir, &project.name);
-        render::render(&project, ffmpeg::Quality::Export, &out)?;
+        let mut last = Instant::now();
+        render::export(&project, &out, &cancel, |progress| {
+            if last.elapsed() >= PROGRESS_INTERVAL {
+                last = Instant::now();
+                let _ = app.emit("export-progress", progress);
+            }
+        })?;
         Ok(out)
     })
     .await
+}
+
+/// Stops the export in progress, if any.
+#[tauri::command]
+fn cancel_export(cancel: State<ExportCancel>) {
+    cancel.0.store(true, Ordering::SeqCst);
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -172,6 +199,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .manage(CurrentProject(Mutex::new(None)))
         .manage(PreviewCounter(AtomicU64::new(0)))
+        .manage(ExportCancel(Arc::new(AtomicBool::new(false))))
         .invoke_handler(tauri::generate_handler![
             load_project,
             save_project,
@@ -183,7 +211,8 @@ pub fn run() {
             import_music,
             save_title_image,
             render_preview,
-            export_video
+            export_video,
+            cancel_export
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

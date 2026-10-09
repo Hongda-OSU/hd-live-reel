@@ -7,7 +7,7 @@ pub mod normalize;
 mod probe;
 mod tool;
 
-pub use compose::{compose, Composition, Music, Quality, Segment, Title};
+pub use compose::{compose, compose_with_progress, Composition, Music, Quality, Segment, Title};
 pub use grade::{Grade, Look};
 pub use music::{normalize_music, MUSIC_LUFS};
 pub use normalize::{loudness, normalize, uncropped_frame, Normalized};

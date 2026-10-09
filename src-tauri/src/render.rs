@@ -4,6 +4,7 @@
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::AtomicBool;
 
 use crate::ffmpeg::{self, Composition, Grade, Look, Music, Quality, Segment, Title};
 use crate::project::{Audio, AudioMode, Filter, Preset, Project, TransitionKind};
@@ -89,6 +90,38 @@ pub fn render(project: &Project, quality: Quality, out: &Path) -> Result<(), Str
         std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
     }
     ffmpeg::compose(&composition, quality, out).map_err(|e| e.to_string())
+}
+
+/// The error a cancelled export returns, so callers can tell it apart
+/// from a failure.
+pub const CANCELLED: &str = "cancelled";
+
+/// Renders the full-quality video into `out`, reporting progress from 0
+/// to 1. It is written under a hidden name and renamed when complete, so
+/// the folder never holds a half-written video, even after a cancel.
+pub fn export(
+    project: &Project,
+    out: &Path,
+    cancel: &AtomicBool,
+    on_progress: impl FnMut(f64),
+) -> Result<(), String> {
+    let composition = composition(project)?;
+    let dir = out.parent().ok_or("export path has no folder")?;
+    let name = out.file_name().ok_or("export path has no file name")?;
+    std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    let partial = dir.join(format!(".{}.partial.mp4", name.to_string_lossy()));
+    let result =
+        ffmpeg::compose_with_progress(&composition, Quality::Export, &partial, cancel, on_progress);
+    match result {
+        Ok(()) => std::fs::rename(&partial, out).map_err(|e| e.to_string()),
+        Err(error) => {
+            let _ = std::fs::remove_file(&partial);
+            Err(match error {
+                ffmpeg::Error::Cancelled => CANCELLED.into(),
+                error => error.to_string(),
+            })
+        }
+    }
 }
 
 /// Stores the frontend-rendered title PNG under `<cache>/titles/`, named by
@@ -273,5 +306,95 @@ mod tests {
         assert_eq!(second.file_name().unwrap(), "Turkey Run 2.mp4");
         assert_eq!(unnamed.file_name().unwrap(), "HD Live Reel.mp4");
         assert_eq!(slashed.file_name().unwrap(), "9-28- Lake.mp4");
+    }
+
+    /// A project with one real, normalized 2-second clip under `dir`.
+    fn exportable(dir: &Path) -> Project {
+        let src = dir.join("src.mov");
+        ffmpeg::Tool::Ffmpeg
+            .run([
+                "-y",
+                "-v",
+                "error",
+                "-f",
+                "lavfi",
+                "-i",
+                "testsrc2=size=640x480:rate=30:duration=2",
+                "-f",
+                "lavfi",
+                "-i",
+                "sine=duration=2",
+                "-c:v",
+                "libx264",
+                "-c:a",
+                "pcm_s16le",
+                src.to_str().unwrap(),
+            ])
+            .unwrap();
+        let norm = dir.join("norm.mov");
+        ffmpeg::normalize(&src, &norm, 0.5).unwrap();
+        let mut clip = clip((0.0, 2.0), false);
+        clip.normalized_path = Some(norm);
+        Project {
+            clips: vec![clip],
+            ..Default::default()
+        }
+    }
+
+    /// Files in `dir`, hidden ones included.
+    fn listing(dir: &Path) -> Vec<String> {
+        let mut names: Vec<String> = std::fs::read_dir(dir)
+            .unwrap()
+            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        names.sort();
+        names
+    }
+
+    #[test]
+    fn export_reports_progress_and_leaves_only_the_video() {
+        let dir = std::env::temp_dir().join(format!(
+            "hd-live-reel-export-progress-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let project = exportable(&dir);
+        let out_dir = dir.join("out");
+        let mut progress = Vec::new();
+        export(
+            &project,
+            &out_dir.join("Trip.mp4"),
+            &AtomicBool::new(false),
+            |p| progress.push(p),
+        )
+        .unwrap();
+        let files = listing(&out_dir);
+        std::fs::remove_dir_all(&dir).unwrap();
+
+        assert_eq!(files, ["Trip.mp4"]);
+        assert!(!progress.is_empty());
+        assert!(
+            progress.iter().all(|p| (0.0..=1.0).contains(p)),
+            "{progress:?}"
+        );
+        assert!(*progress.last().unwrap() > 0.95, "{progress:?}");
+    }
+
+    #[test]
+    fn cancelled_export_leaves_nothing_behind() {
+        let dir =
+            std::env::temp_dir().join(format!("hd-live-reel-cancelled-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let project = exportable(&dir);
+        let out_dir = dir.join("out");
+        let cancel = AtomicBool::new(false);
+        let result = export(&project, &out_dir.join("Trip.mp4"), &cancel, |_| {
+            cancel.store(true, std::sync::atomic::Ordering::SeqCst);
+        });
+        let files = listing(&out_dir);
+        std::fs::remove_dir_all(&dir).unwrap();
+
+        assert_eq!(result, Err(CANCELLED.to_string()));
+        assert!(files.is_empty(), "{files:?}");
     }
 }

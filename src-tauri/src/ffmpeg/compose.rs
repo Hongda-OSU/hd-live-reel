@@ -2,6 +2,7 @@
 //! title. Preview and export share this graph; only the tail differs.
 
 use std::path::{Path, PathBuf};
+use std::sync::atomic::AtomicBool;
 
 use super::normalize::{EDGE_FADE, FPS};
 use super::{Error, Grade, Tool};
@@ -111,6 +112,24 @@ pub fn compose(composition: &Composition, quality: Quality, out: &Path) -> Resul
     }
     Tool::Ffmpeg.run(args(composition, quality, out))?;
     Ok(())
+}
+
+/// Like `compose`, reporting the share done (0 to 1) as it goes and
+/// stopping with `Error::Cancelled` once `cancel` is set.
+pub fn compose_with_progress(
+    composition: &Composition,
+    quality: Quality,
+    out: &Path,
+    cancel: &AtomicBool,
+    mut on_progress: impl FnMut(f64),
+) -> Result<(), Error> {
+    if composition.clips.is_empty() {
+        return Err(Error::Parse("nothing to compose".into()));
+    }
+    let length = composition.length();
+    Tool::Ffmpeg.run_with_progress(args(composition, quality, out), cancel, |seconds| {
+        on_progress((seconds / length).clamp(0.0, 1.0))
+    })
 }
 
 fn args(composition: &Composition, quality: Quality, out: &Path) -> Vec<String> {
