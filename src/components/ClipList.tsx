@@ -27,7 +27,7 @@ const styles = stylex.create({
   },
   row: {
     display: "grid",
-    gridTemplateColumns: "16px 30px 1fr auto",
+    gridTemplateColumns: "16px 30px 1fr",
     gap: 8,
     alignItems: "center",
     paddingBlock: "6px",
@@ -204,7 +204,6 @@ function ClipRow({ clip, index, selected, thumb, noOriginalSound, onSelect, disp
           {clipLength(clip).toFixed(1)} 秒{clip.kind === "video" ? " · 视频" : ""}
         </div>
       </span>
-      <span {...stylex.props(styles.sub)}>{clip.muted ? "🔇" : ""}</span>
       {selected && (
         <div onClick={(e) => e.stopPropagation()} {...stylex.props(styles.detail)}>
           <div {...stylex.props(styles.detailRow)}>
