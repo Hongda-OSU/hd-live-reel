@@ -3,7 +3,6 @@ import { ask } from "@tauri-apps/plugin-dialog";
 import * as stylex from "@stylexjs/stylex";
 import {
   addIphoneClips,
-  cropClip,
   cropFrame,
   fileUrl,
   loadProject,
@@ -20,6 +19,7 @@ import { PickerSheet } from "./components/PickerSheet";
 import { Stage, type CropView } from "./components/Stage";
 import {
   clipSpans,
+  clipStart,
   crossfade,
   hasTitleText,
   reducer,
@@ -145,7 +145,7 @@ interface Crop extends Omit<CropView, "applying"> {
   clipId: string;
   /** "rendering" once the new crop is in the project; the overlay stays
    * until the preview that includes it arrives. */
-  phase: "drag" | "cropping" | "rendering";
+  phase: "drag" | "rendering";
 }
 
 function App() {
@@ -169,7 +169,7 @@ function App() {
     loadProject()
       .then((loaded) => {
         dispatch({ type: "load", project: loaded });
-        setImageKey(titleImageKey(loaded.title));
+        setImageKey(titleImageKey(loaded.title, loaded.output.aspect));
         setSelectedId(loaded.clips[0]?.id ?? null);
         if (loaded.clips.length === 0) setPickerOpen(true);
       })
@@ -193,7 +193,8 @@ function App() {
 
   // ---------- title PNG ----------
   const title = project?.title ?? null;
-  const titleKey = title ? titleImageKey(title) : null;
+  const aspect = project?.output.aspect ?? "9:16";
+  const titleKey = title ? titleImageKey(title, aspect) : null;
   useEffect(() => {
     // Only the title's look matters; other title edits find the keys equal.
     if (!title || titleKey === imageKey) return;
@@ -203,7 +204,7 @@ function App() {
     }
     let cancelled = false;
     const timer = setTimeout(async () => {
-      const path = await saveTitleImage(await renderTitlePng(title));
+      const path = await saveTitleImage(await renderTitlePng(title, aspect));
       if (cancelled) return;
       dispatch({ type: "updateTitle", patch: { textImage: path } });
       setImageKey(titleKey);
@@ -212,7 +213,7 @@ function App() {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [title, titleKey, imageKey]);
+  }, [title, aspect, titleKey, imageKey]);
 
   // ---------- preview ----------
   const key = project ? renderKey(project) : null;
@@ -220,6 +221,8 @@ function App() {
   const titleReady = titleKey !== null && titleKey === imageKey;
   const latest = useRef(project);
   latest.current = project;
+  const latestCrop = useRef(crop);
+  latestCrop.current = crop;
   const renderSeq = useRef(0);
   useEffect(() => {
     const current = latest.current;
@@ -235,7 +238,12 @@ function App() {
         const path = await renderPreview(latest.current!);
         if (seq === renderSeq.current) {
           setPreview({ url: fileUrl(path), busy: false, error: null });
-          setCrop((c) => (c?.phase === "rendering" ? null : c));
+          const applied = latestCrop.current;
+          if (applied?.phase === "rendering") {
+            setCrop(null);
+            // Show the clip that was just cropped, not the start.
+            setSeekTo({ time: clipStart(latest.current!, applied.clipId), nonce: Date.now() });
+          }
         }
       } catch (e) {
         if (seq === renderSeq.current) {
@@ -290,29 +298,25 @@ function App() {
   function selectClip(id: string) {
     if (!project) return;
     setSelectedId(id);
-    const index = project.clips.findIndex((c) => c.id === id);
-    const spanStart = clipSpans(project)
-      .slice(0, index)
-      .reduce((sum, span) => sum + span, 0);
-    // Past the dissolve into it, where the clip is fully on screen.
-    const settled = index > 0 ? crossfade(project) / 2 : 0;
-    setSeekTo({ time: spanStart + settled + 0.01, nonce: Date.now() });
+    setSeekTo({ time: clipStart(project, id), nonce: Date.now() });
   }
 
   // ---------- crop ----------
   function startCrop(time: number) {
     if (!project) return;
     const spans = clipSpans(project);
-    let end = 0;
-    const clip =
-      project.clips.find((_, i) => {
-        end += spans[i];
-        return time < end;
-      }) ?? project.clips[project.clips.length - 1];
+    const found = spans.findIndex((_, i) => time < spans.slice(0, i + 1).reduce((a, b) => a + b, 0));
+    const index = found === -1 ? project.clips.length - 1 : found;
+    const clip = project.clips[index];
     if (!clip) return;
+    // The same moment inside the clip's own file: the time into its span,
+    // plus the half dissolve its span starts after, plus its trimmed head.
+    const spanStart = spans.slice(0, index).reduce((a, b) => a + b, 0);
+    const into = time - spanStart + (index > 0 ? crossfade(project) / 2 : 0);
+    const at = Math.min(clip.trimStart + Math.max(0, into), clip.trimEnd);
     setSelectedId(clip.id);
     setCrop({ clipId: clip.id, frame: null, start: clip.cropOffset, offset: clip.cropOffset, phase: "drag" });
-    cropFrame(clip)
+    cropFrame(clip, at)
       .then((path) => setCrop((c) => (c?.clipId === clip.id ? { ...c, frame: fileUrl(path) } : c)))
       .catch((e) => {
         setCrop(null);
@@ -320,27 +324,17 @@ function App() {
       });
   }
 
-  async function endCrop() {
+  function endCrop() {
     const clip = project?.clips.find((c) => c.id === crop?.clipId);
-    // Cache files are named by whole percent.
+    // Whole percent: finer steps are invisible and only churn the preview.
     const offset = crop ? Math.round(crop.offset * 100) / 100 : 0;
     if (!crop || !clip || offset === clip.cropOffset) {
       setCrop(null);
       return;
     }
-    setCrop({ ...crop, offset, phase: "cropping" });
-    try {
-      const cropped = await cropClip(clip, offset);
-      dispatch({
-        type: "updateClip",
-        id: clip.id,
-        patch: { cropOffset: cropped.cropOffset, normalizedPath: cropped.normalizedPath },
-      });
-      setCrop((c) => c && { ...c, phase: "rendering" });
-    } catch (e) {
-      setCrop(null);
-      setPreview((p) => ({ ...p, error: String(e) }));
-    }
+    // The crop is applied while composing, so only the preview re-renders.
+    dispatch({ type: "updateClip", id: clip.id, patch: { cropOffset: offset } });
+    setCrop({ ...crop, offset, phase: "rendering" });
   }
 
   if (loadError) return <p {...stylex.props(styles.fatal)}>无法打开工程：{loadError}</p>;
@@ -405,6 +399,8 @@ function App() {
         </aside>
         <Stage
           src={preview.url}
+          aspect={project.output.aspect}
+          croppable={project.output.fill === "crop"}
           lengths={clipSpans(project)}
           seekTo={seekTo}
           busy={preview.busy}

@@ -2,13 +2,11 @@ import * as stylex from "@stylexjs/stylex";
 import { colors } from "../tokens.stylex";
 import { withStyle } from "../ui";
 
-const FRAME_ASPECT = 9 / 16;
-
 /** How many frame widths and heights an uncropped still covers when it
- * fills the 9:16 frame; one of the two is always 1. */
-export function fillFactor(width: number, height: number) {
+ * fills a frame of `frameAspect` (width / height); one is always 1. */
+export function fillFactor(width: number, height: number, frameAspect: number) {
   const aspect = width / height;
-  return aspect > FRAME_ASPECT ? { x: aspect / FRAME_ASPECT, y: 1 } : { x: 1, y: FRAME_ASPECT / aspect };
+  return aspect > frameAspect ? { x: aspect / frameAspect, y: 1 } : { x: 1, y: frameAspect / aspect };
 }
 
 const styles = stylex.create({
@@ -44,14 +42,16 @@ interface Props {
   src: string;
   /** Natural size of `src` once loaded. */
   size: { width: number; height: number } | null;
+  /** Width / height of the output frame. */
+  frameAspect: number;
   offset: number;
   onSize: (size: { width: number; height: number }) => void;
 }
 
-/** The whole picture behind the 9:16 frame: dimmed where the crop cuts it
+/** The whole picture behind the output frame: dimmed where the crop cuts it
  * away, full strength inside. Sits inside the frame and spills past it. */
-export function CropLayer({ src, size, offset, onSize }: Props) {
-  const factor = size ? fillFactor(size.width, size.height) : { x: 1, y: 1 };
+export function CropLayer({ src, size, frameAspect, offset, onSize }: Props) {
+  const factor = size ? fillFactor(size.width, size.height, frameAspect) : { x: 1, y: 1 };
   const place = {
     width: `${factor.x * 100}%`,
     height: `${factor.y * 100}%`,

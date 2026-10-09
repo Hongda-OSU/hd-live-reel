@@ -17,23 +17,32 @@ const styles = stylex.create({
     backgroundColor: colors.stage,
   },
   // Clips the uncropped still where it spills past the frame.
+  // A size container, so the frame can be sized from the space it has
+  // rather than from its contents.
   wrap: {
     display: "grid",
     placeItems: "center",
     minHeight: 0,
+    minWidth: 0,
     overflow: "hidden",
+    containerType: "size",
   },
-  // Height-bound: a 9:16 frame on a landscape window fills the height.
   frame: {
     position: "relative",
-    height: "100%",
-    maxWidth: "100%",
-    aspectRatio: "9 / 16",
     borderRadius: 10,
     overflow: "hidden",
     backgroundColor: "#000",
     boxShadow: shadows.stage,
     touchAction: "none",
+  },
+  // As large as fits: the full width, unless that would be too tall.
+  portrait: {
+    width: "min(100cqw, 100cqh * 9 / 16)",
+    aspectRatio: "9 / 16",
+  },
+  landscape: {
+    width: "min(100cqw, 100cqh * 16 / 9)",
+    aspectRatio: "16 / 9",
   },
   grab: {
     cursor: "grab",
@@ -148,6 +157,10 @@ const styles = stylex.create({
 interface Props {
   /** Playable URL of the latest preview, or null before the first one. */
   src: string | null;
+  aspect: "9:16" | "16:9";
+  /** False when clips are fitted whole (black bars, blur), so there is
+   * nothing to drag. */
+  croppable: boolean;
   /** Clip lengths in order, for the boundary ticks under the scrubber. */
   lengths: number[];
   /** Seconds to jump to; changes when a clip is picked in the list. */
@@ -176,13 +189,16 @@ export interface CropView {
 
 /** Pointer travel before a press counts as a drag, not a click. */
 const DRAG_THRESHOLD = 4;
+/** Overflow below 1% of the frame is rounding, not something to crop. */
+const CROP_SLACK = 0.01;
 
 const clamp01 = (n: number) => Math.min(1, Math.max(0, n));
 
 const fmt = (t: number) => `${Math.floor(t / 60)}:${(t % 60).toFixed(1).padStart(4, "0")}`;
 
 export function Stage(props: Props) {
-  const { src, lengths, seekTo, busy, error, empty, crop, onAdd } = props;
+  const { src, aspect, croppable, lengths, seekTo, busy, error, empty, crop, onAdd } = props;
+  const frameAspect = aspect === "16:9" ? 16 / 9 : 9 / 16;
   const video = useRef<HTMLVideoElement>(null);
   const frame = useRef<HTMLDivElement>(null);
   const [time, setTime] = useState(0);
@@ -191,6 +207,8 @@ export function Stage(props: Props) {
   const [hovered, setHovered] = useState(false);
   const [still, setStill] = useState<{ src: string; width: number; height: number } | null>(null);
   const stillSize = crop && still?.src === crop.frame ? still : null;
+  const overflow = stillSize && fillFactor(stillSize.width, stillSize.height, frameAspect);
+  const nothingToCrop = overflow !== null && overflow.x < 1 + CROP_SLACK && overflow.y < 1 + CROP_SLACK;
   const press = useRef<{ x: number; y: number; dragging: boolean } | null>(null);
 
   const togglePlay = () => (video.current?.paused ? video.current.play() : video.current?.pause());
@@ -207,18 +225,17 @@ export function Stage(props: Props) {
     const dx = e.clientX - p.x;
     const dy = e.clientY - p.y;
     if (!p.dragging) {
-      if (Math.hypot(dx, dy) < DRAG_THRESHOLD) return;
+      if (!croppable || Math.hypot(dx, dy) < DRAG_THRESHOLD) return;
       p.dragging = true;
       video.current?.pause();
       props.onCropStart(video.current?.currentTime ?? 0);
       return;
     }
-    if (!crop || !stillSize || !frame.current) return;
+    if (!crop || !overflow || nothingToCrop || !frame.current) return;
     // Dragging the picture right shows more of its left side.
     const rect = frame.current.getBoundingClientRect();
-    const factor = fillFactor(stillSize.width, stillSize.height);
-    if (factor.x > 1) props.onCropChange(clamp01(crop.start - dx / (rect.width * (factor.x - 1))));
-    else if (factor.y > 1) props.onCropChange(clamp01(crop.start - dy / (rect.height * (factor.y - 1))));
+    if (overflow.x >= 1 + CROP_SLACK) props.onCropChange(clamp01(crop.start - dx / (rect.width * (overflow.x - 1))));
+    else props.onCropChange(clamp01(crop.start - dy / (rect.height * (overflow.y - 1))));
   }
 
   function onPointerUp() {
@@ -261,7 +278,12 @@ export function Stage(props: Props) {
           onPointerCancel={onPointerUp}
           onPointerEnter={() => setHovered(true)}
           onPointerLeave={() => setHovered(false)}
-          {...stylex.props(styles.frame, src !== null && styles.grab, crop !== null && styles.cropping)}
+          {...stylex.props(
+            styles.frame,
+            aspect === "16:9" ? styles.landscape : styles.portrait,
+            src !== null && croppable && styles.grab,
+            crop !== null && styles.cropping,
+          )}
         >
           {src && (
             <video
@@ -294,12 +316,16 @@ export function Stage(props: Props) {
             <CropLayer
               src={crop.frame}
               size={stillSize}
+              frameAspect={frameAspect}
               offset={crop.offset}
               onSize={(size) => setStill({ src: crop.frame!, ...size })}
             />
           )}
-          {src && hovered && !playing && !crop && !busy && (
+          {src && croppable && hovered && !playing && !crop && !busy && (
             <div {...stylex.props(styles.pill, styles.hint)}>拖动画面可调整裁切位置</div>
+          )}
+          {crop && nothingToCrop && !crop.applying && (
+            <div {...stylex.props(styles.pill)}>这段画面和画幅比例一致，不需要裁切</div>
           )}
           {crop?.applying ? (
             <div {...stylex.props(styles.pill)}>正在应用裁切…</div>

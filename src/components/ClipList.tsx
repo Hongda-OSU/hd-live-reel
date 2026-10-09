@@ -226,7 +226,7 @@ function ClipRow({ clip, index, selected, thumb, noOriginalSound, onSelect, disp
             <p {...stylex.props(ui.note)}>配乐模式下没有原声；切回「原声」或「配乐 + 原声」后生效。</p>
           )}
           <div {...stylex.props(styles.detailRow)}>
-            <span {...stylex.props(ui.note)}>裁切位置：在预览上左右拖动</span>
+            <span {...stylex.props(ui.note)}>裁切位置：在预览上拖动画面</span>
             <Button variant="danger" onClick={() => dispatch({ type: "removeClip", id: clip.id })}>
               移除
             </Button>

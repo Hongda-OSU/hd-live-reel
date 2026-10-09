@@ -2,6 +2,8 @@
 // changes; App persists every new state.
 import type { Audio, Clip, Filter, Output, Project, Title, Transition } from "./api";
 
+type Aspect = Output["aspect"];
+
 export type Action =
   | { type: "load"; project: Project }
   | { type: "rename"; name: string }
@@ -73,6 +75,16 @@ export function clipSpans(project: Project): number[] {
   return project.clips.map((clip, i) => clipLength(clip) - (i > 0 ? overlap / 2 : 0) - (i < last ? overlap / 2 : 0));
 }
 
+/** Where `id` is fully on screen: its start, past the dissolve into it. */
+export function clipStart(project: Project, id: string): number {
+  const index = project.clips.findIndex((c) => c.id === id);
+  const spanStart = clipSpans(project)
+    .slice(0, index)
+    .reduce((sum, span) => sum + span, 0);
+  const settled = index > 0 ? crossfade(project) / 2 : 0;
+  return spanStart + settled + 0.01;
+}
+
 export const totalLength = (project: Project) => clipSpans(project).reduce((sum, span) => sum + span, 0);
 
 /** "IMG_2388" from "202609_a/IMG_2388.HEIC". */
@@ -81,10 +93,10 @@ export function clipLabel(clip: Clip): string {
   return name.replace(/\.[^.]+$/, "");
 }
 
-/** Title fields that change the rendered PNG. */
-export function titleImageKey(title: Title): string {
+/** Title fields, and the frame shape, that change the rendered PNG. */
+export function titleImageKey(title: Title, aspect: Aspect): string {
   const { text, subtitle, font, fontSize, color, position, lineGap, weight, textStyle } = title;
-  return JSON.stringify({ text, subtitle, font, fontSize, color, position, lineGap, weight, textStyle });
+  return JSON.stringify({ text, subtitle, font, fontSize, color, position, lineGap, weight, textStyle, aspect });
 }
 
 /** Shown in place of an empty project name, and used as the file name. */
@@ -107,9 +119,10 @@ export const hasTitleText = (title: Title) => title.text.trim() !== "" || title.
 
 /** Everything that changes the rendered video; previews re-run when it does. */
 export function renderKey(project: Project): string {
-  const { clips, title, filter, audio, transition } = project;
+  const { clips, title, filter, audio, transition, output } = project;
   return JSON.stringify({
-    clips: clips.map((c) => [c.normalizedPath, c.trimStart, c.trimEnd, c.muted]),
+    clips: clips.map((c) => [c.normalizedPath, c.trimStart, c.trimEnd, c.muted, c.cropOffset]),
+    frame: [output.aspect, output.fill],
     title: hasTitleText(title) ? [title.textImage, title.showFor, title.fadeOut] : null,
     filter,
     audio,

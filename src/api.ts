@@ -124,8 +124,8 @@ export const saveProject = (project: Project) => invoke<void>("save_project", { 
 export const listIphoneMedia = () => invoke<MediaItem[]>("list_iphone_media");
 export const iphoneThumbnails = (ids: string[]) => invoke<Thumbnail[]>("iphone_thumbnails", { ids });
 export const addIphoneClips = (ids: string[]) => invoke<Clip[]>("add_iphone_clips", { ids });
-export const cropClip = (clip: Clip, cropOffset: number) => invoke<Clip>("crop_clip", { clip, cropOffset });
-export const cropFrame = (clip: Clip) => invoke<string>("crop_frame", { clip });
+/** The uncropped picture of `clip` at `at` seconds into its normalized file. */
+export const cropFrame = (clip: Clip, at: number) => invoke<string>("crop_frame", { clip, at });
 
 export const importMusic = (path: string) => invoke<string>("import_music", { path });
 

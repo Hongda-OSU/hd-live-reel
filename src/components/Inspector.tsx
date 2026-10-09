@@ -4,6 +4,7 @@ import type { Action } from "../project";
 import { colors } from "../tokens.stylex";
 import { Button, Field, Group, Select, Seg, Slider, Swatches, ui } from "../ui";
 import { ExportGroup } from "./ExportGroup";
+import { FrameGroup } from "./FrameGroup";
 import { SoundGroup } from "./SoundGroup";
 
 /** Fade used by the "淡出" choice, in seconds. */
@@ -259,18 +260,7 @@ export function Inspector({ title, audio, filter, transition, output, dispatch }
         </p>
       </Group>
 
-      <Group title="画幅" badge="即将支持" dimmed>
-        <Field>
-          <Seg
-            options={[
-              ["9:16", "9:16 竖屏"],
-              ["16:9", "16:9 横屏"],
-            ]}
-            value="9:16"
-            disabled
-          />
-        </Field>
-      </Group>
+      <FrameGroup output={output} dispatch={dispatch} />
 
       <ExportGroup output={output} dispatch={dispatch} />
     </aside>
