@@ -32,7 +32,7 @@ Personal macOS desktop app that stitches iPhone Live Photos into one MP4 with or
 
 - Preview and export use the same FFmpeg filter graph built from `project.json`; only resolution and encoder speed differ. Never emulate filters in CSS/WebGL.
 - Treat originals as read-only. Write intermediates only to `~/Library/Caches/<App>/`.
-- Normalize every clip on import to 1080×1920, 30 fps, BT.709 SDR, stereo 48 kHz; later stages assume this.
+- Normalize every clip on import to 30 fps, BT.709 SDR, stereo 48 kHz, keeping its shape; compose fits it to the 9:16 or 16:9 frame.
 - Lay out title text in a frontend Canvas and overlay it as a transparent PNG. Do not use FFmpeg `drawtext`.
 - Rust owns timing (`Composition::length`, `crossfade`); `clipSpans` in `src/project.ts` must match it.
 - Style components with StyleX; colours and sizes come from `src/tokens.stylex.ts`. Only document-level resets go in `src/global.css`.
@@ -47,7 +47,7 @@ Personal macOS desktop app that stitches iPhone Live Photos into one MP4 with or
 ## Gotchas
 
 - Homebrew's default `ffmpeg` has no `zscale`; P3 → BT.709 and HDR → SDR need it.
-- Live Photo MOVs are ~2 s, 1920×1440, variable frame rate, mono and very quiet (−40 to −59 LUFS). Normalize to −30 LUFS with at most +18 dB gain.
+- Live Photo MOVs are ~2 s, 1920×1440, variable frame rate, mono and very quiet (−40 to −59 LUFS).
 - Live Photos are SDR (P3, 8-bit). Only regular iPhone videos are HDR (HLG) and need tone mapping.
 - iPhone "Transfer to Mac or PC" must be "Keep Originals", or files arrive as JPG. "Optimize iPhone Storage" can leave only thumbnails on the phone.
 - "Invalid hook call" after adding a JS dependency is a stale Vite cache: delete `node_modules/.vite`, restart `pnpm tauri dev`.
