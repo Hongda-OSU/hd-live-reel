@@ -47,12 +47,23 @@ where
 }
 
 /// Reopens the last project (or starts a new one) and makes it current.
+/// Clips still on the old portrait-cropped intermediates are re-prepared
+/// first, which takes a few seconds once.
 #[tauri::command]
-fn load_project(
+async fn load_project(
     app: AppHandle,
-    current: State<CurrentProject>,
+    current: State<'_, CurrentProject>,
 ) -> Result<project::Project, String> {
-    let (path, project) = project_store(&app)?.open_last()?;
+    let (path, mut project) = project_store(&app)?.open_last()?;
+    let cache = cache_dir(&app)?;
+    let save_to = path.clone();
+    let project = blocking(move || {
+        if clips::upgrade(&mut project.clips, &cache)? {
+            project::save(&save_to, &project)?;
+        }
+        Ok(project)
+    })
+    .await?;
     *current.0.lock().unwrap() = Some(path);
     Ok(project)
 }
@@ -97,22 +108,12 @@ async fn add_iphone_clips(app: AppHandle, ids: Vec<String>) -> Result<Vec<projec
     .await
 }
 
-/// Re-normalizes `clip` with a new crop offset; returns the updated clip.
+/// The uncropped picture of `clip` at `at` seconds into it, for the crop
+/// picker.
 #[tauri::command]
-async fn crop_clip(
-    app: AppHandle,
-    clip: project::Clip,
-    crop_offset: f64,
-) -> Result<project::Clip, String> {
+async fn crop_frame(app: AppHandle, clip: project::Clip, at: f64) -> Result<PathBuf, String> {
     let cache = cache_dir(&app)?;
-    blocking(move || clips::recrop(&clip, crop_offset, &cache)).await
-}
-
-/// An uncropped still of `clip` for the crop picker.
-#[tauri::command]
-async fn crop_frame(app: AppHandle, clip: project::Clip) -> Result<PathBuf, String> {
-    let cache = cache_dir(&app)?;
-    blocking(move || clips::crop_frame(&clip, &cache)).await
+    blocking(move || clips::crop_frame(&clip, at, &cache)).await
 }
 
 /// Normalizes a chosen music file into the cache; returns the cached path.
@@ -207,7 +208,6 @@ pub fn run() {
             list_iphone_media,
             iphone_thumbnails,
             add_iphone_clips,
-            crop_clip,
             crop_frame,
             import_music,
             save_title_image,

@@ -25,7 +25,7 @@ pub struct Progress {
 }
 
 /// Downloads `ids` from the phone and returns ready-to-edit clips in the
-/// same order. Normalized files are cached per item and crop offset.
+/// same order. Normalized files are cached per item.
 pub fn add_from_iphone(
     ids: &[String],
     cache: &Path,
@@ -63,8 +63,7 @@ pub fn add_from_iphone(
             _ => return Err(format!("{id}: nothing downloaded")),
         };
 
-        let crop_offset = 0.5;
-        let (normalized, duration) = normalize_cached(cache, id, &video_path, crop_offset)?;
+        let (normalized, duration) = normalize_cached(cache, id, &video_path)?;
         let taken_at = ffmpeg::probe(&video_path)
             .ok()
             .and_then(|info| info.creation_time);
@@ -83,7 +82,7 @@ pub fn add_from_iphone(
             trim_start: 0.0,
             trim_end: duration,
             muted: false,
-            crop_offset,
+            crop_offset: 0.5,
             ai_score: None,
             ai_reason: None,
         });
@@ -91,68 +90,79 @@ pub fn add_from_iphone(
     Ok(clips)
 }
 
-/// Re-normalizes `clip` with a new crop offset (snapped to whole percent,
-/// like the cache names) and returns the updated clip. Trims are kept:
-/// the same source gives the same frame count.
-pub fn recrop(clip: &Clip, crop_offset: f64, cache: &Path) -> Result<Clip, String> {
-    let id = clip
-        .asset_id
-        .as_deref()
-        .ok_or_else(|| format!("{}: no source id", clip.id))?;
-    let crop_offset = (crop_offset.clamp(0.0, 1.0) * 100.0).round() / 100.0;
-    let (normalized, _) = normalize_cached(cache, id, &clip.video_path, crop_offset)?;
-    Ok(Clip {
-        normalized_path: Some(normalized),
-        crop_offset,
-        ..clip.clone()
-    })
+/// Clips prepared before intermediates kept their own shape point at
+/// portrait-cropped files. Re-normalizes those from the cached original so
+/// every aspect and fill works; returns whether any clip changed.
+pub fn upgrade(clips: &mut [Clip], cache: &Path) -> Result<bool, String> {
+    let mut changed = false;
+    for clip in clips {
+        let current = clip
+            .normalized_path
+            .as_deref()
+            .is_some_and(|path| path.to_string_lossy().ends_with(NORMALIZED_SUFFIX));
+        let Some(id) = clip.asset_id.clone() else {
+            continue;
+        };
+        if current || !clip.video_path.is_file() {
+            continue;
+        }
+        let (normalized, _) = normalize_cached(cache, &id, &clip.video_path)?;
+        clip.normalized_path = Some(normalized);
+        changed = true;
+    }
+    Ok(changed)
 }
 
-/// A still of `clip` before cropping, for the crop picker; cached as
-/// `<cache>/frames/<device folder>/<name>.jpg`.
-pub fn crop_frame(clip: &Clip, cache: &Path) -> Result<PathBuf, String> {
+/// The uncropped picture of `clip` at `at` seconds into it, for the crop
+/// picker; cached as `<cache>/frames/<device folder>/<name>.<ms>.jpg`.
+pub fn crop_frame(clip: &Clip, at: f64, cache: &Path) -> Result<PathBuf, String> {
     let id = clip
         .asset_id
         .as_deref()
         .ok_or_else(|| format!("{}: no source id", clip.id))?;
-    let path = cache.join("frames").join(id).with_extension("jpg");
+    let source = clip
+        .normalized_path
+        .as_deref()
+        .ok_or_else(|| format!("{id}: not prepared yet"))?;
+    // Stay a frame short of the end, where there is no picture to grab.
+    let at = at.clamp(0.0, (clip.duration - 1.0 / ffmpeg::FPS as f64).max(0.0));
+    let millis = (at * 1000.0).round() as u64;
+    let path = cache
+        .join("frames")
+        .join(id)
+        .with_extension(format!("{millis}.jpg"));
     if !path.is_file() {
         std::fs::create_dir_all(path.parent().unwrap()).map_err(|e| e.to_string())?;
-        ffmpeg::uncropped_frame(&clip.video_path, &path).map_err(|e| format!("{id}: {e}"))?;
+        ffmpeg::still_frame(source, &path, at).map_err(|e| format!("{id}: {e}"))?;
     }
     Ok(path)
 }
 
-/// The normalized file for `id` at `crop_offset` and its duration,
-/// reusing the cached file when there is one.
-fn normalize_cached(
-    cache: &Path,
-    id: &str,
-    video_path: &Path,
-    crop_offset: f64,
-) -> Result<(PathBuf, f64), String> {
-    let normalized = normalized_path(cache, id, crop_offset);
+/// The normalized file for `id` and its duration, reusing the cached file
+/// when there is one.
+fn normalize_cached(cache: &Path, id: &str, video_path: &Path) -> Result<(PathBuf, f64), String> {
+    let normalized = normalized_path(cache, id);
     let duration = if normalized.is_file() {
         ffmpeg::probe(&normalized)
             .map_err(|e| e.to_string())?
             .duration
     } else {
         std::fs::create_dir_all(normalized.parent().unwrap()).map_err(|e| e.to_string())?;
-        ffmpeg::normalize(video_path, &normalized, crop_offset)
+        ffmpeg::normalize(video_path, &normalized)
             .map_err(|e| format!("{id}: {e}"))?
             .duration
     };
     Ok((normalized, duration))
 }
 
-/// `<cache>/clips/<device folder>/<name>.c<offset%>.norm.mov`; the crop is
-/// baked in, so each offset gets its own file.
-fn normalized_path(cache: &Path, id: &str, crop_offset: f64) -> PathBuf {
-    let percent = (crop_offset * 100.0).round() as u32;
-    cache
-        .join("clips")
-        .join(id)
-        .with_extension(format!("c{percent}.norm.mov"))
+/// Ends every current intermediate; older, cropped ones ended in
+/// `.c<offset%>.norm.mov`.
+const NORMALIZED_SUFFIX: &str = ".full.norm.mov";
+
+/// `<cache>/clips/<device folder>/<name>.full.norm.mov`.
+fn normalized_path(cache: &Path, id: &str) -> PathBuf {
+    let path = cache.join("clips").join(id);
+    path.with_extension(&NORMALIZED_SUFFIX[1..])
 }
 
 #[cfg(test)]
@@ -160,18 +170,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn normalized_path_mirrors_device_layout_and_crop() {
+    fn normalized_path_mirrors_device_layout() {
         assert_eq!(
-            normalized_path(Path::new("/c"), "202609_a/IMG_2388.HEIC", 0.5),
-            Path::new("/c/clips/202609_a/IMG_2388.c50.norm.mov")
-        );
-        assert_eq!(
-            normalized_path(Path::new("/c"), "202609_a/IMG_2388.HEIC", 0.25),
-            Path::new("/c/clips/202609_a/IMG_2388.c25.norm.mov")
+            normalized_path(Path::new("/c"), "202609_a/IMG_2388.HEIC"),
+            Path::new("/c/clips/202609_a/IMG_2388.full.norm.mov")
         );
     }
 
-    /// A 640×480 test pattern whose left and right halves differ.
+    /// A 640×480 test pattern under a fake device id.
     fn landscape_clip(cache: &Path) -> Clip {
         let src = cache.join("src.mov");
         crate::ffmpeg::Tool::Ffmpeg
@@ -209,54 +215,40 @@ mod tests {
         }
     }
 
-    /// First frame as raw grey pixels at a tiny size.
-    fn first_frame(path: &Path) -> Vec<u8> {
-        crate::ffmpeg::Tool::Ffmpeg
-            .run([
-                "-v".as_ref(),
-                "error".as_ref(),
-                "-i".as_ref(),
-                path.as_os_str(),
-                "-vf".as_ref(),
-                "scale=27:48,format=gray".as_ref(),
-                "-frames:v".as_ref(),
-                "1".as_ref(),
-                "-f".as_ref(),
-                "rawvideo".as_ref(),
-                "-".as_ref(),
-            ] as [&std::ffi::OsStr; 11])
-            .unwrap()
-            .stdout
-    }
-
     #[test]
-    fn recrop_moves_the_window_and_reuses_files() {
+    fn upgrade_replaces_cropped_intermediates_once() {
         let cache =
-            std::env::temp_dir().join(format!("hd-live-reel-recrop-{}", std::process::id()));
+            std::env::temp_dir().join(format!("hd-live-reel-upgrade-{}", std::process::id()));
         std::fs::create_dir_all(&cache).unwrap();
-        let clip = landscape_clip(&cache);
+        let mut clips = vec![Clip {
+            normalized_path: Some(cache.join("clips/dev/IMG_0001.c50.norm.mov")),
+            ..landscape_clip(&cache)
+        }];
 
-        let left = recrop(&clip, 0.0, &cache).unwrap();
-        let right = recrop(&clip, 0.996, &cache).unwrap();
-        let left_path = left.normalized_path.clone().unwrap();
-        let built = std::fs::metadata(&left_path).unwrap().modified().unwrap();
-        let again = recrop(&clip, 0.001, &cache).unwrap();
-        let reused = std::fs::metadata(&left_path).unwrap().modified().unwrap();
-        let (left_px, right_px) = (
-            first_frame(&left_path),
-            first_frame(right.normalized_path.as_ref().unwrap()),
-        );
-        let frame = crop_frame(&clip, &cache).unwrap();
+        let changed = upgrade(&mut clips, &cache).unwrap();
+        let path = clips[0].normalized_path.clone().unwrap();
+        let size = crate::ffmpeg::probe(&path).unwrap().video.unwrap();
+        let again = upgrade(&mut clips, &cache).unwrap();
+        let frame = crop_frame(&clips[0], 0.3, &cache).unwrap();
         std::fs::remove_dir_all(&cache).unwrap();
 
-        assert_eq!(left.crop_offset, 0.0);
-        assert_eq!(right.crop_offset, 1.0, "snapped to whole percent");
-        assert_eq!((left.trim_start, left.trim_end), (0.2, 0.8), "trims kept");
-        assert!(left_path.ends_with("IMG_0001.c0.norm.mov"));
-        assert_ne!(left_px, right_px, "different part of the picture");
-        assert_eq!(again.normalized_path, left.normalized_path);
-        assert_eq!(built, reused, "cached file not rebuilt");
-        assert!(frame.ends_with("frames/dev/IMG_0001.jpg"));
+        assert!(changed);
+        assert!(
+            path.ends_with("clips/dev/IMG_0001.full.norm.mov"),
+            "{path:?}"
+        );
+        assert_eq!(
+            (size.width, size.height),
+            (640, 480),
+            "own shape, not cropped"
+        );
+        assert_eq!(
+            (clips[0].trim_start, clips[0].trim_end),
+            (0.2, 0.8),
+            "trims kept"
+        );
+        assert!(!again, "already current");
+        assert!(frame.ends_with("frames/dev/IMG_0001.300.jpg"), "{frame:?}");
     }
 
     #[test]

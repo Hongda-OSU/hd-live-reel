@@ -1,5 +1,7 @@
 //! Joins normalized clips into the final video, with an optional opening
-//! title. Preview and export share this graph; only the tail differs.
+//! title. Each clip is fitted to the output frame here (crop, black bars or
+//! a blurred backdrop), so the intermediates keep their own shape. Preview
+//! and export share this graph; the preview just works at half size.
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
@@ -42,6 +44,44 @@ pub enum Quality {
     Export,
 }
 
+/// Shape of the finished video.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Shape {
+    /// 9:16, 1080×1920.
+    Portrait,
+    /// 16:9, 1920×1080.
+    Landscape,
+}
+
+impl Shape {
+    /// Frame size in pixels; the preview renders at half of it.
+    pub fn size(self, quality: Quality) -> (u32, u32) {
+        let (width, height) = match self {
+            Shape::Portrait => (1080, 1920),
+            Shape::Landscape => (1920, 1080),
+        };
+        match quality {
+            Quality::Preview => (width / 2, height / 2),
+            Quality::Export => (width, height),
+        }
+    }
+}
+
+/// How a clip whose shape differs from the frame fills it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Fill {
+    /// Scale up to cover the frame and cut the overflow.
+    Crop,
+    /// Fit the whole picture and pad with black.
+    Black,
+    /// Fit the whole picture over a blurred, enlarged copy of itself.
+    Blur,
+}
+
+/// The blurred backdrop is built at 1/6 size: blurring that is cheap, and
+/// scaling it back up smooths it further. 6 keeps every size even.
+const BLUR_SHRINK: u32 = 6;
+
 /// One normalized clip and how much of it to use.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Segment {
@@ -51,6 +91,8 @@ pub struct Segment {
     /// Start and end, in seconds into the clip; `None` keeps all of it.
     pub trim: Option<(f64, f64)>,
     pub muted: bool,
+    /// 0..1 along the axis that overflows when cropping; 0.5 is centred.
+    pub crop_offset: f64,
 }
 
 impl Segment {
@@ -61,6 +103,7 @@ impl Segment {
             duration,
             trim: None,
             muted: false,
+            crop_offset: 0.5,
         }
     }
 
@@ -77,6 +120,8 @@ impl Segment {
 pub struct Composition {
     /// Normalized clips in playback order.
     pub clips: Vec<Segment>,
+    pub shape: Shape,
+    pub fill: Fill,
     /// Seconds each join cross-dissolves over; 0 is a hard cut.
     pub transition: f64,
     pub grade: Grade,
@@ -167,12 +212,15 @@ fn args(composition: &Composition, quality: Quality, out: &Path) -> Vec<String> 
 
 fn filter_graph(composition: &Composition, quality: Quality) -> String {
     let n = composition.clips.len();
+    let (width, height) = composition.shape.size(quality);
     let mut graph = String::new();
     let labels: Vec<(String, String)> = composition
         .clips
         .iter()
         .enumerate()
-        .map(|(i, segment)| segment_filters(i, segment, &mut graph))
+        .map(|(i, segment)| {
+            segment_filters(i, segment, (width, height), composition.fill, &mut graph)
+        })
         .collect();
     let crossfade = composition.crossfade();
     if crossfade > 0.0 {
@@ -183,16 +231,11 @@ fn filter_graph(composition: &Composition, quality: Quality) -> String {
     }
 
     let mut video = "joined".to_string();
-    // The preview shrinks first so grading touches a quarter of the pixels;
-    // grading is per pixel, so the order does not change the look.
+    // The title PNG is laid out at full size; the preview needs it halved.
     let shrink = match quality {
-        Quality::Preview => ",scale=iw/2:ih/2",
-        Quality::Export => "",
+        Quality::Preview => format!(",scale={width}:{height}"),
+        Quality::Export => String::new(),
     };
-    if quality == Quality::Preview {
-        graph.push_str(&format!("[{video}]scale=iw/2:ih/2[small];"));
-        video = "small".into();
-    }
     // Graded before the title goes on, so the text keeps its colour.
     if let Some(grade) = composition.grade.filter() {
         graph.push_str(&format!("[{video}]{grade}[graded];"));
@@ -269,21 +312,54 @@ fn join_with_crossfades(
     }
 }
 
-/// Adds trim / mute chains for input `i` to `graph` and returns the labels
-/// to feed into concat. Untouched clips go in as they are.
-fn segment_filters(i: usize, segment: &Segment, graph: &mut String) -> (String, String) {
-    if segment.trim.is_none() && !segment.muted {
-        return (format!("{i}:v"), format!("{i}:a"));
+/// Adds the chains for input `i` to `graph` and returns the labels to
+/// join: the picture is trimmed and fitted to `width`×`height`; the sound
+/// is trimmed and muted, or used as it is when neither applies.
+fn segment_filters(
+    i: usize,
+    segment: &Segment,
+    (width, height): (u32, u32),
+    fill: Fill,
+    graph: &mut String,
+) -> (String, String) {
+    // Snap to whole frames so audio and video cut at the same instant.
+    let trim = segment.trim.map(|(start, end)| (snap(start), snap(end)));
+    let cut = trim.map_or(String::new(), |(start, end)| {
+        format!("trim=start={start}:end={end},setpts=PTS-STARTPTS,")
+    });
+    let cover =
+        format!("scale={width}:{height}:force_original_aspect_ratio=increase:flags=lanczos");
+    let contain = format!(
+        "scale={width}:{height}:force_original_aspect_ratio=decrease:force_divisible_by=2:flags=lanczos"
+    );
+    match fill {
+        Fill::Crop => graph.push_str(&format!(
+            "[{i}:v]{cut}{cover},{},setsar=1[s{i}v];",
+            crop_filter(width, height, segment.crop_offset)
+        )),
+        Fill::Black => graph.push_str(&format!(
+            "[{i}:v]{cut}{contain},pad={width}:{height}:(ow-iw)/2:(oh-ih)/2,setsar=1[s{i}v];"
+        )),
+        Fill::Blur => {
+            let (small_w, small_h) = (width / BLUR_SHRINK, height / BLUR_SHRINK);
+            let radius = small_w.min(small_h) / 10;
+            graph.push_str(&format!(
+                "[{i}:v]{cut}split[s{i}f][s{i}b];\
+                 [s{i}b]scale={small_w}:{small_h}:force_original_aspect_ratio=increase,\
+                 crop={small_w}:{small_h},boxblur=luma_radius={radius}:luma_power=2,\
+                 scale={width}:{height},setsar=1[s{i}g];\
+                 [s{i}f]{contain},setsar=1[s{i}c];\
+                 [s{i}g][s{i}c]overlay=(W-w)/2:(H-h)/2[s{i}v];"
+            ))
+        }
     }
-    let mut video = format!("{i}:v");
+    let video = format!("s{i}v");
+
+    if trim.is_none() && !segment.muted {
+        return (video, format!("{i}:a"));
+    }
     let mut audio_chain = Vec::new();
-    if let Some((start, end)) = segment.trim {
-        // Snap to whole frames so audio and video cut at the same instant.
-        let (start, end) = (snap(start), snap(end));
-        graph.push_str(&format!(
-            "[{i}:v]trim=start={start}:end={end},setpts=PTS-STARTPTS[s{i}v];"
-        ));
-        video = format!("s{i}v");
+    if let Some((start, end)) = trim {
         // Trimming cuts off the click-guard fades normalize added; redo them.
         audio_chain.push(format!(
             "atrim=start={start}:end={end},asetpts=PTS-STARTPTS,\
@@ -296,6 +372,18 @@ fn segment_filters(i: usize, segment: &Segment, graph: &mut String) -> (String, 
     }
     graph.push_str(&format!("[{i}:a]{}[s{i}a];", audio_chain.join(",")));
     (video, format!("s{i}a"))
+}
+
+/// After the cover scale only one axis overflows, so one offset serves
+/// both: 0 keeps the left / top, 1 the right / bottom.
+fn crop_filter(width: u32, height: u32, offset: f64) -> String {
+    let offset = offset.clamp(0.0, 1.0);
+    if offset == 0.5 {
+        // FFmpeg's default is centred; keep the plain form.
+        format!("crop={width}:{height}")
+    } else {
+        format!("crop={width}:{height}:x=(in_w-out_w)*{offset}:y=(in_h-out_h)*{offset}")
+    }
 }
 
 fn snap(seconds: f64) -> f64 {
@@ -347,6 +435,8 @@ mod tests {
     fn composition(title: Option<Title>) -> Composition {
         Composition {
             grade: Grade::default(),
+            shape: Shape::Portrait,
+            fill: Fill::Crop,
             transition: 0.0,
             music: None,
             clips: vec![
@@ -355,6 +445,14 @@ mod tests {
             ],
             title,
         }
+    }
+
+    /// The crop-fill chain for input `i` at `width`×`height`, centred.
+    fn fit(i: usize, width: u32, height: u32) -> String {
+        format!(
+            "[{i}:v]scale={width}:{height}:force_original_aspect_ratio=increase:flags=lanczos,\
+             crop={width}:{height},setsar=1[s{i}v];"
+        )
     }
 
     fn title(fade_out: f64) -> Title {
@@ -369,18 +467,21 @@ mod tests {
     fn joins_clips_without_title() {
         assert_eq!(
             filter_graph(&composition(None), Quality::Export),
-            "[0:v][0:a][1:v][1:a]concat=n=2:v=1:a=1[joined][a0];\
-             [joined]null[v];[a0]alimiter=limit=0.89[a]"
+            fit(0, 1080, 1920)
+                + &fit(1, 1080, 1920)
+                + "[s0v][0:a][s1v][1:a]concat=n=2:v=1:a=1[joined][a0];\
+                   [joined]null[v];[a0]alimiter=limit=0.89[a]"
         );
     }
 
     #[test]
     fn overlays_title_after_the_clips() {
-        assert_eq!(
-            filter_graph(&composition(Some(title(0.0))), Quality::Export),
-            "[0:v][0:a][1:v][1:a]concat=n=2:v=1:a=1[joined][a0];\
+        assert!(
+            filter_graph(&composition(Some(title(0.0))), Quality::Export).ends_with(
+                "concat=n=2:v=1:a=1[joined][a0];\
              [2:v]format=rgba[title];[joined][title]overlay=0:0:eof_action=pass[titled];\
              [titled]null[v];[a0]alimiter=limit=0.89[a]"
+            )
         );
         let args = args(
             &composition(Some(title(0.0))),
@@ -404,6 +505,8 @@ mod tests {
     fn trims_and_mutes_only_the_segments_that_ask() {
         let composition = Composition {
             grade: Grade::default(),
+            shape: Shape::Portrait,
+            fill: Fill::Crop,
             transition: 0.0,
             music: None,
             clips: vec![
@@ -412,6 +515,7 @@ mod tests {
                     duration: 2.0,
                     trim: Some((0.51, 1.5)),
                     muted: false,
+                    crop_offset: 0.5,
                 },
                 Segment::whole("b.mov".into(), 2.0),
                 Segment {
@@ -419,31 +523,38 @@ mod tests {
                     duration: 2.0,
                     trim: None,
                     muted: true,
+                    crop_offset: 0.5,
                 },
             ],
             title: None,
         };
         assert_eq!(
             filter_graph(&composition, Quality::Export),
-            "[0:v]trim=start=0.5:end=1.5,setpts=PTS-STARTPTS[s0v];\
+            "[0:v]trim=start=0.5:end=1.5,setpts=PTS-STARTPTS,\
+             scale=1080:1920:force_original_aspect_ratio=increase:flags=lanczos,\
+             crop=1080:1920,setsar=1[s0v];\
              [0:a]atrim=start=0.5:end=1.5,asetpts=PTS-STARTPTS,\
-             afade=t=in:d=0.03,afade=t=out:st=0.9700:d=0.03[s0a];\
-             [2:a]volume=0[s2a];\
-             [s0v][s0a][1:v][1:a][2:v][s2a]concat=n=3:v=1:a=1[joined][a0];\
-             [joined]null[v];[a0]alimiter=limit=0.89[a]"
+             afade=t=in:d=0.03,afade=t=out:st=0.9700:d=0.03[s0a];"
+                .to_string()
+                + &fit(1, 1080, 1920)
+                + &fit(2, 1080, 1920)
+                + "[2:a]volume=0[s2a];\
+                   [s0v][s0a][s1v][1:a][s2v][s2a]concat=n=3:v=1:a=1[joined][a0];\
+                   [joined]null[v];[a0]alimiter=limit=0.89[a]"
         );
     }
 
     #[test]
-    fn preview_shrinks_video_and_title_first() {
+    fn preview_fits_clips_and_title_at_half_size() {
         let graph = filter_graph(&composition(Some(title(0.0))), Quality::Preview);
         assert_eq!(
             graph,
-            "[0:v][0:a][1:v][1:a]concat=n=2:v=1:a=1[joined][a0];\
-             [joined]scale=iw/2:ih/2[small];\
-             [2:v]format=rgba,scale=iw/2:ih/2[title];\
-             [small][title]overlay=0:0:eof_action=pass[titled];\
-             [titled]null[v];[a0]alimiter=limit=0.89[a]"
+            fit(0, 540, 960)
+                + &fit(1, 540, 960)
+                + "[s0v][0:a][s1v][1:a]concat=n=2:v=1:a=1[joined][a0];\
+                   [2:v]format=rgba,scale=540:960[title];\
+                   [joined][title]overlay=0:0:eof_action=pass[titled];\
+                   [titled]null[v];[a0]alimiter=limit=0.89[a]"
         );
         assert!(encoder_args(Quality::Preview).contains(&"ultrafast".to_string()));
     }
@@ -456,7 +567,7 @@ mod tests {
         assert!(filter_graph(&graded, Quality::Export).contains(&format!(
             "[joined]{eq}[graded];[2:v]format=rgba[title];[graded][title]overlay"
         )));
-        assert!(filter_graph(&graded, Quality::Preview).contains(&format!("[small]{eq}[graded];")));
+        assert!(filter_graph(&graded, Quality::Preview).contains(&format!("[joined]{eq}[graded];")));
     }
 
     #[test]
@@ -464,15 +575,61 @@ mod tests {
         let mut three = composition(None);
         three.clips.push(Segment::whole("c.mov".into(), 2.0));
         three.transition = 0.3;
-        assert_eq!(
-            filter_graph(&three, Quality::Export),
-            "[0:v][1:v]xfade=transition=fade:duration=0.3000:offset=1.7000[x1v];\
+        assert!(filter_graph(&three, Quality::Export).ends_with(
+            "[s0v][s1v]xfade=transition=fade:duration=0.3000:offset=1.7000[x1v];\
              [0:a][1:a]acrossfade=d=0.3000[x1a];\
-             [x1v][2:v]xfade=transition=fade:duration=0.3000:offset=3.4000[joined];\
+             [x1v][s2v]xfade=transition=fade:duration=0.3000:offset=3.4000[joined];\
              [x1a][2:a]acrossfade=d=0.3000[a0];\
              [joined]null[v];[a0]alimiter=limit=0.89[a]"
-        );
+        ));
         assert!((three.length() - 5.4).abs() < 1e-9);
+    }
+
+    #[test]
+    fn crop_offset_moves_the_window() {
+        assert_eq!(crop_filter(1080, 1920, 0.5), "crop=1080:1920");
+        assert_eq!(
+            crop_filter(1920, 1080, 0.0),
+            "crop=1920:1080:x=(in_w-out_w)*0:y=(in_h-out_h)*0"
+        );
+        assert!(crop_filter(1080, 1920, 7.0).contains("*1:"), "clamped");
+    }
+
+    #[test]
+    fn landscape_frames_are_wide() {
+        let mut wide = composition(None);
+        wide.shape = Shape::Landscape;
+        assert!(filter_graph(&wide, Quality::Export).starts_with(&fit(0, 1920, 1080)));
+        assert!(filter_graph(&wide, Quality::Preview).starts_with(&fit(0, 960, 540)));
+    }
+
+    #[test]
+    fn black_and_blur_fills_keep_the_whole_picture() {
+        let mut black = composition(None);
+        black.fill = Fill::Black;
+        assert!(filter_graph(&black, Quality::Export).starts_with(
+            "[0:v]scale=1080:1920:force_original_aspect_ratio=decrease:force_divisible_by=2\
+             :flags=lanczos,pad=1080:1920:(ow-iw)/2:(oh-ih)/2,setsar=1[s0v];"
+        ));
+
+        let mut blur = composition(None);
+        blur.fill = Fill::Blur;
+        let graph = filter_graph(&blur, Quality::Export);
+        // The backdrop is blurred at 1/6 size (180×320) and scaled back up.
+        assert!(
+            graph.starts_with("[0:v]split[s0f][s0b];[s0b]scale=180:320"),
+            "{graph}"
+        );
+        assert!(graph.contains("boxblur=luma_radius=18"), "{graph}");
+        assert!(
+            graph.contains("[s0g][s0c]overlay=(W-w)/2:(H-h)/2[s0v];"),
+            "{graph}"
+        );
+        let preview = filter_graph(&blur, Quality::Preview);
+        assert!(
+            preview.contains("boxblur=luma_radius=9"),
+            "same look at half size"
+        );
     }
 
     #[test]
@@ -605,12 +762,14 @@ mod tests {
                 ])
                 .unwrap();
             let norm = dir.join(format!("norm{i}.mov"));
-            normalize(&src, &norm, 0.5).unwrap();
+            normalize(&src, &norm).unwrap();
             clips.push(norm);
         }
         let out = dir.join("out.mp4");
         let composition = Composition {
             grade: Grade::default(),
+            shape: Shape::Portrait,
+            fill: Fill::Crop,
             transition: 0.0,
             music: None,
             clips: vec![
@@ -619,12 +778,14 @@ mod tests {
                     duration: 2.0,
                     trim: Some((0.5, 1.5)),
                     muted: false,
+                    crop_offset: 0.5,
                 },
                 Segment {
                     path: clips[1].clone(),
                     duration: 2.0,
                     trim: None,
                     muted: true,
+                    crop_offset: 0.5,
                 },
             ],
             title: None,
@@ -669,7 +830,7 @@ mod tests {
                 ])
                 .unwrap();
             let norm = dir.join(format!("norm{i}.mov"));
-            normalize(&src, &norm, 0.5).unwrap();
+            normalize(&src, &norm).unwrap();
             clips.push(norm);
         }
         let png = dir.join("title.png");
@@ -697,6 +858,8 @@ mod tests {
             .collect();
         let without = Composition {
             grade: Grade::default(),
+            shape: Shape::Portrait,
+            fill: Fill::Crop,
             transition: 0.0,
             music: None,
             clips: clips.clone(),
@@ -704,6 +867,8 @@ mod tests {
         };
         let with = Composition {
             grade: Grade::default(),
+            shape: Shape::Portrait,
+            fill: Fill::Crop,
             transition: 0.0,
             music: None,
             clips,
@@ -765,7 +930,7 @@ mod tests {
                 ])
                 .unwrap();
             let norm = dir.join(format!("norm{i}.mov"));
-            normalize(&src, &norm, 0.5).unwrap();
+            normalize(&src, &norm).unwrap();
             clips.push(Segment::whole(norm, 2.0));
         }
         // 1.5 s of music under 4 s of video: it has to loop.
@@ -790,6 +955,8 @@ mod tests {
             let composition = Composition {
                 clips: clips.clone(),
                 grade: Grade::default(),
+                shape: Shape::Portrait,
+                fill: Fill::Crop,
                 transition: 0.0,
                 title: None,
                 music: Some(Music {
@@ -854,12 +1021,14 @@ mod tests {
                 ])
                 .unwrap();
             let norm = dir.join(format!("norm{i}.mov"));
-            normalize(&src, &norm, 0.5).unwrap();
+            normalize(&src, &norm).unwrap();
             clips.push(Segment::whole(norm, 2.0));
         }
         clips[1].trim = Some((0.5, 1.5));
         let composition = Composition {
             clips,
+            shape: Shape::Portrait,
+            fill: Fill::Crop,
             transition: 0.3,
             grade: Grade::default(),
             title: None,
@@ -890,6 +1059,57 @@ mod tests {
         assert_eq!(durations.len(), 2, "video and audio");
         for d in durations {
             assert!((d - expected).abs() < 0.05, "{d} vs {expected}");
+        }
+    }
+
+    #[test]
+    fn renders_every_fill_in_both_shapes() {
+        let dir = std::env::temp_dir().join(format!("hd-live-reel-fills-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let src = dir.join("src.mov");
+        Tool::Ffmpeg
+            .run([
+                "-y",
+                "-v",
+                "error",
+                "-f",
+                "lavfi",
+                "-i",
+                "testsrc2=size=640x480:rate=30:duration=1",
+                "-c:v",
+                "libx264",
+                src.to_str().unwrap(),
+            ])
+            .unwrap();
+        let norm = dir.join("norm.mov");
+        let duration = normalize(&src, &norm).unwrap().duration;
+
+        let mut sizes = Vec::new();
+        for shape in [Shape::Portrait, Shape::Landscape] {
+            for fill in [Fill::Crop, Fill::Black, Fill::Blur] {
+                let out = dir.join(format!("{shape:?}-{fill:?}.mp4"));
+                let composition = Composition {
+                    clips: vec![Segment::whole(norm.clone(), duration)],
+                    shape,
+                    fill,
+                    transition: 0.0,
+                    grade: Grade::default(),
+                    title: None,
+                    music: None,
+                };
+                compose(&composition, Quality::Preview, &out).unwrap();
+                let video = crate::ffmpeg::probe(&out).unwrap().video.unwrap();
+                sizes.push((shape, fill, video.width, video.height));
+            }
+        }
+        std::fs::remove_dir_all(&dir).unwrap();
+
+        for (shape, fill, width, height) in sizes {
+            assert_eq!(
+                (width, height),
+                shape.size(Quality::Preview),
+                "{shape:?} {fill:?}"
+            );
         }
     }
 }

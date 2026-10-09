@@ -6,8 +6,8 @@ use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 
-use crate::ffmpeg::{self, Composition, Grade, Look, Music, Quality, Segment, Title};
-use crate::project::{Audio, AudioMode, Filter, Preset, Project, TransitionKind};
+use crate::ffmpeg::{self, Composition, Fill, Grade, Look, Music, Quality, Segment, Shape, Title};
+use crate::project::{self as p, Audio, AudioMode, Filter, Preset, Project, TransitionKind};
 
 /// What FFmpeg should join for `project`.
 pub fn composition(project: &Project) -> Result<Composition, String> {
@@ -29,6 +29,7 @@ pub fn composition(project: &Project) -> Result<Composition, String> {
                 duration: clip.duration,
                 trim: (!whole).then_some((clip.trim_start, clip.trim_end)),
                 muted: clip.muted,
+                crop_offset: clip.crop_offset,
             })
         })
         .collect::<Result<Vec<_>, String>>()?;
@@ -49,6 +50,15 @@ pub fn composition(project: &Project) -> Result<Composition, String> {
     };
     Ok(Composition {
         clips,
+        shape: match project.output.aspect {
+            p::Aspect::Portrait => Shape::Portrait,
+            p::Aspect::Landscape => Shape::Landscape,
+        },
+        fill: match project.output.fill {
+            p::Fill::Crop => Fill::Crop,
+            p::Fill::Black => Fill::Black,
+            p::Fill::Blur => Fill::Blur,
+        },
         transition,
         grade: grade(&project.filter),
         title,
@@ -346,7 +356,7 @@ mod tests {
             ])
             .unwrap();
         let norm = dir.join("norm.mov");
-        ffmpeg::normalize(&src, &norm, 0.5).unwrap();
+        ffmpeg::normalize(&src, &norm).unwrap();
         let mut clip = clip((0.0, 2.0), false);
         clip.normalized_path = Some(norm);
         Project {

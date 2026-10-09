@@ -1,14 +1,15 @@
 //! Converts each source clip once into a uniform intermediate file:
-//! 1080×1920, 30 fps, BT.709 SDR, stereo 48 kHz, loudness-matched.
-//! Preview and export both start from these files.
+//! 30 fps, BT.709 SDR, stereo 48 kHz, loudness-matched, in the source's own
+//! shape. Fitting it to the output frame happens in `compose`, so changing
+//! the aspect, fill or crop never re-encodes a clip.
 
 use std::path::Path;
 
 use super::{probe, Error, MediaInfo, Tool, VideoInfo};
 
-pub const WIDTH: u32 = 1080;
-pub const HEIGHT: u32 = 1920;
 pub const FPS: u32 = 30;
+/// Longest side of an intermediate; larger sources (4K) are scaled down.
+pub const MAX_SIDE: u32 = 1920;
 
 /// Loudness every clip is pulled towards.
 pub const TARGET_LUFS: f64 = -30.0;
@@ -26,12 +27,10 @@ pub struct Normalized {
 }
 
 /// Normalizes `src` into `dst` (a `.mov`; audio is kept as PCM).
-/// `crop_offset` picks which part survives the fill crop: 0 = left/top,
-/// 0.5 = centre, 1 = right/bottom.
-pub fn normalize(src: &Path, dst: &Path, crop_offset: f64) -> Result<Normalized, Error> {
+pub fn normalize(src: &Path, dst: &Path) -> Result<Normalized, Error> {
     let info = probe(src)?;
     let lufs = if info.has_audio { loudness(src)? } else { None };
-    let plan = plan(&info, lufs, crop_offset)?;
+    let plan = plan(&info, lufs)?;
 
     let mut args: Vec<String> = vec!["-y".into(), "-v".into(), "error".into()];
     args.extend(["-i".into(), src.to_string_lossy().into_owned()]);
@@ -122,7 +121,7 @@ struct Plan {
     audio_filter: String,
 }
 
-fn plan(info: &MediaInfo, lufs: Option<f64>, crop_offset: f64) -> Result<Plan, Error> {
+fn plan(info: &MediaInfo, lufs: Option<f64>) -> Result<Plan, Error> {
     let video = info
         .video
         .as_ref()
@@ -132,12 +131,10 @@ fn plan(info: &MediaInfo, lufs: Option<f64>, crop_offset: f64) -> Result<Plan, E
     let duration = frames as f64 / FPS as f64;
     let gain_db = gain_db(lufs);
 
-    let offset = crop_offset.clamp(0.0, 1.0);
     let video_filter = format!(
-        "{},fps={FPS},{},{},setsar=1",
+        "{},fps={FPS},{},setsar=1",
         colour_filter(video),
-        fill_scale(WIDTH, HEIGHT),
-        crop_filter(offset),
+        fit_within(MAX_SIDE),
     );
     let audio_filter = format!(
         "aresample=48000,aformat=channel_layouts=stereo,volume={gain_db:.1}dB,\
@@ -183,47 +180,36 @@ fn colour_filter(video: &VideoInfo) -> String {
     )
 }
 
-/// Scales so the picture covers `width`×`height`; one axis may overflow.
-fn fill_scale(width: u32, height: u32) -> String {
-    format!("scale={width}:{height}:force_original_aspect_ratio=increase:flags=lanczos")
+/// Shrinks the picture until both sides are at most `side`, keeping its
+/// shape and even dimensions; smaller pictures are left as they are.
+fn fit_within(side: u32) -> String {
+    format!(
+        "scale='min({side},iw)':'min({side},ih)':force_original_aspect_ratio=decrease\
+         :force_divisible_by=2:flags=lanczos"
+    )
 }
 
-/// Writes one JPEG frame from the middle of `src`, filled to half the
-/// output size but not cropped, so the crop picker can show what the
-/// crop leaves out.
-pub fn uncropped_frame(src: &Path, dst: &Path) -> Result<(), Error> {
-    let info = probe(src)?;
-    let video = info
-        .video
-        .as_ref()
-        .ok_or_else(|| Error::Parse("no video stream".into()))?;
-    let filter = format!(
-        "{},{},setsar=1",
-        colour_filter(video),
-        fill_scale(WIDTH / 2, HEIGHT / 2)
-    );
-    let mut args: Vec<String> = vec!["-y".into(), "-v".into(), "error".into()];
-    args.extend([
+/// Writes the frame of the normalized intermediate `src` shown at `at`
+/// seconds as a JPEG, whole and at most 960 on a side, so the crop picker
+/// shows what the crop leaves out of exactly that moment.
+pub fn still_frame(src: &Path, dst: &Path, at: f64) -> Result<(), Error> {
+    Tool::Ffmpeg.run([
+        "-y".to_string(),
+        "-v".into(),
+        "error".into(),
         "-ss".into(),
-        format!("{:.3}", info.duration / 2.0),
+        format!("{:.3}", at.max(0.0)),
         "-i".into(),
         src.to_string_lossy().into_owned(),
-    ]);
-    args.extend(["-vf".into(), filter]);
-    args.extend(["-frames:v", "1", "-q:v", "3"].map(String::from));
-    args.push(dst.to_string_lossy().into_owned());
-    Tool::Ffmpeg.run(&args)?;
+        "-vf".into(),
+        format!("{},setsar=1", fit_within(MAX_SIDE / 2)),
+        "-frames:v".into(),
+        "1".into(),
+        "-q:v".into(),
+        "3".into(),
+        dst.to_string_lossy().into_owned(),
+    ])?;
     Ok(())
-}
-
-/// After the fill scale only one axis overflows, so one offset serves both.
-fn crop_filter(offset: f64) -> String {
-    if offset == 0.5 {
-        // FFmpeg's default is centred; keep the plain form.
-        format!("crop={WIDTH}:{HEIGHT}")
-    } else {
-        format!("crop={WIDTH}:{HEIGHT}:x=(in_w-out_w)*{offset}:y=(in_h-out_h)*{offset}")
-    }
 }
 
 #[cfg(test)]
@@ -247,17 +233,17 @@ mod tests {
     }
 
     #[test]
-    fn matches_compose_py_for_a_live_photo() {
-        let plan = plan(&live_photo(), Some(-50.8), 0.5).unwrap();
+    fn live_photo_keeps_its_shape_and_compose_py_sound() {
+        let plan = plan(&live_photo(), Some(-50.8)).unwrap();
         assert_eq!(plan.frames, 59);
         assert_eq!(plan.gain_db, 18.0);
-        // Strings as compose.py builds them for the same input.
+        // Colour as compose.py converts it; no fill or crop yet.
         assert_eq!(
             plan.video_filter,
             "zscale=rin=full:pin=smpte432:tin=bt709:min=bt709:r=limited:p=bt709:t=bt709:m=bt709,\
              format=yuv420p,fps=30,\
-             scale=1080:1920:force_original_aspect_ratio=increase:flags=lanczos,\
-             crop=1080:1920,setsar=1"
+             scale='min(1920,iw)':'min(1920,ih)':force_original_aspect_ratio=decrease\
+             :force_divisible_by=2:flags=lanczos,setsar=1"
         );
         assert_eq!(
             plan.audio_filter,
@@ -284,13 +270,13 @@ mod tests {
 
     #[test]
     fn hdr_video_is_tone_mapped_and_sdr_is_not() {
-        let hdr = plan(&iphone_hdr_video(), None, 0.5).unwrap().video_filter;
+        let hdr = plan(&iphone_hdr_video(), None).unwrap().video_filter;
         assert!(
             hdr.starts_with("zscale=rin=limited:pin=bt2020:tin=arib-std-b67:min=bt2020nc:t=linear"),
             "{hdr}"
         );
         assert!(hdr.contains("tonemap=tonemap=hable"), "{hdr}");
-        let sdr = plan(&live_photo(), None, 0.5).unwrap().video_filter;
+        let sdr = plan(&live_photo(), None).unwrap().video_filter;
         assert!(!sdr.contains("tonemap"), "{sdr}");
     }
 
@@ -298,19 +284,8 @@ mod tests {
     fn unknown_primaries_fall_back_to_bt709() {
         let mut info = live_photo();
         info.video.as_mut().unwrap().primaries = Some("unknown".into());
-        let plan = plan(&info, None, 0.5).unwrap();
+        let plan = plan(&info, None).unwrap();
         assert!(plan.video_filter.contains("pin=bt709"));
-    }
-
-    #[test]
-    fn crop_offset_moves_the_window() {
-        assert_eq!(crop_filter(0.5), "crop=1080:1920");
-        assert_eq!(
-            crop_filter(0.0),
-            "crop=1080:1920:x=(in_w-out_w)*0:y=(in_h-out_h)*0"
-        );
-        let plan = plan(&live_photo(), None, 7.0).unwrap();
-        assert!(plan.video_filter.contains("x=(in_w-out_w)*1:"), "clamped");
     }
 
     #[test]
@@ -381,20 +356,20 @@ mod tests {
 
         let src = generated_clip(&dir, true);
         let dst = dir.join("out.mov");
-        let result = normalize(&src, &dst, 0.5).unwrap();
+        let result = normalize(&src, &dst).unwrap();
         let summary = stream_summary(&dst);
         let out_lufs = loudness(&dst).unwrap().unwrap();
 
         let silent = generated_clip(&dir, false);
         let silent_dst = dir.join("silent-out.mov");
-        let silent_result = normalize(&silent, &silent_dst, 0.0).unwrap();
+        let silent_result = normalize(&silent, &silent_dst).unwrap();
         let silent_summary = stream_summary(&silent_dst);
         std::fs::remove_dir_all(&dir).unwrap();
 
         assert_eq!(result.duration, 2.0);
         assert!(result.gain_db > 0.0);
         assert!(
-            summary.contains("width=1080|height=1920|color_primaries=bt709|avg_frame_rate=30/1"),
+            summary.contains("width=640|height=480|color_primaries=bt709|avg_frame_rate=30/1"),
             "{summary}"
         );
         assert!(
@@ -412,17 +387,17 @@ mod tests {
     }
 
     #[test]
-    fn uncropped_frame_keeps_the_overflow() {
+    fn still_frame_shows_the_whole_picture() {
         let dir = std::env::temp_dir().join(format!("hd-live-reel-frame-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let src = generated_clip(&dir, false);
         let dst = dir.join("frame.jpg");
-        uncropped_frame(&src, &dst).unwrap();
+        still_frame(&src, &dst, 0.5).unwrap();
         let summary = stream_summary(&dst);
         std::fs::remove_dir_all(&dir).unwrap();
 
-        // 640×480 scaled to cover 540×960: the full 4:3 width survives.
-        assert!(summary.contains("width=1280|height=960"), "{summary}");
+        // Already within 960 on a side, so kept as it is.
+        assert!(summary.contains("width=640|height=480"), "{summary}");
     }
 
     /// First-frame signalstats value, e.g. "SATAVG".
@@ -486,7 +461,7 @@ mod tests {
             ])
             .unwrap();
         let dst = dir.join("out.mov");
-        normalize(&src, &dst, 0.5).unwrap();
+        normalize(&src, &dst).unwrap();
         let summary = stream_summary(&dst);
         let saturation = first_frame_stat(&dst, "SATAVG");
         let brightest = first_frame_stat(&dst, "YHIGH");
