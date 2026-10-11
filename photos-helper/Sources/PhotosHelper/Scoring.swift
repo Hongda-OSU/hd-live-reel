@@ -11,6 +11,9 @@ struct ScoreResult: Encodable {
     /// Mean brightness change between neighbouring pixels of a small grey
     /// copy; near 0 for an empty sky, which Vision still scores well.
     let detail: Float?
+    /// Share of the picture covered by its largest face, 0 with none; large
+    /// for selfies and portraits, tiny for people in a landscape.
+    let faceArea: Float?
     /// Vision's image feature print; the Euclidean distance between two is
     /// small for near-identical pictures.
     let featurePrint: [Float]?
@@ -32,20 +35,26 @@ enum Scoring {
     private static func score(path: String) -> ScoreResult {
         let aesthetics = VNCalculateImageAestheticsScoresRequest()
         let print = VNGenerateImageFeaturePrintRequest()
+        let faces = VNDetectFaceRectanglesRequest()
         do {
-            try VNImageRequestHandler(url: URL(fileURLWithPath: path)).perform([aesthetics, print])
+            try VNImageRequestHandler(url: URL(fileURLWithPath: path)).perform([
+                aesthetics, print, faces,
+            ])
             let scores = aesthetics.results?.first
             return ScoreResult(
                 path: path,
                 aesthetics: scores?.overallScore,
                 utility: scores?.isUtility,
                 detail: detail(of: URL(fileURLWithPath: path)),
+                faceArea: Float(
+                    faces.results?.map { $0.boundingBox.width * $0.boundingBox.height }.max() ?? 0),
                 featurePrint: print.results?.first.flatMap(floats),
                 error: nil
             )
         } catch {
             return ScoreResult(
-                path: path, aesthetics: nil, utility: nil, detail: nil, featurePrint: nil,
+                path: path, aesthetics: nil, utility: nil, detail: nil, faceArea: nil,
+                featurePrint: nil,
                 error: "\(error)"
             )
         }
