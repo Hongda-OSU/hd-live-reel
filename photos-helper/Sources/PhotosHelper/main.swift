@@ -20,9 +20,10 @@ struct DeviceInfo: Encodable {
     }
 }
 
-func printJSON<T: Encodable>(_ value: T) {
+func printJSON<T: Encodable>(_ value: T, pretty: Bool = true) {
     let encoder = JSONEncoder()
-    encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+    encoder.outputFormatting =
+        pretty ? [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes] : [.withoutEscapingSlashes]
     encoder.dateEncodingStrategy = .iso8601
     let data = try! encoder.encode(value)
     FileHandle.standardOutput.write(data)
@@ -56,6 +57,7 @@ let usage = """
            photos-helper list
            photos-helper download <id>... --to <dir>
            photos-helper thumbnails <id>... --to <dir> [--size <pixels>]
+           photos-helper score <image file>...
     """
 
 /// Splits "<id>... --to <dir> [--size <n>]" into its parts.
@@ -101,6 +103,11 @@ case "thumbnails":
                 ids: batch.ids, from: session.files, to: batch.dir, maxPixels: batch.size ?? 320
             ))
     }
+case "score":
+    let paths = Array(args.dropFirst())
+    guard !paths.isEmpty else { fail(usage, code: 64) }
+    // Compact: each feature print is hundreds of numbers.
+    printJSON(Scoring.score(paths: paths), pretty: false)
 case "-h", "--help":
     print(usage)
 default:

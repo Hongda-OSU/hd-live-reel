@@ -3,7 +3,8 @@ import PackageDescription
 
 let package = Package(
     name: "photos-helper",
-    platforms: [.macOS(.v14)],
+    // Vision aesthetics scores need macOS 15.
+    platforms: [.macOS(.v15)],
     products: [
         .executable(name: "photos-helper", targets: ["PhotosHelper"])
     ],

@@ -16,14 +16,14 @@ A macOS desktop app that stitches iPhone Live Photos into one short video, keepi
 - App shell: Tauri 2
 - Frontend: React, TypeScript, StyleX
 - Core: Rust (project files, FFmpeg command building)
-- Photo access: Swift command-line helper (ImageCaptureCore)
+- Photo access: Swift command-line helper (ImageCaptureCore, Vision)
 - Video: FFmpeg with libzimg, bundled as a sidecar
 
 ## Getting Started
 
 ### Prerequisites
 
-- macOS on Apple silicon
+- macOS 15 or later on Apple silicon
 - Xcode (for the Swift helper)
 - Node.js 22+ with pnpm (`corepack enable pnpm`)
 - Rust (stable, via [rustup](https://rustup.rs))
