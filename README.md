@@ -6,6 +6,7 @@ A macOS desktop app that stitches iPhone Live Photos into one short video, keepi
 
 - Pick Live Photos and videos straight from a USB-connected iPhone, with thumbnails grouped by day
 - Or drag videos, Live Photo pairs (photo + MOV of the same name) and folders in from Finder
+- Let on-device AI pick a reel's worth from a day or part of one: one shot per burst, no empty skies, selfies only on request, each with a reason and a score
 - Keep each clip's original sound, loudness-matched, with click-free joins, or lay a music track under or over it
 - Reorder, trim (long videos in a large view with a filmstrip), mute and re-crop clips; add a styled opening title and colour filters
 - Preview from the same FFmpeg pipeline as the export, refreshed after every edit

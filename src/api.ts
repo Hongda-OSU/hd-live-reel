@@ -24,6 +24,25 @@ export interface Thumbnail {
   error: string | null;
 }
 
+/** Why AI selection did or didn't pick an item (`select::Reason`). */
+export type AiReason =
+  | { type: "bestInScene" }
+  | { type: "highScore" }
+  | { type: "duplicate"; of: string }
+  | { type: "plain" }
+  | { type: "utility" }
+  | { type: "cut" }
+  | { type: "lowScore" }
+  | { type: "portrait" };
+
+export interface AiVerdict {
+  id: string;
+  picked: boolean;
+  /** Aesthetics after penalties, about -1 to 1. */
+  value: number;
+  reason: AiReason;
+}
+
 // ---------- project.json ----------
 
 export interface Clip {
@@ -135,6 +154,10 @@ export const saveProject = (project: Project) => invoke<void>("save_project", { 
 export const listIphoneMedia = () => invoke<MediaItem[]>("list_iphone_media");
 /** Thumbnails for iPhone item ids and the asset ids of clips. */
 export const thumbnails = (ids: string[]) => invoke<Thumbnail[]>("thumbnails", { ids });
+/** Picks about `targetSeconds` from `items`, with selfies and portraits
+ * only if `people`; a verdict per usable item. */
+export const aiSelect = (items: MediaItem[], targetSeconds: number, people: boolean) =>
+  invoke<AiVerdict[]>("ai_select", { items, targetSeconds, people });
 export const addIphoneClips = (ids: string[]) => invoke<Clip[]>("add_iphone_clips", { ids });
 /** Videos, Live Photo pairs and folders on the Mac, oldest first. */
 export const addFileClips = (paths: string[]) => invoke<AddedFiles>("add_file_clips", { paths });

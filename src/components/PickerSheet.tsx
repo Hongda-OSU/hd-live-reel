@@ -1,12 +1,20 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import * as stylex from "@stylexjs/stylex";
-import type { ClipsProgress, MediaItem } from "../api";
+import { aiSelect, type AiReason, type AiVerdict, type ClipsProgress, type MediaItem } from "../api";
 import { normalizingLabel } from "../project";
+import { groupDays, sceneLabel, type Day } from "../scenes";
 import { colors, layout, shadows } from "../tokens.stylex";
 import type { Library } from "../useLibrary";
 import { Button, Seg, ui, withStyle } from "../ui";
+import { AiPanel, TARGET } from "./AiPanel";
 
 type Filter = "all" | "live" | "video";
+
+/** The "connected" dot breathes, like a Mac's sleep light. */
+const breathe = stylex.keyframes({
+  "0%, 100%": { opacity: 1, boxShadow: `0 0 0 0 ${colors.success}` },
+  "50%": { opacity: 0.45, boxShadow: "0 0 6px 1px transparent" },
+});
 
 const styles = stylex.create({
   scrim: {
@@ -68,9 +76,17 @@ const styles = stylex.create({
     height: 7,
     borderRadius: "50%",
     backgroundColor: colors.success,
+    animationName: {
+      default: breathe,
+      "@media (prefers-reduced-motion: reduce)": "none",
+    },
+    animationDuration: "2.4s",
+    animationTimingFunction: "ease-in-out",
+    animationIterationCount: "infinite",
   },
   dotOff: {
     backgroundColor: colors.muted,
+    animationName: "none",
   },
   bar: {
     display: "flex",
@@ -87,20 +103,8 @@ const styles = stylex.create({
   filter: {
     width: 240,
   },
-  ai: {
-    display: "flex",
-    alignItems: "center",
-    gap: 10,
-    paddingTop: "4px",
-    paddingRight: "6px",
-    paddingBottom: "4px",
-    paddingLeft: "10px",
-    borderRadius: 8,
-    backgroundColor: colors.surface2,
-    opacity: 0.6,
-  },
-  aiRange: {
-    width: 110,
+  aiAnchor: {
+    position: "relative",
   },
   scroll: {
     overflowY: "auto",
@@ -110,14 +114,37 @@ const styles = stylex.create({
   notice: {
     color: colors.muted,
   },
-  day: {
+  // Day and scene titles double as buttons that set AI selection's range.
+  rangeTitle: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 6,
     marginTop: "4px",
     marginRight: "0",
     marginBottom: "8px",
-    marginLeft: "0",
+    marginLeft: "-6px",
+    paddingBlock: "2px",
+    paddingInline: "6px",
+    borderWidth: 0,
+    borderRadius: 6,
+    backgroundColor: {
+      default: "transparent",
+      ":hover": colors.hover,
+    },
     color: colors.muted,
     fontSize: 12,
     fontWeight: 600,
+    cursor: "pointer",
+  },
+  sceneTitle: {
+    fontWeight: 500,
+  },
+  inRange: {
+    backgroundColor: {
+      default: colors.accentSoft,
+      ":hover": colors.accentSoft,
+    },
+    color: colors.accent,
   },
   grid: {
     display: "grid",
@@ -195,6 +222,36 @@ const styles = stylex.create({
       transform: "translateY(-1px) rotate(-45deg)",
     },
   },
+  caption: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    display: "flex",
+    gap: 4,
+    paddingTop: "10px",
+    paddingRight: "6px",
+    paddingBottom: "4px",
+    paddingLeft: "6px",
+    backgroundImage: "linear-gradient(transparent, rgba(0, 0, 0, 0.65))",
+    color: "#fff",
+    fontSize: 10,
+    textAlign: "left",
+  },
+  captionPicked: {
+    fontWeight: 600,
+  },
+  reason: {
+    flex: "1",
+    minWidth: 0,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  points: {
+    fontWeight: 700,
+    fontVariantNumeric: "tabular-nums",
+  },
   footer: {
     display: "flex",
     alignItems: "center",
@@ -239,6 +296,34 @@ function dayLabel(iso?: string | null): string {
 
 const usable = (item: MediaItem) => item.kind !== "photo";
 
+/** AI's value (about -1 to 1, after penalties) as 0 to 100 points. */
+const points = (value: number) => Math.round(Math.min(1, Math.max(0, (value + 1) / 2)) * 100);
+
+/** "IMG_2388" from "202609_a/IMG_2388.HEIC". */
+const shortName = (id: string) => (id.split("/").pop() ?? id).replace(/\.[^.]+$/, "");
+
+/** A tile caption and the longer tooltip for why AI did what it did. */
+function explainReason(reason: AiReason): [string, string] {
+  switch (reason.type) {
+    case "bestInScene":
+      return ["本段最佳", "这一段里评分最高的一张"];
+    case "highScore":
+      return ["评分高", "画面评分高"];
+    case "duplicate":
+      return [`和 ${shortName(reason.of)} 重复`, `和 ${shortName(reason.of)} 几乎一样，留下了评分更高的那张`];
+    case "plain":
+      return ["画面太空", "画面大部分是空的，比如只有天空"];
+    case "utility":
+      return ["像截图或地图", "看起来像截图、地图或文件"];
+    case "cut":
+      return ["名额已满", "不错，但目标时长已经被评分更高的照片填满了"];
+    case "lowScore":
+      return ["评分较低", "画面评分较低，可能模糊、太暗或逆光"];
+    case "portrait":
+      return ["人像", "有人像或自拍；打开「包含人像」才会选"];
+  }
+}
+
 function progressLabel(adding: Props["adding"]): string {
   if (adding === "starting") return "正在准备…";
   if (!adding) return "";
@@ -259,6 +344,14 @@ export function PickerSheet({
 }: Props) {
   const [filter, setFilter] = useState<Filter>("live");
   const [chosen, setChosen] = useState<Set<string>>(new Set());
+  /** Scenes AI selection picks from, by `Scene.key`. */
+  const [range, setRange] = useState<Set<string>>(new Set());
+  const [target, setTarget] = useState(TARGET.initial);
+  /** Off by default: reels are mostly the place, not the people. */
+  const [people, setPeople] = useState(false);
+  const [verdicts, setVerdicts] = useState<Map<string, AiVerdict>>(new Map());
+  const [ai, setAi] = useState<{ busy: boolean; error: string | null }>({ busy: false, error: null });
+  const [aiOpen, setAiOpen] = useState(false);
 
   useEffect(() => {
     if (open && library.state === "idle") onRefresh();
@@ -270,21 +363,51 @@ export function PickerSheet({
   }, [open, library, onLoadThumbs]);
 
   const items = useMemo(() => (library.state === "ready" ? library.items : []), [library]);
-  const days = useMemo(() => {
-    const groups: { label: string; items: MediaItem[] }[] = [];
-    for (const item of items) {
-      const keep =
-        filter === "all" ||
-        (filter === "live" && item.kind === "livePhoto") ||
-        (filter === "video" && item.kind === "video");
-      if (!keep) continue;
-      const label = dayLabel(item.createdAt);
-      const last = groups[groups.length - 1];
-      if (last?.label === label) last.items.push(item);
-      else groups.push({ label, items: [item] });
+  // Grouped before filtering, so scenes (and the range) stay put when the
+  // filter changes.
+  const days = useMemo(() => groupDays(items, (item) => dayLabel(item.createdAt)), [items]);
+  const visible = (item: MediaItem) =>
+    filter === "all" ||
+    (filter === "live" && item.kind === "livePhoto") ||
+    (filter === "video" && item.kind === "video");
+
+  function toggleRange(keys: string[]) {
+    setRange((current) => {
+      const next = new Set(current);
+      const all = keys.every((k) => next.has(k));
+      for (const key of keys) {
+        if (all) next.delete(key);
+        else next.add(key);
+      }
+      return next;
+    });
+  }
+
+  const closeAi = useCallback(() => setAiOpen(false), []);
+
+  async function runAi() {
+    const pool = days
+      .flatMap((day) => day.scenes)
+      .filter((scene) => range.has(scene.key))
+      .flatMap((scene) => scene.items)
+      .filter(usable);
+    setAi({ busy: true, error: null });
+    try {
+      const result = await aiSelect(pool, target, people);
+      const inPool = new Set(pool.map((item) => item.id));
+      setVerdicts(new Map(result.map((v) => [v.id, v])));
+      // AI's picks replace whatever was ticked inside the range.
+      setChosen((current) => {
+        const next = new Set([...current].filter((id) => !inPool.has(id)));
+        for (const v of result) if (v.picked) next.add(v.id);
+        return next;
+      });
+      setAi({ busy: false, error: null });
+      setAiOpen(false);
+    } catch (e) {
+      setAi({ busy: false, error: `AI 选片失败：${e}` });
     }
-    return groups;
-  }, [items, filter]);
+  }
 
   function toggle(id: string) {
     setChosen((current) => {
@@ -309,10 +432,26 @@ export function PickerSheet({
   const [wasOpen, setWasOpen] = useState(open);
   if (open !== wasOpen) {
     setWasOpen(open);
-    if (!open) setChosen(new Set());
+    if (!open) {
+      setChosen(new Set());
+      setRange(new Set());
+      setVerdicts(new Map());
+      setAi({ busy: false, error: null });
+      setAiOpen(false);
+    }
   }
 
-  const busy = adding !== null;
+  // "今天 10:14–11:19 · 36 张" per scene in the range, for the AI panel.
+  const rangeLines = days.flatMap((day) =>
+    day.scenes
+      .filter((scene) => range.has(scene.key))
+      .map((scene) => {
+        const when = day.scenes.length > 1 ? `${day.label} ${sceneLabel(scene)}` : day.label;
+        return `${when} · ${scene.items.filter(usable).length} 张`;
+      }),
+  );
+
+  const busy = adding !== null || ai.busy;
   const count = library.state === "ready" ? library.items.length : null;
 
   return (
@@ -332,13 +471,6 @@ export function PickerSheet({
             {library.state === "loading" && "正在读取 iPhone…"}
             {library.state === "error" && "未连接"}
           </span>
-          <span {...stylex.props(ui.spacer)} />
-          <Button onClick={onPickFiles} disabled={busy}>
-            从 Mac 选择…
-          </Button>
-          <Button onClick={onRefresh} disabled={busy || library.state === "loading"}>
-            刷新
-          </Button>
         </header>
         <div {...stylex.props(styles.bar)}>
           <Seg<Filter>
@@ -352,11 +484,30 @@ export function PickerSheet({
             xstyle={styles.filter}
           />
           <span {...stylex.props(ui.spacer)} />
-          <div title="即将支持" {...stylex.props(styles.ai)}>
-            <span {...stylex.props(ui.value)}>目标 40 秒 ≈ 20 张</span>
-            <input type="range" min={30} max={45} defaultValue={40} disabled {...stylex.props(styles.aiRange)} />
-            <Button disabled>AI 选片</Button>
-          </div>
+          <Button onClick={onPickFiles} disabled={busy}>
+            从 Mac 选择…
+          </Button>
+          {/* The panel hangs from its button. */}
+          <span {...stylex.props(styles.aiAnchor)}>
+            <Button onClick={() => setAiOpen((o) => !o)} disabled={busy}>
+              {ai.busy ? "挑选中…" : "AI 选片…"}
+            </Button>
+            {aiOpen && (
+              <AiPanel
+                range={rangeLines}
+                target={target}
+                people={people}
+                busy={ai.busy}
+                onTarget={setTarget}
+                onPeople={setPeople}
+                onRun={runAi}
+                onClose={closeAi}
+              />
+            )}
+          </span>
+          <Button onClick={onRefresh} disabled={busy || library.state === "loading"}>
+            刷新
+          </Button>
         </div>
         <div {...stylex.props(styles.scroll)}>
           {library.state === "error" && (
@@ -368,37 +519,66 @@ export function PickerSheet({
           )}
           {library.state === "loading" && <p {...stylex.props(styles.notice)}>正在读取 iPhone…</p>}
           {days.map((day) => (
-            <section key={day.label}>
-              <div {...stylex.props(styles.day)}>{day.label}</div>
-              <div {...stylex.props(styles.grid)}>
-                {day.items.map((item) => {
-                  const on = chosen.has(item.id);
-                  const thumb = thumbs[item.id];
-                  return (
-                    <button
-                      key={item.id}
-                      disabled={!usable(item) || busy}
-                      title={usable(item) ? item.name : "静态照片没有动态画面"}
-                      onClick={() => toggle(item.id)}
-                      {...withStyle(
-                        stylex.props(styles.tile, on && styles.tileOn, !usable(item) && styles.tileStill),
-                        thumb ? { backgroundImage: `url("${thumb}")` } : undefined,
-                      )}
-                    >
-                      {item.kind === "livePhoto" && <span {...stylex.props(styles.badge)}>LIVE</span>}
-                      {item.kind === "video" && <span {...stylex.props(styles.badge)}>视频</span>}
-                      {usable(item) && <span {...stylex.props(styles.check, on && styles.checkOn)} />}
-                    </button>
-                  );
-                })}
-              </div>
-            </section>
+            <DaySection
+              key={day.label}
+              day={day}
+              visible={visible}
+              range={range}
+              onRange={toggleRange}
+              renderTile={(item) => {
+                const on = chosen.has(item.id);
+                const thumb = thumbs[item.id];
+                const verdict = verdicts.get(item.id);
+                const [caption, why] = verdict ? explainReason(verdict.reason) : [null, null];
+                return (
+                  <button
+                    key={item.id}
+                    disabled={!usable(item) || busy}
+                    title={
+                      !usable(item)
+                        ? "静态照片没有动态画面"
+                        : verdict
+                          ? `${item.name}：${why}（${points(verdict.value)} 分）`
+                          : item.name
+                    }
+                    onClick={() => toggle(item.id)}
+                    {...withStyle(
+                      stylex.props(styles.tile, on && styles.tileOn, !usable(item) && styles.tileStill),
+                      thumb ? { backgroundImage: `url("${thumb}")` } : undefined,
+                    )}
+                  >
+                    {item.kind === "livePhoto" && <span {...stylex.props(styles.badge)}>LIVE</span>}
+                    {item.kind === "video" && <span {...stylex.props(styles.badge)}>视频</span>}
+                    {usable(item) && <span {...stylex.props(styles.check, on && styles.checkOn)} />}
+                    {verdict && (
+                      <span {...stylex.props(styles.caption, verdict.picked && styles.captionPicked)}>
+                        <span {...stylex.props(styles.reason)}>{verdict.picked ? `AI · ${caption}` : caption}</span>
+                        <span {...stylex.props(styles.points)}>{points(verdict.value)}</span>
+                      </span>
+                    )}
+                  </button>
+                );
+              }}
+            />
           ))}
         </div>
         <footer {...stylex.props(styles.footer)}>
           <span {...stylex.props(styles.summary)}>
-            {error ?? (busy ? progressLabel(adding) : chosen.size ? `已选 ${chosen.size} 项` : "还没有选择")}
+            {error ??
+              ai.error ??
+              (ai.busy
+                ? "AI 正在挑选…（第一次要先从 iPhone 读取缩略图）"
+                : busy
+                  ? progressLabel(adding)
+                  : chosen.size
+                    ? `已选 ${chosen.size} 项`
+                    : "点日期或时段标题选范围，再用「AI 选片…」；也可以直接勾选")}
           </span>
+          {chosen.size > 0 && (
+            <Button variant="ghost" onClick={() => setChosen(new Set())} disabled={busy}>
+              全部取消选择
+            </Button>
+          )}
           <Button onClick={onClose} disabled={busy}>
             取消
           </Button>
@@ -408,5 +588,58 @@ export function PickerSheet({
         </footer>
       </div>
     </>
+  );
+}
+
+/** A day's title and its pictures, split under scene titles when the day
+ * has more than one scene. Either title toggles the range AI picks from. */
+function DaySection({
+  day,
+  visible,
+  range,
+  onRange,
+  renderTile,
+}: {
+  day: Day;
+  visible: (item: MediaItem) => boolean;
+  range: Set<string>;
+  onRange: (keys: string[]) => void;
+  renderTile: (item: MediaItem) => ReactNode;
+}) {
+  const scenes = day.scenes
+    .map((scene) => ({ scene, shown: scene.items.filter(visible) }))
+    .filter(({ shown }) => shown.length > 0);
+  if (scenes.length === 0) return null;
+  const keys = day.scenes.map((scene) => scene.key);
+  const dayOn = keys.every((key) => range.has(key));
+  const split = day.scenes.length > 1;
+  return (
+    <section>
+      <button
+        title="选这一天作为 AI 选片的范围"
+        onClick={() => onRange(keys)}
+        {...stylex.props(styles.rangeTitle, dayOn && styles.inRange)}
+      >
+        {dayOn && "✓ "}
+        {day.label}
+      </button>
+      {scenes.map(({ scene, shown }) => (
+        <div key={scene.key}>
+          {split && (
+            <div>
+              <button
+                title="只选这一段作为 AI 选片的范围"
+                onClick={() => onRange([scene.key])}
+                {...stylex.props(styles.rangeTitle, styles.sceneTitle, range.has(scene.key) && styles.inRange)}
+              >
+                {range.has(scene.key) && "✓ "}
+                {sceneLabel(scene)} · {shown.length} 张
+              </button>
+            </div>
+          )}
+          <div {...stylex.props(styles.grid)}>{shown.map(renderTile)}</div>
+        </div>
+      ))}
+    </section>
   );
 }
