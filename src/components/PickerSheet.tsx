@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import * as stylex from "@stylexjs/stylex";
 import { aiSelect, type AiReason, type AiVerdict, type ClipsProgress, type MediaItem } from "../api";
 import { normalizingLabel } from "../project";
 import { groupDays, sceneLabel, type Day } from "../scenes";
 import { colors, layout, shadows } from "../tokens.stylex";
+import { useDragSelect } from "../hooks/useDragSelect";
 import type { Library } from "../hooks/useLibrary";
 import { Button, Seg, ui, withStyle } from "../ui";
 import { AiPanel, TARGET } from "./AiPanel";
@@ -409,6 +410,21 @@ export function PickerSheet({
     }
   }
 
+  // Selectable tiles in the order shown, for drag and Shift-click ranges.
+  const order = useMemo(
+    () =>
+      days
+        .flatMap((day) => day.scenes)
+        .flatMap((scene) => scene.items)
+        .filter((item) => usable(item) && visible(item))
+        .map((item) => item.id),
+    // `visible` only depends on `filter`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [days, filter],
+  );
+  const scroller = useRef<HTMLDivElement>(null);
+  const dragSelect = useDragSelect({ order, selected: chosen, onChange: setChosen, scroller });
+
   function toggle(id: string) {
     setChosen((current) => {
       const next = new Set(current);
@@ -509,7 +525,7 @@ export function PickerSheet({
             刷新
           </Button>
         </div>
-        <div {...stylex.props(styles.scroll)}>
+        <div ref={scroller} {...stylex.props(styles.scroll)}>
           {library.state === "error" && (
             <div {...stylex.props(styles.notice)}>
               <p>{library.message}</p>
@@ -541,7 +557,10 @@ export function PickerSheet({
                           ? `${item.name}：${why}（${points(verdict.value)} 分）`
                           : item.name
                     }
-                    onClick={() => toggle(item.id)}
+                    data-select-id={usable(item) ? item.id : undefined}
+                    onPointerDown={(e) => !busy && dragSelect.onPointerDown(item.id, e)}
+                    // Pointer clicks are handled above; this is the keyboard.
+                    onClick={(e) => e.detail === 0 && toggle(item.id)}
                     {...withStyle(
                       stylex.props(styles.tile, on && styles.tileOn, !usable(item) && styles.tileStill),
                       thumb ? { backgroundImage: `url("${thumb}")` } : undefined,
@@ -572,7 +591,7 @@ export function PickerSheet({
                   ? progressLabel(adding)
                   : chosen.size
                     ? `已选 ${chosen.size} 项`
-                    : "点日期或时段标题选范围，再用「AI 选片…」；也可以直接勾选")}
+                    : "点日期或时段标题选范围，再用「AI 选片…」；也可以直接勾选，按住拖动可连选")}
           </span>
           {chosen.size > 0 && (
             <Button variant="ghost" onClick={() => setChosen(new Set())} disabled={busy}>
