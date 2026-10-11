@@ -36,7 +36,7 @@ import {
 import { renderTitlePng } from "./title";
 import { colors, layout } from "./tokens.stylex";
 import { Button, Icon } from "./ui";
-import { useLibrary } from "./useLibrary";
+import { useLibrary } from "./hooks/useLibrary";
 
 const frosted = {
   backgroundColor: colors.sidebar,

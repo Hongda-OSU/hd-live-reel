@@ -4,7 +4,7 @@ import { aiSelect, type AiReason, type AiVerdict, type ClipsProgress, type Media
 import { normalizingLabel } from "../project";
 import { groupDays, sceneLabel, type Day } from "../scenes";
 import { colors, layout, shadows } from "../tokens.stylex";
-import type { Library } from "../useLibrary";
+import type { Library } from "../hooks/useLibrary";
 import { Button, Seg, ui, withStyle } from "../ui";
 import { AiPanel, TARGET } from "./AiPanel";
 

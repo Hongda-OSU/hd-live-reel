@@ -1,7 +1,7 @@
 // What is on the connected iPhone, plus thumbnails as they arrive. Kept
 // above the picker so reopening it is instant.
 import { useCallback, useRef, useState } from "react";
-import { fileUrl, listIphoneMedia, thumbnails, type MediaItem } from "./api";
+import { fileUrl, listIphoneMedia, thumbnails, type MediaItem } from "../api";
 
 export type Library =
   { state: "idle" | "loading" } | { state: "error"; message: string } | { state: "ready"; items: MediaItem[] };
