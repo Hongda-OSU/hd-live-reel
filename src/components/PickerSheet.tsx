@@ -358,9 +358,14 @@ export function PickerSheet({
     if (open && library.state === "idle") onRefresh();
   }, [open, library.state, onRefresh]);
 
-  // Newest first, matching the grid, so the top fills in first.
+  // Newest first, matching the grid, so the top fills in first. Stills
+  // can't be used but still need a picture to be recognised; they come
+  // after everything usable.
   useEffect(() => {
-    if (open && library.state === "ready") onLoadThumbs(library.items.filter(usable).map((i) => i.id));
+    if (open && library.state === "ready") {
+      const [usableItems, stills] = [library.items.filter(usable), library.items.filter((i) => !usable(i))];
+      onLoadThumbs([...usableItems, ...stills].map((i) => i.id));
+    }
   }, [open, library, onLoadThumbs]);
 
   const items = useMemo(() => (library.state === "ready" ? library.items : []), [library]);
