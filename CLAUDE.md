@@ -6,7 +6,7 @@ Personal macOS desktop app that stitches iPhone Live Photos into one MP4 with or
 
 - Shell: Tauri 2
 - Frontend: React + TypeScript (Vite), styled with StyleX (`src/`)
-- Core: Rust (`src-tauri/`) — project JSON, FFmpeg command building
+- Core: Rust (`src-tauri/`) — project JSON, FFmpeg command building, AI selection
 - Photos: Swift CLI (`photos-helper/`) — ImageCaptureCore (iPhone over USB), Vision scores; prints JSON for Rust
 - Video: FFmpeg + ffprobe as Tauri sidecars (`binaries/`, fetched by `scripts/fetch-ffmpeg.sh`), built with libzimg
 - Package manager: **pnpm** (not npm, not yarn)
@@ -26,7 +26,7 @@ Personal macOS desktop app that stitches iPhone Live Photos into one MP4 with or
 | Build Swift helper into `binaries/`                                   | `pnpm helper` (also run by `pnpm tauri dev`)                                 |
 | Run Swift helper                                                      | `./binaries/photos-helper-aarch64-apple-darwin list`                         |
 
-- `photos-helper` needs a USB-connected, unlocked iPhone for `list` / `download`.
+- `photos-helper` needs a USB-connected, unlocked iPhone for `list`, `download` and `thumbnails`.
 
 ## Rules
 
@@ -34,11 +34,11 @@ Personal macOS desktop app that stitches iPhone Live Photos into one MP4 with or
 - Treat originals as read-only. Write intermediates only to `~/Library/Caches/<App>/`.
 - Normalize every clip on import to 30 fps, BT.709 SDR, stereo 48 kHz, keeping its shape; compose fits it to the 9:16 or 16:9 frame.
 - Lay out title text in a frontend Canvas and overlay it as a transparent PNG. Do not use FFmpeg `drawtext`.
-- Rust owns timing (`Composition::length`, `crossfade`); `clipSpans` in `src/project.ts` must match it.
+- Rust owns timing (`Composition::length`, `crossfade`, `SCENE_GAP`); `clipSpans` in `src/project.ts` and `src/scenes.ts` must match it.
 - Style components with StyleX; colours and sizes come from `src/tokens.stylex.ts`. Only document-level resets go in `src/global.css`.
-- `src/ui/` holds generic controls that know nothing about Live Photos or projects; app-specific components go in `src/components/`.
+- `src/ui/` holds generic controls that know nothing about Live Photos or projects; app-specific components go in `src/components/`, hooks in `src/hooks/`.
 - Never commit photos or videos; they carry GPS data. Test media stays outside the repo.
-- Ask before adding a dependency or changing the `project.json` schema.
+- Ask before adding a dependency or changing the `project.json` schema. If a change touches more than three files, propose the approach first.
 - Run `pnpm check` before every commit. Do not commit if it fails.
 - After any code change, run the tests for the affected area before saying it's done.
 - Commits: Conventional Commits, atomic, subject and body lines ≤ 72 chars, body explains only why.
@@ -52,13 +52,7 @@ Personal macOS desktop app that stitches iPhone Live Photos into one MP4 with or
 - iPhone "Transfer to Mac or PC" must be "Keep Originals", or files arrive as JPG. "Optimize iPhone Storage" can leave only thumbnails on the phone.
 - "Invalid hook call" after adding a JS dependency is a stale Vite cache: delete `node_modules/.vite`, restart `pnpm tauri dev`.
 
-## Read these only when relevant
-
-Fetch via the Notion MCP only when the task needs them.
+## Read these only when relevant (Notion MCP)
 
 - Product spec (features, data model, risks): https://app.notion.com/p/3f060d3cf9f3812482e2d629faa4b62e
 - Implementation plan and progress: https://app.notion.com/p/3f260d3cf9f381d6a391d52452e1b402
-
-## When unsure
-
-If a change touches more than three files, or the `project.json` schema, propose the approach before writing code.

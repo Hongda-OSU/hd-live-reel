@@ -4,13 +4,11 @@ A macOS desktop app that stitches iPhone Live Photos into one short video, keepi
 
 ## Features
 
-- Pick Live Photos and videos straight from a USB-connected iPhone, with thumbnails grouped by day
-- Or drag videos, Live Photo pairs (photo + MOV of the same name) and folders in from Finder
-- Let on-device AI pick a reel's worth from a day or part of one: one shot per burst, no empty skies, selfies only on request, each with a reason and a score
-- Keep each clip's original sound, loudness-matched, with click-free joins, or lay a music track under or over it
-- Reorder, trim (long videos in a large view with a filmstrip), mute and re-crop clips; add a styled opening title and colour filters
-- Preview from the same FFmpeg pipeline as the export, refreshed after every edit
-- Export a 9:16 or 16:9 H.264/AAC MP4, cropped, letterboxed or over a blurred backdrop, that WeChat can play directly
+- Pick Live Photos and videos from a USB-connected iPhone, or drag them in from Finder
+- Let on-device AI pick a reel's worth from a day or part of one, with a reason and a score for each shot
+- Keep each clip's original sound, loudness-matched, or lay a music track under or over it
+- Trim, reorder, crop and mute clips; add a styled opening title, colour filters and cross-dissolves
+- Preview from the same FFmpeg pipeline as the export; export a 9:16 or 16:9 MP4 that WeChat plays directly
 
 ## Tech Stack
 
@@ -48,10 +46,3 @@ pnpm tauri dev
 ```
 
 Exports are saved to `~/Movies/HD Live Reel/` unless another folder is chosen in the 导出 (Export) section.
-
-Before committing:
-
-```bash
-pnpm format   # format TypeScript, Rust and Swift
-pnpm check    # types, lint and formatting checks
-```
