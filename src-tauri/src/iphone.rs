@@ -8,6 +8,8 @@ use std::process::Command;
 
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
+use crate::select::Score;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum MediaKind {
@@ -130,6 +132,36 @@ pub fn thumbnails(ids: &[String], dir: &Path, max_pixels: u32) -> Result<Vec<Thu
         .collect())
 }
 
+/// Vision scores for each image file, in order; `None` where the helper
+/// could not read one.
+pub fn score(paths: &[PathBuf]) -> Result<Vec<Option<Score>>, Error> {
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct Scored {
+        aesthetics: Option<f32>,
+        utility: Option<bool>,
+        detail: Option<f32>,
+        feature_print: Option<Vec<f32>>,
+    }
+    if paths.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut args: Vec<&OsStr> = vec!["score".as_ref()];
+    args.extend(paths.iter().map(|p| p.as_os_str()));
+    let scored: Vec<Scored> = run(args)?;
+    Ok(scored
+        .into_iter()
+        .map(|s| {
+            Some(Score {
+                aesthetics: s.aesthetics?,
+                utility: s.utility?,
+                detail: s.detail?,
+                feature_print: s.feature_print?,
+            })
+        })
+        .collect())
+}
+
 fn run<T, I, S>(args: I) -> Result<T, Error>
 where
     T: DeserializeOwned,
@@ -209,6 +241,47 @@ mod tests {
             thumbs[0].path.as_deref(),
             Some(dir.join("f/a.HEIC.jpg").as_path())
         );
+    }
+
+    #[test]
+    fn scores_pictures_with_vision() {
+        let dir = std::env::temp_dir().join(format!("hd-live-reel-score-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let (busy, plain) = (dir.join("busy.jpg"), dir.join("plain.jpg"));
+        for (source, path) in [
+            ("testsrc2=size=320x240", &busy),
+            ("color=c=0x4a90d9:size=320x240", &plain),
+        ] {
+            crate::ffmpeg::Tool::Ffmpeg
+                .run([
+                    "-y",
+                    "-v",
+                    "error",
+                    "-f",
+                    "lavfi",
+                    "-i",
+                    source,
+                    "-frames:v",
+                    "1",
+                    path.to_str().unwrap(),
+                ])
+                .unwrap();
+        }
+        let missing = dir.join("missing.jpg");
+        let scores = score(&[busy, plain, missing]).unwrap();
+        std::fs::remove_dir_all(&dir).unwrap();
+
+        let busy = scores[0].as_ref().unwrap();
+        let plain = scores[1].as_ref().unwrap();
+        assert!((-1.0..=1.0).contains(&busy.aesthetics));
+        assert_eq!(busy.feature_print.len(), 768);
+        assert!(busy.detail > crate::select::PLAIN_DETAIL, "{}", busy.detail);
+        assert!(
+            plain.detail < crate::select::PLAIN_DETAIL,
+            "{}",
+            plain.detail
+        );
+        assert_eq!(scores[2], None, "unreadable file");
     }
 
     #[test]

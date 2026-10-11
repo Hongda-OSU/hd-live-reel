@@ -4,6 +4,7 @@ pub mod iphone;
 pub mod music;
 pub mod project;
 pub mod render;
+pub mod select;
 mod sidecar;
 
 use std::path::PathBuf;
@@ -88,6 +89,49 @@ async fn list_iphone_media() -> Result<Vec<iphone::MediaItem>, String> {
 async fn thumbnails(app: AppHandle, ids: Vec<String>) -> Result<Vec<iphone::Thumbnail>, String> {
     let cache = cache_dir(&app)?;
     blocking(move || clips::thumbnails(&ids, &cache)).await
+}
+
+/// Picks about `target_seconds` of `items` (the days or scenes chosen in
+/// the picker) by Vision scores of their thumbnails; returns a verdict per
+/// usable item, in capture order. Plain photos have no motion and are left
+/// out.
+#[tauri::command]
+async fn ai_select(
+    app: AppHandle,
+    items: Vec<iphone::MediaItem>,
+    target_seconds: f64,
+) -> Result<Vec<select::Verdict>, String> {
+    let cache = cache_dir(&app)?;
+    blocking(move || {
+        let items: Vec<_> = items
+            .into_iter()
+            .filter(|item| item.kind != iphone::MediaKind::Photo)
+            .collect();
+        let ids: Vec<String> = items.iter().map(|item| item.id.clone()).collect();
+        let thumbs = clips::thumbnails(&ids, &cache)?;
+        let (items, paths): (Vec<_>, Vec<_>) = items
+            .into_iter()
+            .filter_map(|item| {
+                let path = thumbs.iter().find(|t| t.id == item.id)?.path.clone()?;
+                Some((item, path))
+            })
+            .unzip();
+        let scores = iphone::score(&paths).map_err(|e| e.to_string())?;
+        let candidates: Vec<select::Candidate> = items
+            .into_iter()
+            .zip(scores)
+            .filter_map(|(item, score)| {
+                Some(select::Candidate {
+                    id: item.id,
+                    kind: item.kind,
+                    taken_at: item.created_at,
+                    score: score?,
+                })
+            })
+            .collect();
+        Ok(select::select(&candidates, target_seconds))
+    })
+    .await
 }
 
 /// Downloads and prepares iPhone items as clips. Emits `clips-progress`.
@@ -216,6 +260,7 @@ pub fn run() {
             thumbnails,
             add_iphone_clips,
             add_file_clips,
+            ai_select,
             crop_frame,
             import_music,
             save_title_image,
