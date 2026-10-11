@@ -7,7 +7,7 @@ import { colors, layout, shadows } from "../tokens.stylex";
 import { useDragSelect } from "../hooks/useDragSelect";
 import type { Library } from "../hooks/useLibrary";
 import { Button, Seg, ui, withStyle } from "../ui";
-import { AiPanel, TARGET } from "./AiPanel";
+import { AiPanel, TARGET, type AiSource } from "./AiPanel";
 
 type Filter = "all" | "live" | "video";
 
@@ -353,6 +353,8 @@ export function PickerSheet({
   const [verdicts, setVerdicts] = useState<Map<string, AiVerdict>>(new Map());
   const [ai, setAi] = useState<{ busy: boolean; error: string | null }>({ busy: false, error: null });
   const [aiOpen, setAiOpen] = useState(false);
+  /** Pick from the chosen days and scenes, or narrow down the ticked photos. */
+  const [aiSource, setAiSource] = useState<AiSource>("range");
 
   useEffect(() => {
     if (open && library.state === "idle") onRefresh();
@@ -392,11 +394,14 @@ export function PickerSheet({
   const closeAi = useCallback(() => setAiOpen(false), []);
 
   async function runAi() {
-    const pool = days
-      .flatMap((day) => day.scenes)
-      .filter((scene) => range.has(scene.key))
-      .flatMap((scene) => scene.items)
-      .filter(usable);
+    const pool =
+      aiSource === "chosen"
+        ? items.filter((item) => chosen.has(item.id) && usable(item))
+        : days
+            .flatMap((day) => day.scenes)
+            .filter((scene) => range.has(scene.key))
+            .flatMap((scene) => scene.items)
+            .filter(usable);
     setAi({ busy: true, error: null });
     try {
       const result = await aiSelect(pool, target, people);
@@ -510,12 +515,22 @@ export function PickerSheet({
           </Button>
           {/* The panel hangs from its button. */}
           <span {...stylex.props(styles.aiAnchor)}>
-            <Button onClick={() => setAiOpen((o) => !o)} disabled={busy}>
+            <Button
+              onClick={() => {
+                // Ticked photos and no range: narrow down the ticked ones.
+                if (!aiOpen) setAiSource(range.size === 0 && chosen.size > 0 ? "chosen" : "range");
+                setAiOpen((o) => !o);
+              }}
+              disabled={busy}
+            >
               {ai.busy ? "挑选中…" : "AI 选片…"}
             </Button>
             {aiOpen && (
               <AiPanel
                 range={rangeLines}
+                source={aiSource}
+                chosenCount={chosen.size}
+                onSource={setAiSource}
                 target={target}
                 people={people}
                 busy={ai.busy}
@@ -596,7 +611,7 @@ export function PickerSheet({
                   ? progressLabel(adding)
                   : chosen.size
                     ? `已选 ${chosen.size} 项`
-                    : "点日期或时段标题选范围，再用「AI 选片…」；也可以直接勾选，按住拖动可连选")}
+                    : "勾选照片（按住拖动可连选），或点日期、时段标题选范围，再用「AI 选片…」挑出精选")}
           </span>
           {chosen.size > 0 && (
             <Button variant="ghost" onClick={() => setChosen(new Set())} disabled={busy}>

@@ -1,7 +1,10 @@
 import { useEffect } from "react";
 import * as stylex from "@stylexjs/stylex";
 import { colors, shadows } from "../tokens.stylex";
-import { Button, Field, Switch, ui } from "../ui";
+import { Button, Field, Seg, Switch, ui } from "../ui";
+
+/** Where AI picks from: the chosen days and scenes, or the ticked photos. */
+export type AiSource = "range" | "chosen";
 
 /** Default and range of the AI target, in seconds; Live Photos run ~2 s. */
 export const TARGET = { initial: 40, min: 30, max: 45 };
@@ -51,6 +54,10 @@ const styles = stylex.create({
 interface Props {
   /** "今天 10:14–11:19 · 36 张" per scene in the range. */
   range: string[];
+  source: AiSource;
+  /** Photos ticked in the grid. */
+  chosenCount: number;
+  onSource: (source: AiSource) => void;
   target: number;
   people: boolean;
   busy: boolean;
@@ -63,7 +70,20 @@ interface Props {
 /** Settings for AI selection, popped up under its button. It stays open
  * while the range is set in the grid, by clicking day and scene titles;
  * Esc, 取消 or the button close it. */
-export function AiPanel({ range, target, people, busy, onTarget, onPeople, onRun, onClose }: Props) {
+export function AiPanel({
+  range,
+  source,
+  chosenCount,
+  onSource,
+  target,
+  people,
+  busy,
+  onTarget,
+  onPeople,
+  onRun,
+  onClose,
+}: Props) {
+  const ready = source === "chosen" ? chosenCount > 0 : range.length > 0;
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -78,7 +98,21 @@ export function AiPanel({ range, target, people, busy, onTarget, onPeople, onRun
       {/* One block, so the fields' own spacing applies evenly. */}
       <div>
         <Field label="范围">
-          {range.length ? (
+          <Seg<AiSource>
+            options={[
+              ["range", "日期 / 时段"],
+              ["chosen", `已勾选的 ${chosenCount} 张`],
+            ]}
+            value={source}
+            onChange={onSource}
+          />
+          {source === "chosen" ? (
+            <p {...stylex.props(ui.note)}>
+              {chosenCount
+                ? "只在这些照片里挑；没被选中的会取消勾选。"
+                : "还没有勾选照片：先在下面勾选或拖动连选一批。"}
+            </p>
+          ) : range.length ? (
             <p {...stylex.props(styles.range)}>
               {range.map((line) => (
                 <span key={line}>
@@ -118,7 +152,7 @@ export function AiPanel({ range, target, people, busy, onTarget, onPeople, onRun
         <Button onClick={onClose} disabled={busy}>
           取消
         </Button>
-        <Button variant="primary" onClick={onRun} disabled={busy || range.length === 0}>
+        <Button variant="primary" onClick={onRun} disabled={busy || !ready}>
           {busy ? "挑选中…" : "开始挑选"}
         </Button>
       </div>
