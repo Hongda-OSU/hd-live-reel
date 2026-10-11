@@ -75,9 +75,58 @@ impl fmt::Display for Error {
 
 impl std::error::Error for Error {}
 
-/// Everything on the phone, newest first.
+/// Everything on the phone, newest first, each edited photo once.
 pub fn list() -> Result<Vec<MediaItem>, Error> {
-    run(["list"])
+    run(["list"]).map(one_per_edit)
+}
+
+/// The phone keeps an edited photo twice: the original `IMG_2687.HEIC`
+/// and the rendered edit `IMG_E2687.HEIC`, at the same time. Photos shows
+/// one, so keep one: the edit, unless editing turned Live off and only the
+/// original still moves.
+fn one_per_edit(items: Vec<MediaItem>) -> Vec<MediaItem> {
+    // "<folder>/IMG_2687" for both "IMG_2687.HEIC" and "IMG_E2687.HEIC".
+    fn key(item: &MediaItem) -> Option<(String, bool)> {
+        let (folder, name) = item.id.rsplit_once('/')?;
+        let stem = name.rsplit_once('.').map_or(name, |(stem, _)| stem);
+        let edited = stem
+            .strip_prefix("IMG_E")
+            .filter(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()));
+        Some(match edited {
+            Some(number) => (format!("{folder}/IMG_{number}"), true),
+            None => (format!("{folder}/{stem}"), false),
+        })
+    }
+    let edits: std::collections::HashMap<String, MediaKind> = items
+        .iter()
+        .filter_map(|item| match key(item)? {
+            (key, true) => Some((key, item.kind)),
+            _ => None,
+        })
+        .collect();
+    let originals: std::collections::HashMap<String, MediaKind> = items
+        .iter()
+        .filter_map(|item| match key(item)? {
+            (key, false) if edits.contains_key(&key) => Some((key, item.kind)),
+            _ => None,
+        })
+        .collect();
+    // Only the original moves when the edit is a still and it isn't.
+    let keep_original = |edit: MediaKind, original: MediaKind| {
+        edit == MediaKind::Photo && original != MediaKind::Photo
+    };
+    items
+        .into_iter()
+        .filter(|item| match key(item) {
+            Some((key, true)) => originals
+                .get(&key)
+                .is_none_or(|&original| !keep_original(item.kind, original)),
+            Some((key, false)) => edits
+                .get(&key)
+                .is_none_or(|&edit| keep_original(edit, item.kind)),
+            None => true,
+        })
+        .collect()
 }
 
 /// Copies items (and Live Photo videos) to `<dir>/<device folder>/<name>`.
@@ -198,6 +247,45 @@ mod tests {
         assert_eq!(items[0].video.as_ref().unwrap().name, "IMG_2589.MOV");
         assert_eq!(items[1].created_at, None);
         assert_eq!(items[1].video, None);
+    }
+
+    fn item(id: &str, kind: MediaKind) -> MediaItem {
+        MediaItem {
+            id: id.into(),
+            kind,
+            name: id.rsplit_once('/').unwrap().1.into(),
+            size: 1,
+            created_at: None,
+            video: None,
+        }
+    }
+
+    #[test]
+    fn shows_an_edited_photo_once() {
+        use MediaKind::*;
+        let items = vec![
+            item("f/IMG_E2687.HEIC", LivePhoto),
+            item("f/IMG_2687.HEIC", LivePhoto),
+            // Live turned off while editing: only the original moves.
+            item("f/IMG_E2697.HEIC", Photo),
+            item("f/IMG_2697.HEIC", LivePhoto),
+            item("f/IMG_E1300.MOV", Video),
+            item("f/IMG_1300.MOV", Video),
+            // Same number in another folder is another picture.
+            item("g/IMG_2687.HEIC", LivePhoto),
+            item("f/IMG_2700.HEIC", LivePhoto),
+        ];
+        let ids: Vec<String> = one_per_edit(items).into_iter().map(|i| i.id).collect();
+        assert_eq!(
+            ids,
+            [
+                "f/IMG_E2687.HEIC",
+                "f/IMG_2697.HEIC",
+                "f/IMG_E1300.MOV",
+                "g/IMG_2687.HEIC",
+                "f/IMG_2700.HEIC"
+            ]
+        );
     }
 
     #[test]
