@@ -94,12 +94,13 @@ async fn thumbnails(app: AppHandle, ids: Vec<String>) -> Result<Vec<iphone::Thum
 /// Picks about `target_seconds` of `items` (the days or scenes chosen in
 /// the picker) by Vision scores of their thumbnails; returns a verdict per
 /// usable item, in capture order. Plain photos have no motion and are left
-/// out.
+/// out; selfies and portraits only count with `people`.
 #[tauri::command]
 async fn ai_select(
     app: AppHandle,
     items: Vec<iphone::MediaItem>,
     target_seconds: f64,
+    people: bool,
 ) -> Result<Vec<select::Verdict>, String> {
     let cache = cache_dir(&app)?;
     blocking(move || {
@@ -129,7 +130,7 @@ async fn ai_select(
                 })
             })
             .collect();
-        Ok(select::select(&candidates, target_seconds))
+        Ok(select::select(&candidates, target_seconds, people))
     })
     .await
 }

@@ -4,7 +4,8 @@
 //!   HD_LIVE_REEL_AI_SAMPLE=<sample.json> \
 //!   cargo test --manifest-path src-tauri/Cargo.toml --test ai_select -- --ignored
 //!
-//! The sample holds `targetSeconds`, the hand-picked ids as `picks`, and
+//! The sample holds `targetSeconds`, `people` (the picker's portrait
+//! switch), the hand-picked ids as `picks`, and
 //! every item of the scene as `candidates` (`select::Candidate`, with the
 //! `photos-helper score` output of its thumbnail as `score`).
 
@@ -15,6 +16,9 @@ use serde::Deserialize;
 #[serde(rename_all = "camelCase")]
 struct Sample {
     target_seconds: f64,
+    /// Whether selfies and portraits may be picked, as the picker's switch.
+    #[serde(default)]
+    people: bool,
     picks: Vec<String>,
     candidates: Vec<Candidate>,
 }
@@ -28,7 +32,7 @@ fn agrees_with_a_hand_picked_reel() {
     let path = std::env::var("HD_LIVE_REEL_AI_SAMPLE").expect("set HD_LIVE_REEL_AI_SAMPLE");
     let sample: Sample = serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap();
 
-    let verdicts = select(&sample.candidates, sample.target_seconds);
+    let verdicts = select(&sample.candidates, sample.target_seconds, sample.people);
     let chosen: Vec<&str> = verdicts
         .iter()
         .filter(|v| v.picked)

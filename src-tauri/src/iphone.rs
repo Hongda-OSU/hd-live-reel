@@ -190,6 +190,7 @@ pub fn score(paths: &[PathBuf]) -> Result<Vec<Option<Score>>, Error> {
         aesthetics: Option<f32>,
         utility: Option<bool>,
         detail: Option<f32>,
+        face_area: Option<f32>,
         feature_print: Option<Vec<f32>>,
     }
     if paths.is_empty() {
@@ -205,6 +206,7 @@ pub fn score(paths: &[PathBuf]) -> Result<Vec<Option<Score>>, Error> {
                 aesthetics: s.aesthetics?,
                 utility: s.utility?,
                 detail: s.detail?,
+                face_area: s.face_area?,
                 feature_print: s.feature_print?,
             })
         })
@@ -369,6 +371,7 @@ mod tests {
             "{}",
             plain.detail
         );
+        assert_eq!(busy.face_area, 0.0, "no one in a test pattern");
         assert_eq!(scores[2], None, "unreadable file");
     }
 

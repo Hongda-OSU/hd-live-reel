@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use crate::iphone::MediaKind;
 
 /// A new scene starts after this long without a picture, in seconds. The
-/// picker must split days into scenes the same way.
+/// picker splits days into scenes the same way (`src/scenes.ts`).
 pub const SCENE_GAP: i64 = 30 * 60;
 /// Feature-print distance under which two pictures count as the same shot.
 /// Measured on real bursts: 0.30 near-identical, 0.45 the same view
@@ -18,6 +18,9 @@ pub const DUPLICATE_DISTANCE: f32 = 0.35;
 /// Below this `detail` a picture is mostly empty sky or wall; Vision still
 /// scores those well. An empty sky measured 1.3, hand-picked shots 11+.
 pub const PLAIN_DETAIL: f32 = 4.0;
+/// Share of the frame a face must cover to make a selfie or portrait.
+/// Measured: selfies 0.047 to 0.098, hikers in a landscape 0.005.
+pub const PORTRAIT_FACE: f32 = 0.02;
 const UTILITY_PENALTY: f64 = 0.3;
 const PLAIN_PENALTY: f64 = 0.5;
 /// Nothing scoring below this is picked, even to fill the target.
@@ -36,6 +39,9 @@ pub struct Score {
     /// Screenshots, receipts, maps and the like.
     pub utility: bool,
     pub detail: f32,
+    /// Share of the picture covered by its largest face.
+    #[serde(default)]
+    pub face_area: f32,
     pub feature_print: Vec<f32>,
 }
 
@@ -66,6 +72,10 @@ pub enum Reason {
     Utility,
     /// Fine, but the target was filled by better ones.
     Cut,
+    /// Scored below `MIN_VALUE`.
+    LowScore,
+    /// A selfie or portrait, left out unless people are wanted.
+    Portrait,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -79,11 +89,12 @@ pub struct Verdict {
 }
 
 /// Picks about `target_seconds` of items, returning a verdict for every
-/// candidate in capture order.
+/// candidate in capture order. Selfies and portraits are only picked with
+/// `people`.
 ///
 /// Each scene gets picks in proportion to how many pictures were taken
 /// there, best first, skipping near-duplicates of better pictures.
-pub fn select(candidates: &[Candidate], target_seconds: f64) -> Vec<Verdict> {
+pub fn select(candidates: &[Candidate], target_seconds: f64, people: bool) -> Vec<Verdict> {
     let mut order: Vec<usize> = (0..candidates.len()).collect();
     let time = |i: usize| candidates[i].taken_at.as_deref().and_then(epoch_seconds);
     // Undated ones last, as a scene of their own.
@@ -113,6 +124,10 @@ pub fn select(candidates: &[Candidate], target_seconds: f64) -> Vec<Verdict> {
     let mut reasons: Vec<Option<Reason>> = vec![None; candidates.len()];
     let mut representatives: Vec<usize> = Vec::new();
     for &i in &by_value {
+        if !people && candidates[i].score.face_area >= PORTRAIT_FACE {
+            reasons[i] = Some(Reason::Portrait);
+            continue;
+        }
         let print = &candidates[i].score.feature_print;
         match representatives
             .iter()
@@ -176,6 +191,8 @@ pub fn select(candidates: &[Candidate], target_seconds: f64) -> Vec<Verdict> {
                     Reason::Plain
                 } else if score.utility {
                     Reason::Utility
+                } else if value[i] < MIN_VALUE {
+                    Reason::LowScore
                 } else {
                     Reason::Cut
                 });
@@ -247,6 +264,7 @@ mod tests {
                 aesthetics,
                 utility: false,
                 detail: 15.0,
+                face_area: 0.0,
                 feature_print: vec![angle.cos(), angle.sin()],
             },
         }
@@ -277,6 +295,7 @@ mod tests {
                 photo("b", 2, 0.4, 0.9),
             ],
             4.0,
+            true,
         );
         assert_eq!(picked(&verdicts), ["a2", "b"]);
         assert_eq!(verdicts[0].reason, Reason::Duplicate { of: "a2".into() });
@@ -298,7 +317,7 @@ mod tests {
             .collect();
         candidates.push(photo("p0", 300, 0.9, 4.0));
         candidates.push(photo("p1", 305, 0.8, 5.0));
-        let verdicts = select(&candidates, 8.0);
+        let verdicts = select(&candidates, 8.0, true);
 
         // Four picks: the afternoon's best, then the morning's, then by share.
         let chosen = picked(&verdicts);
@@ -319,7 +338,7 @@ mod tests {
         let mut map = photo("map", 1, 0.6, 1.0);
         map.score.utility = true;
         let lake = photo("lake", 2, 0.45, 2.0);
-        let verdicts = select(&[sky, map, lake], 2.0);
+        let verdicts = select(&[sky, map, lake], 2.0, true);
 
         assert_eq!(picked(&verdicts), ["lake"]);
         assert_eq!(verdicts[0].reason, Reason::Plain);
@@ -328,13 +347,30 @@ mod tests {
     }
 
     #[test]
+    fn portraits_only_when_people_are_wanted() {
+        let mut selfie = photo("selfie", 0, 0.8, 0.0);
+        selfie.score.face_area = 0.07;
+        let mut hikers = photo("hikers", 1, 0.5, 1.0);
+        hikers.score.face_area = 0.005;
+        let lake = photo("lake", 2, 0.4, 2.0);
+        let candidates = [selfie, hikers, lake];
+
+        let without = select(&candidates, 4.0, false);
+        assert_eq!(picked(&without), ["hikers", "lake"]);
+        assert_eq!(without[0].reason, Reason::Portrait);
+        let with = select(&candidates, 4.0, true);
+        assert_eq!(picked(&with), ["selfie", "hikers"]);
+    }
+
+    #[test]
     fn never_pads_with_poor_pictures() {
         let verdicts = select(
             &[photo("good", 0, 0.5, 0.0), photo("poor", 1, 0.1, 1.0)],
             60.0,
+            true,
         );
         assert_eq!(picked(&verdicts), ["good"]);
-        assert_eq!(verdicts[1].reason, Reason::Cut);
+        assert_eq!(verdicts[1].reason, Reason::LowScore);
     }
 
     #[test]
@@ -344,6 +380,7 @@ mod tests {
         let verdicts = select(
             &[video, photo("a", 1, 0.5, 1.0), photo("b", 2, 0.4, 2.0)],
             6.0,
+            true,
         );
         assert_eq!(picked(&verdicts), ["v", "a"]);
     }
