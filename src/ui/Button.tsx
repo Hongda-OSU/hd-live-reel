@@ -6,6 +6,8 @@ const styles = stylex.create({
   base: {
     display: "inline-flex",
     alignItems: "center",
+    // Centred when stretched, say across a panel.
+    justifyContent: "center",
     gap: 6,
     height: 28,
     paddingInline: 12,
