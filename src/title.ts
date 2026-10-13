@@ -1,6 +1,7 @@
-// Lays out the opening title on a transparent, output-sized canvas. FFmpeg
-// overlays the PNG, so what is drawn here is exactly what gets exported.
-import type { Output, Title, TitleWeight } from "./api";
+// Lays out the opening title, and the captions over single clips, on
+// transparent output-sized canvases. FFmpeg overlays the PNGs, so what is
+// drawn here is exactly what gets exported.
+import type { Caption, Output, Title, TitlePosition, TitleWeight } from "./api";
 
 /** Output frame in pixels. Font sizes are pixels on the 1080 short side,
  * so a title looks the same size in either shape. */
@@ -11,6 +12,8 @@ const FRAME: Record<Output["aspect"], [number, number]> = {
 /** Text never runs wider than this share of the frame. */
 const MAX_TEXT_SHARE = 0.86;
 const SUBTITLE_SCALE = 0.62;
+/** Captions are one line, smaller than the title they take their look from. */
+const CAPTION_SCALE = 0.75;
 
 /** CSS font weights for [title, subtitle]; "regular" is the original look. */
 const WEIGHTS: Record<TitleWeight, [number, number]> = {
@@ -72,17 +75,15 @@ function drawLine(ctx: CanvasRenderingContext2D, text: string, x: number, y: num
   ctx.shadowColor = "transparent";
 }
 
-export async function renderTitlePng(title: Title, aspect: Output["aspect"]): Promise<Uint8Array> {
-  const [width, height] = FRAME[aspect];
-  const canvas = document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext("2d")!;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
+interface Line {
+  text: string;
+  weight: number;
+  size: number;
+}
 
+export function renderTitlePng(title: Title, aspect: Output["aspect"]): Promise<Uint8Array> {
   const [titleWeight, subtitleWeight] = WEIGHTS[title.weight];
-  const lines: { text: string; weight: number; size: number }[] = [];
+  const lines: Line[] = [];
   if (title.text.trim())
     lines.push({ text: fixApostrophes(title.text.trim()), weight: titleWeight, size: title.fontSize });
   if (title.subtitle.trim())
@@ -91,22 +92,49 @@ export async function renderTitlePng(title: Title, aspect: Output["aspect"]): Pr
       weight: subtitleWeight,
       size: Math.round(title.fontSize * SUBTITLE_SCALE),
     });
+  return renderLines(lines, title, title.position, aspect);
+}
+
+/** One line in the title's font, colour and outline, at `caption.position`. */
+export function renderCaptionPng(caption: Caption, title: Title, aspect: Output["aspect"]): Promise<Uint8Array> {
+  const line = {
+    text: fixApostrophes(caption.text.trim()),
+    weight: WEIGHTS[title.weight][0],
+    size: Math.round(title.fontSize * CAPTION_SCALE),
+  };
+  return renderLines([line], title, caption.position, aspect);
+}
+
+/** Draws `lines` centred around `position` and encodes them as a PNG. */
+async function renderLines(
+  lines: Line[],
+  style: Title,
+  position: TitlePosition,
+  aspect: Output["aspect"],
+): Promise<Uint8Array> {
+  const [width, height] = FRAME[aspect];
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d")!;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
 
   for (const line of lines)
-    line.size = fitFont(ctx, line.text, line.weight, line.size, title.font, width * MAX_TEXT_SHARE);
-  const gap = title.lineGap;
+    line.size = fitFont(ctx, line.text, line.weight, line.size, style.font, width * MAX_TEXT_SHARE);
+  const gap = style.lineGap;
   const blockHeight = lines.reduce((sum, line) => sum + line.size, 0) + gap * (lines.length - 1);
-  const centre = title.position === "top" ? height * 0.2 : title.position === "bottom" ? height * 0.8 : height / 2;
+  const centre = position === "top" ? height * 0.2 : position === "bottom" ? height * 0.8 : height / 2;
 
   let y = centre - blockHeight / 2;
   for (const line of lines) {
-    ctx.font = fontSpec(line.weight, line.size, title.font);
-    drawLine(ctx, line.text, width / 2, y + line.size / 2, line.size, title);
+    ctx.font = fontSpec(line.weight, line.size, style.font);
+    drawLine(ctx, line.text, width / 2, y + line.size / 2, line.size, style);
     y += line.size + gap;
   }
 
   const blob = await new Promise<Blob>((resolve, reject) =>
-    canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("could not encode title"))), "image/png"),
+    canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("could not encode text"))), "image/png"),
   );
   return new Uint8Array(await blob.arrayBuffer());
 }

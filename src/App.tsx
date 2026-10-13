@@ -14,6 +14,7 @@ import {
   saveTitleImage,
   MEDIA_EXTENSIONS,
   type ClipsProgress,
+  type Project,
 } from "./api";
 import { ClipList } from "./components/ClipList";
 import { DropOverlay, type Drop } from "./components/DropOverlay";
@@ -23,9 +24,11 @@ import { PickerSheet } from "./components/PickerSheet";
 import { Stage, type CropView } from "./components/Stage";
 import { TrimEditor } from "./components/TrimEditor";
 import {
+  captionImageKey,
   clipSpans,
   clipStart,
   crossfade,
+  hasCaption,
   hasTitleText,
   reducer,
   renderKey,
@@ -33,7 +36,7 @@ import {
   totalLength,
   UNTITLED,
 } from "./project";
-import { renderTitlePng } from "./title";
+import { renderCaptionPng, renderTitlePng } from "./title";
 import { colors, layout } from "./tokens.stylex";
 import { Button, Icon } from "./ui";
 import { useLibrary } from "./hooks/useLibrary";
@@ -153,6 +156,15 @@ interface Crop extends Omit<CropView, "applying"> {
   phase: "drag" | "rendering";
 }
 
+/** Keys for the caption PNGs a loaded project already has. */
+function renderedCaptionKeys(project: Project): Record<string, string> {
+  return Object.fromEntries(
+    project.clips
+      .filter((clip) => hasCaption(clip) && clip.caption!.image)
+      .map((clip) => [clip.id, captionImageKey(clip.caption!, project.title, project.output.aspect)]),
+  );
+}
+
 function App() {
   const [project, dispatch] = useReducer(reducer, null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -173,11 +185,14 @@ function App() {
   // ---------- load + autosave ----------
   /** Title fields the current `textImage` was rendered from. */
   const [imageKey, setImageKey] = useState<string | null>(null);
+  /** Per clip, the caption fields its current `caption.image` was rendered from. */
+  const [captionKeys, setCaptionKeys] = useState<Record<string, string>>({});
   useEffect(() => {
     loadProject()
       .then((loaded) => {
         dispatch({ type: "load", project: loaded });
         setImageKey(titleImageKey(loaded.title, loaded.output.aspect));
+        setCaptionKeys(renderedCaptionKeys(loaded));
         setSelectedId(loaded.clips[0]?.id ?? null);
         if (loaded.clips.length === 0) setPickerOpen(true);
       })
@@ -223,10 +238,42 @@ function App() {
     };
   }, [title, aspect, titleKey, imageKey]);
 
+  // ---------- caption PNGs ----------
+  // Same as the title: re-render a clip's caption when its text or
+  // position, or the title's look it borrows, changes.
+  const captionJobs =
+    project && title
+      ? project.clips.filter(hasCaption).flatMap((clip) => {
+          const key = captionImageKey(clip.caption!, title, aspect);
+          return captionKeys[clip.id] === key ? [] : [{ id: clip.id, caption: clip.caption!, title, aspect, key }];
+        })
+      : [];
+  const pendingCaptions = JSON.stringify(captionJobs.map((job) => job.key));
+  const latestJobs = useRef(captionJobs);
+  latestJobs.current = captionJobs;
+  useEffect(() => {
+    const jobs = latestJobs.current;
+    if (jobs.length === 0) return;
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      for (const job of jobs) {
+        const path = await saveTitleImage(await renderCaptionPng(job.caption, job.title, job.aspect));
+        if (cancelled) return;
+        dispatch({ type: "setCaptionImage", id: job.id, image: path });
+        setCaptionKeys((keys) => ({ ...keys, [job.id]: job.key }));
+      }
+    }, TITLE_DELAY);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [pendingCaptions]);
+
   // ---------- preview ----------
   const key = project ? renderKey(project) : null;
-  // Wait for the PNG so a text edit never renders with the old title.
+  // Wait for the PNGs so a text edit never renders with the old text.
   const titleReady = titleKey !== null && titleKey === imageKey;
+  const captionsReady = captionJobs.length === 0;
   const latest = useRef(project);
   latest.current = project;
   const latestCrop = useRef(crop);
@@ -238,7 +285,7 @@ function App() {
   const renderSeq = useRef(0);
   useEffect(() => {
     const current = latest.current;
-    if (!current || !titleReady) return;
+    if (!current || !titleReady || !captionsReady) return;
     if (current.clips.length === 0) {
       setPreview({ url: null, busy: false, error: null });
       return;
@@ -267,7 +314,7 @@ function App() {
       }
     }, PREVIEW_DELAY);
     return () => clearTimeout(timer);
-  }, [key, titleReady]);
+  }, [key, titleReady, captionsReady]);
 
   // ---------- thumbnails for the clip list ----------
   // Joined into one string so the effect runs only when the set changes;

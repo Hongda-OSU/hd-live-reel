@@ -1,6 +1,6 @@
 // Edits to the open project. The reducer is the only place the project
 // changes; App persists every new state.
-import type { Audio, Clip, ClipsProgress, Filter, Output, Project, Title, Transition } from "./api";
+import type { Audio, Caption, Clip, ClipsProgress, Filter, Output, Project, Title, Transition } from "./api";
 
 type Aspect = Output["aspect"];
 
@@ -11,6 +11,8 @@ export type Action =
   | { type: "moveClip"; from: number; to: number }
   | { type: "updateClip"; id: string; patch: Partial<Clip> }
   | { type: "removeClip"; id: string }
+  /** Only the PNG, so text typed while it rendered is kept. */
+  | { type: "setCaptionImage"; id: string; image: string }
   | { type: "clearClips" }
   | { type: "updateTitle"; patch: Partial<Title> }
   | { type: "updateFilter"; patch: Partial<Filter> }
@@ -36,6 +38,13 @@ export function reducer(project: Project | null, action: Action): Project | null
       return {
         ...project,
         clips: project.clips.map((clip) => (clip.id === action.id ? { ...clip, ...action.patch } : clip)),
+      };
+    case "setCaptionImage":
+      return {
+        ...project,
+        clips: project.clips.map((clip) =>
+          clip.id === action.id && clip.caption ? { ...clip, caption: { ...clip.caption, image: action.image } } : clip,
+        ),
       };
     case "removeClip":
       return { ...project, clips: project.clips.filter((clip) => clip.id !== action.id) };
@@ -141,11 +150,41 @@ export function musicName(path: string): string {
 
 export const hasTitleText = (title: Title) => title.text.trim() !== "" || title.subtitle.trim() !== "";
 
+/** A caption before any text is typed. */
+export const NEW_CAPTION: Caption = { text: "", position: "bottom", showFor: null };
+/** The "first seconds" choice for how long a caption shows. */
+export const CAPTION_FIRST_SECONDS = 1.5;
+
+export const hasCaption = (clip: Clip) => !!clip.caption?.text.trim();
+
+/** Caption fields, the title's look and the frame shape: what changes a
+ * caption's rendered PNG. */
+export function captionImageKey(caption: Caption, title: Title, aspect: Aspect): string {
+  const { font, fontSize, color, weight, textStyle } = title;
+  return JSON.stringify({
+    text: caption.text.trim(),
+    position: caption.position,
+    font,
+    fontSize,
+    color,
+    weight,
+    textStyle,
+    aspect,
+  });
+}
+
 /** Everything that changes the rendered video; previews re-run when it does. */
 export function renderKey(project: Project): string {
   const { clips, title, filter, audio, transition, output } = project;
   return JSON.stringify({
-    clips: clips.map((c) => [c.normalizedPath, c.trimStart, c.trimEnd, c.muted, c.cropOffset]),
+    clips: clips.map((c) => [
+      c.normalizedPath,
+      c.trimStart,
+      c.trimEnd,
+      c.muted,
+      c.cropOffset,
+      hasCaption(c) ? [c.caption!.image, c.caption!.showFor] : null,
+    ]),
     frame: [output.aspect, output.fill],
     title: hasTitleText(title) ? [title.textImage, title.showFor, title.fadeOut] : null,
     filter,
