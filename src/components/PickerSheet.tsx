@@ -620,7 +620,7 @@ export function PickerSheet({
                   ? progressLabel(adding)
                   : chosen.size
                     ? `已选 ${chosen.size} 项`
-                    : "点击或拖动勾选照片，再让「AI 选片…」从中挑出精选")}
+                    : "点击或拖动勾选照片，再用「AI 选片…」挑出精选")}
           </span>
           {chosen.size > 0 && (
             <Button variant="ghost" onClick={() => setChosen(new Set())} disabled={busy}>
