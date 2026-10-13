@@ -3,9 +3,13 @@ import { colors } from "../tokens.stylex";
 import { withStyle } from "./styles";
 
 const styles = stylex.create({
+  // The selection ring is drawn outside the swatch: leave room for it
+  // above and below. Sideways it hangs into the panel padding, like a
+  // focus ring, so the swatches line up with the fields.
   row: {
     display: "flex",
     gap: 8,
+    paddingBlock: 4,
   },
   swatch: {
     position: "relative",
