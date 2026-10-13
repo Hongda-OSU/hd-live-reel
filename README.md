@@ -45,4 +45,4 @@ Connect the iPhone with a cable and unlock it (or skip this and drag files in), 
 pnpm tauri dev
 ```
 
-Exports are saved to `~/Movies/HD Live Reel/` unless another folder is chosen in the 导出 (Export) section.
+Exports are saved to `~/Movies/HD Live Reel/` unless another folder is chosen in the Export section of the settings panel.
