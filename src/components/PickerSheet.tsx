@@ -214,6 +214,16 @@ const styles = stylex.create({
       boxShadow: `inset 0 0 0 3px ${colors.accent}`,
     },
   },
+  // Already in the project: darkened, but it can still be ticked again,
+  // say to use two parts of one video.
+  tileAdded: {
+    "::before": {
+      content: '""',
+      position: "absolute",
+      inset: 0,
+      backgroundColor: "rgba(0, 0, 0, 0.45)",
+    },
+  },
   // Still photos have no motion to stitch.
   tileStill: {
     opacity: 0.4,
@@ -309,6 +319,8 @@ interface Props {
   open: boolean;
   library: Library;
   thumbs: Record<string, string>;
+  /** Ids of the photos and videos already in the project. */
+  added: Set<string>;
   adding: ClipsProgress | "starting" | null;
   error: string | null;
   onRefresh: () => void;
@@ -371,6 +383,7 @@ export function PickerSheet({
   open,
   library,
   thumbs,
+  added,
   adding,
   error,
   onRefresh,
@@ -582,21 +595,32 @@ export function PickerSheet({
                     title={
                       !usable(item)
                         ? "静态照片没有动态画面"
-                        : verdict
-                          ? `${item.name}：${why}（${points(verdict.value)} 分）`
-                          : item.name
+                        : added.has(item.id) && !verdict
+                          ? `${item.name}：已在工程里，再勾选会多加一段`
+                          : verdict
+                            ? `${item.name}：${why}（${points(verdict.value)} 分）`
+                            : item.name
                     }
                     data-select-id={usable(item) ? item.id : undefined}
                     onPointerDown={(e) => !busy && dragSelect.onPointerDown(item.id, e)}
                     // Pointer clicks are handled above; this is the keyboard.
                     onClick={(e) => e.detail === 0 && toggle(item.id)}
                     {...withStyle(
-                      stylex.props(styles.tile, on && styles.tileOn, !usable(item) && styles.tileStill),
+                      stylex.props(
+                        styles.tile,
+                        on && styles.tileOn,
+                        added.has(item.id) && styles.tileAdded,
+                        !usable(item) && styles.tileStill,
+                      ),
                       thumb ? { backgroundImage: `url("${thumb}")` } : undefined,
                     )}
                   >
-                    {item.kind === "livePhoto" && <span {...stylex.props(styles.badge)}>LIVE</span>}
-                    {item.kind === "video" && <span {...stylex.props(styles.badge)}>视频</span>}
+                    {item.kind !== "photo" && (
+                      <span {...stylex.props(styles.badge)}>
+                        {item.kind === "livePhoto" ? "LIVE" : "视频"}
+                        {added.has(item.id) && " · 已添加"}
+                      </span>
+                    )}
                     {usable(item) && <span {...stylex.props(styles.check, on && styles.checkOn)} />}
                     {verdict && (
                       <span {...stylex.props(styles.caption, verdict.picked && styles.captionPicked)}>

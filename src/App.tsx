@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { ask, open } from "@tauri-apps/plugin-dialog";
 import * as stylex from "@stylexjs/stylex";
@@ -277,6 +277,8 @@ function App() {
     const ids = clipAssetKey.split("|").filter(Boolean);
     if (ids.length) loadThumbs(ids);
   }, [clipAssetKey, loadThumbs]);
+  // Marked in the picker, so a photo isn't added twice by accident.
+  const added = useMemo(() => new Set(clipAssetKey.split("|").filter(Boolean)), [clipAssetKey]);
 
   // ---------- actions ----------
   const addClips = useCallback(async (ids: string[]) => {
@@ -499,6 +501,7 @@ function App() {
         open={pickerOpen}
         library={library}
         thumbs={thumbs}
+        added={added}
         adding={adding}
         error={addError}
         onRefresh={refresh}
