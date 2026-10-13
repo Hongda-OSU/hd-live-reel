@@ -385,7 +385,8 @@ export function Stage(props: Props) {
           </Icon>
         </button>
         <span {...stylex.props(styles.time)}>
-          {formatTime(time)} / {formatTime(duration || total)}
+          {/* Without a preview, the last one's time and length are stale. */}
+          {src ? `${formatTime(time)} / ${formatTime(duration || total)}` : `${formatTime(0)} / ${formatTime(total)}`}
         </span>
         <div {...stylex.props(styles.scrub)}>
           <div {...stylex.props(styles.ticks)}>
@@ -396,9 +397,9 @@ export function Stage(props: Props) {
           <input
             type="range"
             min={0}
-            max={duration || 1}
+            max={(src && duration) || 1}
             step={0.01}
-            value={time}
+            value={src ? time : 0}
             disabled={!src}
             onChange={(e) => {
               if (video.current) video.current.currentTime = Number(e.target.value);
