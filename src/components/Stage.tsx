@@ -13,7 +13,7 @@ const styles = stylex.create({
     minWidth: 0,
     paddingTop: "18px",
     paddingRight: "18px",
-    paddingBottom: "10px",
+    paddingBottom: "18px",
     paddingLeft: "18px",
     backgroundColor: colors.stage,
   },
@@ -123,12 +123,12 @@ const styles = stylex.create({
   transport: {
     display: "grid",
     gridTemplateColumns: "auto auto 1fr auto",
-    gap: 12,
+    gap: 16,
     alignItems: "center",
     justifySelf: "center",
     width: "100%",
     maxWidth: 760,
-    paddingTop: 10,
+    paddingTop: 16,
   },
   play: {
     display: "grid",
