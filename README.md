@@ -5,16 +5,16 @@ A macOS desktop app that stitches iPhone Live Photos into one short video, keepi
 ## Features
 
 - Pick Live Photos and videos from a USB-connected iPhone, or drag them in from Finder
-- Let on-device AI pick a reel's worth from a day or part of one, with a reason and a score for each shot
+- Tick photos, a whole day or scene at a time, and let on-device AI narrow them to a reel's worth, with a reason and a score for each shot
 - Keep each clip's original sound, loudness-matched, or lay a music track under or over it
-- Trim, reorder, crop and mute clips; add a styled opening title, colour filters and cross-dissolves
-- Preview from the same FFmpeg pipeline as the export; export a 9:16 or 16:9 MP4 that WeChat plays directly
+- Trim, reorder, crop and mute clips; add a styled opening title, captions on single clips, colour filters and cross-dissolves
+- Preview from the same FFmpeg pipeline as the export, with a filmstrip of the clips; export a 9:16 or 16:9 MP4 that WeChat plays directly
 
 ## Tech Stack
 
 - App shell: Tauri 2
 - Frontend: React, TypeScript, StyleX
-- Core: Rust (project files, FFmpeg command building)
+- Core: Rust (project files, FFmpeg command building, AI selection)
 - Photo access: Swift command-line helper (ImageCaptureCore, Vision)
 - Video: FFmpeg with libzimg, bundled as a sidecar
 
