@@ -88,10 +88,38 @@ pub struct Clip {
     pub ai_score: Option<f64>,
     #[serde(default)]
     pub ai_reason: Option<String>,
+    /// Text shown over this clip, if any.
+    #[serde(default)]
+    pub caption: Option<Caption>,
 }
 
 fn centre() -> f64 {
     0.5
+}
+
+/// A line of text over one clip. Font, weight, colour and outline follow
+/// the title, so captions match it without settings of their own.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct Caption {
+    pub text: String,
+    pub position: Position,
+    /// Seconds on screen once the clip is fully in; `None` keeps it for
+    /// the whole clip.
+    pub show_for: Option<f64>,
+    /// The laid-out text as a transparent PNG, rendered by the frontend.
+    pub image: Option<PathBuf>,
+}
+
+impl Default for Caption {
+    fn default() -> Self {
+        Self {
+            text: String::new(),
+            position: Position::Bottom,
+            show_for: None,
+            image: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -319,6 +347,15 @@ impl Project {
             if !(0.0..=1.0).contains(&clip.crop_offset) {
                 return Err(format!("{id}: crop offset must be between 0 and 1"));
             }
+            if let Some(Caption {
+                show_for: Some(seconds),
+                ..
+            }) = &clip.caption
+            {
+                if *seconds <= 0.0 {
+                    return Err(format!("{id}: caption must show for a positive time"));
+                }
+            }
         }
         if self.title.show_for <= 0.0 || self.title.fade_out < 0.0 {
             return Err("title must show for a positive time".into());
@@ -479,6 +516,7 @@ mod tests {
             crop_offset,
             ai_score: None,
             ai_reason: None,
+            caption: None,
         }
     }
 
@@ -527,6 +565,28 @@ mod tests {
     }
 
     #[test]
+    fn captions_default_to_none_and_keep_their_fields() {
+        let mut project: Project = serde_json::from_str(DOC_EXAMPLE).unwrap();
+        assert_eq!(project.clips[0].caption, None, "older clips have none");
+
+        project.clips[0].caption = Some(Caption {
+            text: "Day 2".into(),
+            show_for: Some(1.5),
+            ..Default::default()
+        });
+        let json = serde_json::to_value(&project).unwrap();
+        assert_eq!(json["clips"][0]["caption"]["text"], "Day 2");
+        assert_eq!(json["clips"][0]["caption"]["position"], "bottom");
+        assert_eq!(json["clips"][0]["caption"]["showFor"], 1.5);
+        let again: Project = serde_json::from_value(json).unwrap();
+        assert_eq!(again, project);
+
+        // A whole-clip caption has no time limit to check.
+        project.clips[0].caption.as_mut().unwrap().show_for = None;
+        project.validate().unwrap();
+    }
+
+    #[test]
     fn clip_defaults_fill_missing_optional_fields() {
         let json = r#"{"id": "c1", "source": "file", "kind": "video", "videoPath": "/v.mov",
                        "duration": 3, "trimStart": 0, "trimEnd": 3}"#;
@@ -553,6 +613,12 @@ mod tests {
         project.title.line_gap = 0.0;
         project.transition.duration = -0.1;
         assert!(project.validate().unwrap_err().contains("transition"));
+        project.transition.duration = 0.0;
+        project.clips[0].caption = Some(Caption {
+            show_for: Some(0.0),
+            ..Default::default()
+        });
+        assert!(project.validate().unwrap_err().contains("caption"));
     }
 
     #[test]

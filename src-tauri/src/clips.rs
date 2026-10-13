@@ -285,6 +285,7 @@ fn prepare(
         crop_offset: 0.5,
         ai_score: None,
         ai_reason: None,
+        caption: None,
     })
 }
 
@@ -458,6 +459,7 @@ mod tests {
             crop_offset: 0.5,
             ai_score: None,
             ai_reason: None,
+            caption: None,
         }
     }
 

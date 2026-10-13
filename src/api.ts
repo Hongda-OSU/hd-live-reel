@@ -61,6 +61,18 @@ export interface Clip {
   cropOffset: number;
   aiScore?: number | null;
   aiReason?: string | null;
+  /** Text shown over this clip, if any. */
+  caption?: Caption | null;
+}
+
+/** A line of text over one clip, styled like the title. */
+export interface Caption {
+  text: string;
+  position: TitlePosition;
+  /** Seconds on screen once the clip is fully in; null for the whole clip. */
+  showFor: number | null;
+  /** The laid-out text as a transparent PNG, rendered by the frontend. */
+  image?: string | null;
 }
 
 export type TitlePosition = "top" | "center" | "bottom";
