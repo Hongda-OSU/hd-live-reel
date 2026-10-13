@@ -81,6 +81,12 @@ const styles = stylex.create({
     justifyContent: "flex-end",
     paddingRight: 14,
   },
+  // Export is a plain button like 添加照片, marked only by a blue icon, so
+  // the toolbar stays quiet and balanced.
+  exportIcon: {
+    display: "flex",
+    color: colors.accent,
+  },
   name: {
     width: 260,
     paddingBlock: "1px",
@@ -484,10 +490,12 @@ function App() {
           </div>
         </div>
         <div data-tauri-drag-region {...stylex.props(styles.toolbarRight)}>
-          <Button variant="primary" disabled={project.clips.length === 0} onClick={() => setExportOpen(true)}>
-            <Icon>
-              <path d="M8 10V2.5M5 5.5 8 2.5l3 3M3 9.5v3.5h10V9.5" />
-            </Icon>
+          <Button disabled={project.clips.length === 0} onClick={() => setExportOpen(true)}>
+            <span {...stylex.props(styles.exportIcon)}>
+              <Icon>
+                <path d="M8 10V2.5M5 5.5 8 2.5l3 3M3 9.5v3.5h10V9.5" />
+              </Icon>
+            </span>
             导出
           </Button>
         </div>
