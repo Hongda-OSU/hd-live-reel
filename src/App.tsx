@@ -483,7 +483,6 @@ function App() {
             onCropStart={startCrop}
             onCropChange={(offset) => setCrop((c) => c && { ...c, offset })}
             onCropEnd={endCrop}
-            onAdd={() => setPickerOpen(true)}
           />
         )}
         <Inspector

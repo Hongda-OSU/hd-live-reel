@@ -16,12 +16,6 @@ const styles = stylex.create({
     padding: 0,
     listStyle: "none",
   },
-  empty: {
-    padding: 8,
-    color: colors.muted,
-    fontSize: 12,
-    lineHeight: 1.6,
-  },
   row: {
     display: "grid",
     gridTemplateColumns: "16px 30px 1fr",
@@ -143,9 +137,8 @@ export function ClipList({ clips, selectedId, thumbs, noOriginalSound, onSelect,
     dispatch({ type: "moveClip", from, to });
   }
 
-  if (clips.length === 0) {
-    return <p {...stylex.props(styles.empty)}>还没有片段。点「添加照片」从 iPhone 挑选，或把文件拖进窗口。</p>;
-  }
+  // The stage says how to add clips; an empty list needs no words.
+  if (clips.length === 0) return null;
   return (
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
       <SortableContext items={clips.map((c) => c.id)} strategy={verticalListSortingStrategy}>

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type PointerEvent } from "react";
 import * as stylex from "@stylexjs/stylex";
 import { colors, shadows } from "../tokens.stylex";
-import { Button, Icon, ui, withStyle } from "../ui";
+import { Icon, withStyle } from "../ui";
 import { formatTime } from "../project";
 import { CropLayer, fillFactor } from "./CropLayer";
 
@@ -57,14 +57,44 @@ const styles = stylex.create({
     width: "100%",
     height: "100%",
   },
+  // Nothing to play yet: an outline of the reel's shape, not a black
+  // video that looks like it failed to load.
+  frameEmpty: {
+    backgroundColor: "transparent",
+    boxShadow: "none",
+    outlineWidth: 1.5,
+    outlineStyle: "dashed",
+    outlineColor: `color-mix(in srgb, ${colors.muted} 45%, transparent)`,
+    outlineOffset: -1.5,
+  },
   empty: {
     position: "absolute",
     inset: 0,
     display: "grid",
     placeContent: "center",
     justifyItems: "center",
-    gap: 4,
-    color: "#a1a1a6",
+    gap: 8,
+    padding: 24,
+    color: colors.muted,
+    textAlign: "center",
+  },
+  emptyIcon: {
+    width: 56,
+    height: 56,
+    marginBottom: 8,
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 1.5,
+  },
+  emptyTitle: {
+    margin: 0,
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: 600,
+  },
+  emptyText: {
+    margin: 0,
+    fontSize: 12,
   },
   pill: {
     position: "absolute",
@@ -175,7 +205,6 @@ interface Props {
   onCropStart: (time: number) => void;
   onCropChange: (offset: number) => void;
   onCropEnd: () => void;
-  onAdd: () => void;
 }
 
 export interface CropView {
@@ -196,7 +225,7 @@ const CROP_SLACK = 0.01;
 const clamp01 = (n: number) => Math.min(1, Math.max(0, n));
 
 export function Stage(props: Props) {
-  const { src, aspect, croppable, lengths, seekTo, busy, error, empty, crop, onAdd } = props;
+  const { src, aspect, croppable, lengths, seekTo, busy, error, empty, crop } = props;
   const frameAspect = aspect === "16:9" ? 16 / 9 : 9 / 16;
   const video = useRef<HTMLVideoElement>(null);
   const frame = useRef<HTMLDivElement>(null);
@@ -280,6 +309,7 @@ export function Stage(props: Props) {
           {...stylex.props(
             styles.frame,
             aspect === "16:9" ? styles.landscape : styles.portrait,
+            empty && styles.frameEmpty,
             src !== null && croppable && styles.grab,
             crop !== null && styles.cropping,
           )}
@@ -306,11 +336,14 @@ export function Stage(props: Props) {
           )}
           {empty && (
             <div {...stylex.props(styles.empty)}>
-              <p>预览会显示在这里</p>
-              <Button variant="primary" onClick={onAdd}>
-                添加照片
-              </Button>
-              <p {...stylex.props(ui.note)}>也可以把视频或 Live Photo 拖进窗口</p>
+              {/* The Live Photo mark: a dot, a ring and a dotted ring. */}
+              <svg viewBox="0 0 56 56" aria-hidden {...stylex.props(styles.emptyIcon)}>
+                <circle cx="28" cy="28" r="5" />
+                <circle cx="28" cy="28" r="13" />
+                <circle cx="28" cy="28" r="22" strokeDasharray="1.5 4.2" strokeLinecap="round" />
+              </svg>
+              <h3 {...stylex.props(styles.emptyTitle)}>把 Live Photo 拼成一段视频</h3>
+              <p {...stylex.props(styles.emptyText)}>点左上角「添加照片」，或把视频、Live Photo 拖到这里</p>
             </div>
           )}
           {crop?.frame && (
