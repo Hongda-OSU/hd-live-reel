@@ -8,7 +8,8 @@ mod probe;
 mod tool;
 
 pub use compose::{
-    compose, compose_with_progress, Composition, Fill, Music, Quality, Segment, Shape, Title,
+    compose, compose_with_progress, Caption, Composition, Fill, Music, Quality, Segment, Shape,
+    Title,
 };
 pub use grade::{Grade, Look};
 pub use music::{normalize_music, MUSIC_LUFS};

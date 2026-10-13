@@ -1,7 +1,8 @@
 //! Joins normalized clips into the final video, with an optional opening
-//! title. Each clip is fitted to the output frame here (crop, black bars or
-//! a blurred backdrop), so the intermediates keep their own shape. Preview
-//! and export share this graph; the preview just works at half size.
+//! title and captions over single clips. Each clip is fitted to the output
+//! frame here (crop, black bars or a blurred backdrop), so the
+//! intermediates keep their own shape. Preview and export share this graph;
+//! the preview just works at half size.
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
@@ -23,6 +24,17 @@ pub struct Title {
     pub show_for: f64,
     /// Seconds of fade at the end of `show_for`; 0 cuts it off.
     pub fade_out: f64,
+}
+
+/// A transparent PNG, sized like the output, laid over one clip.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Caption {
+    pub image: PathBuf,
+    /// Index of the clip it belongs to.
+    pub clip: usize,
+    /// Seconds on screen once the clip is fully in; `None` keeps it until
+    /// the clip starts to leave.
+    pub show_for: Option<f64>,
 }
 
 /// A normalized music track laid under, or instead of, the clips' sound.
@@ -126,6 +138,8 @@ pub struct Composition {
     pub transition: f64,
     pub grade: Grade,
     pub title: Option<Title>,
+    /// Text over single clips, in any order.
+    pub captions: Vec<Caption>,
     pub music: Option<Music>,
 }
 
@@ -148,6 +162,41 @@ impl Composition {
     pub fn length(&self) -> f64 {
         let sum: f64 = self.clips.iter().map(Segment::length).sum();
         sum - self.crossfade() * self.clips.len().saturating_sub(1) as f64
+    }
+
+    /// When each clip is fully on screen, in seconds of the result: after
+    /// the dissolve into it and before the one out of it.
+    pub fn clip_windows(&self) -> Vec<(f64, f64)> {
+        let fade = self.crossfade();
+        let last = self.clips.len().saturating_sub(1);
+        let mut start = 0.0;
+        self.clips
+            .iter()
+            .enumerate()
+            .map(|(i, clip)| {
+                let fade_in = if i > 0 { fade } else { 0.0 };
+                let fade_out = if i < last { fade } else { 0.0 };
+                let window = (start + fade_in, start + clip.length() - fade_out);
+                start += clip.length() - fade;
+                window
+            })
+            .collect()
+    }
+
+    /// The captions that get any screen time, with when they show: their
+    /// clip's window, after the title is gone, cut to `show_for`.
+    fn shown_captions(&self) -> Vec<(&Caption, (f64, f64))> {
+        let windows = self.clip_windows();
+        let title_end = self.title.as_ref().map_or(0.0, |title| title.show_for);
+        self.captions
+            .iter()
+            .filter_map(|caption| {
+                let (start, end) = *windows.get(caption.clip)?;
+                let start = start.max(title_end);
+                let end = caption.show_for.map_or(end, |s| end.min(start + s));
+                (end > start).then_some((caption, (start, end)))
+            })
+            .collect()
     }
 }
 
@@ -195,6 +244,18 @@ fn args(composition: &Composition, quality: Quality, out: &Path) -> Vec<String> 
             title.image.to_string_lossy().into_owned(),
         ]);
     }
+    for (caption, (_, end)) in composition.shown_captions() {
+        args.extend([
+            "-loop".into(),
+            "1".into(),
+            "-framerate".into(),
+            FPS.to_string(),
+            "-t".into(),
+            format!("{end:.3}"),
+            "-i".into(),
+            caption.image.to_string_lossy().into_owned(),
+        ]);
+    }
     if let Some(music) = &composition.music {
         args.extend([
             "-stream_loop".into(),
@@ -236,10 +297,26 @@ fn filter_graph(composition: &Composition, quality: Quality) -> String {
         Quality::Preview => format!(",scale={width}:{height}"),
         Quality::Export => String::new(),
     };
-    // Graded before the title goes on, so the text keeps its colour.
+    // Graded before any text goes on, so the text keeps its colour.
     if let Some(grade) = composition.grade.filter() {
         graph.push_str(&format!("[{video}]{grade}[graded];"));
         video = "graded".into();
+    }
+    // Captions come after the title among the inputs. Each shows on the
+    // frames whose times fall in its window; half a frame either side keeps
+    // rounding from adding or dropping one.
+    let captions = composition.shown_captions();
+    let first_caption = n + usize::from(composition.title.is_some());
+    let half_frame = 0.5 / FPS as f64;
+    for (k, (_, (start, end))) in captions.iter().enumerate() {
+        graph.push_str(&format!(
+            "[{}:v]format=rgba{shrink}[c{k}];\
+             [{video}][c{k}]overlay=0:0:enable='gte(t,{:.4})*lt(t,{:.4})'[cv{k}];",
+            first_caption + k,
+            start - half_frame,
+            end - half_frame,
+        ));
+        video = format!("cv{k}");
     }
     if let Some(title) = &composition.title {
         let fade = if title.fade_out > 0.0 {
@@ -262,7 +339,7 @@ fn filter_graph(composition: &Composition, quality: Quality) -> String {
 
     let mut audio = "a0";
     if let Some(music) = &composition.music {
-        let input = n + usize::from(composition.title.is_some());
+        let input = first_caption + captions.len();
         let length = composition.length();
         let fade = MUSIC_FADE_OUT.min(length / 2.0);
         graph.push_str(&format!(
@@ -434,6 +511,7 @@ mod tests {
 
     fn composition(title: Option<Title>) -> Composition {
         Composition {
+            captions: Vec::new(),
             grade: Grade::default(),
             shape: Shape::Portrait,
             fill: Fill::Crop,
@@ -501,9 +579,81 @@ mod tests {
         assert!(graph.contains("[2:v]format=rgba,fade=t=out:st=0.7:d=0.3:alpha=1[title]"));
     }
 
+    fn caption(clip: usize, show_for: Option<f64>) -> Caption {
+        Caption {
+            image: "caption.png".into(),
+            clip,
+            show_for,
+        }
+    }
+
+    #[test]
+    fn overlays_a_caption_on_its_clip_only() {
+        let mut with = composition(None);
+        with.captions = vec![caption(1, None)];
+        let graph = filter_graph(&with, Quality::Export);
+        // Clip 1 runs from 2 s to 4 s; half a frame early on both ends.
+        assert!(
+            graph.contains(
+                "[2:v]format=rgba[c0];\
+                 [joined][c0]overlay=0:0:enable='gte(t,1.9833)*lt(t,3.9833)'[cv0];\
+                 [cv0]null[v];"
+            ),
+            "{graph}"
+        );
+        let args = args(&with, Quality::Export, Path::new("out.mp4"));
+        let input = args.iter().position(|a| a == "caption.png").unwrap();
+        assert_eq!(
+            args[input - 7..input],
+            ["-loop", "1", "-framerate", "30", "-t", "4.000", "-i"]
+        );
+    }
+
+    #[test]
+    fn clip_windows_skip_the_dissolves() {
+        let mut faded = composition(None);
+        faded.clips.push(Segment::whole("c.mov".into(), 2.0));
+        faded.transition = 0.5;
+        assert_eq!(faded.clip_windows(), [(0.0, 1.5), (2.0, 3.0), (3.5, 5.0)]);
+    }
+
+    #[test]
+    fn captions_wait_for_the_title_and_stop_after_show_for() {
+        let mut with = composition(Some(title(0.0)));
+        with.captions = vec![caption(0, Some(0.5)), caption(1, Some(0.5))];
+        let shown: Vec<_> = with.shown_captions().into_iter().map(|(_, w)| w).collect();
+        assert_eq!(shown, [(1.0, 1.5), (2.0, 2.5)]);
+
+        // A caption the title covers entirely gets no input at all.
+        with.title.as_mut().unwrap().show_for = 2.0;
+        with.captions = vec![caption(0, None)];
+        assert!(with.shown_captions().is_empty());
+        assert!(!filter_graph(&with, Quality::Export).contains("[c0]"));
+        assert!(!args(&with, Quality::Export, Path::new("out.mp4")).contains(&"caption.png".into()));
+    }
+
+    #[test]
+    fn captions_go_on_before_the_title_and_shift_the_music_input() {
+        let mut with = composition(Some(title(0.0)));
+        with.captions = vec![caption(1, None)];
+        with.music = Some(music(None));
+        let graph = filter_graph(&with, Quality::Preview);
+        // Inputs: two clips, the title (2), the caption (3), the music (4).
+        assert!(
+            graph.contains("[3:v]format=rgba,scale=540:960[c0];[joined][c0]overlay"),
+            "{graph}"
+        );
+        assert!(
+            graph.contains("[2:v]format=rgba,scale=540:960[title];[cv0][title]overlay"),
+            "{graph}"
+        );
+        assert!(graph.contains("[4:a]volume"), "{graph}");
+    }
+
     #[test]
     fn trims_and_mutes_only_the_segments_that_ask() {
         let composition = Composition {
+            captions: Vec::new(),
             grade: Grade::default(),
             shape: Shape::Portrait,
             fill: Fill::Crop,
@@ -767,6 +917,7 @@ mod tests {
         }
         let out = dir.join("out.mp4");
         let composition = Composition {
+            captions: Vec::new(),
             grade: Grade::default(),
             shape: Shape::Portrait,
             fill: Fill::Crop,
@@ -857,6 +1008,7 @@ mod tests {
             .map(|clip| Segment::whole(clip, 2.0))
             .collect();
         let without = Composition {
+            captions: Vec::new(),
             grade: Grade::default(),
             shape: Shape::Portrait,
             fill: Fill::Crop,
@@ -866,6 +1018,11 @@ mod tests {
             title: None,
         };
         let with = Composition {
+            captions: vec![Caption {
+                image: png.clone(),
+                clip: 1,
+                show_for: None,
+            }],
             grade: Grade::default(),
             shape: Shape::Portrait,
             fill: Fill::Crop,
@@ -894,11 +1051,17 @@ mod tests {
         let preview_video = preview_info.video.unwrap();
         assert_eq!((preview_video.width, preview_video.height), (540, 960));
 
-        // Title on exactly the first second (30 frames). Both files are lossy
-        // encodes, so frames after it match closely rather than bit for bit.
+        // Title on exactly the first second (30 frames), the caption on
+        // exactly the second clip (frames 60 on). Both files are lossy
+        // encodes, so untouched frames match closely rather than bit for bit.
         assert_eq!(psnr.len(), 120);
         assert!(psnr[..30].iter().all(|&p| p < 20.0), "{:?}", &psnr[..30]);
-        assert!(psnr[30..].iter().all(|&p| p > 35.0), "{:?}", &psnr[30..]);
+        assert!(
+            psnr[30..60].iter().all(|&p| p > 35.0),
+            "{:?}",
+            &psnr[30..60]
+        );
+        assert!(psnr[60..].iter().all(|&p| p < 20.0), "{:?}", &psnr[60..]);
     }
 
     #[test]
@@ -953,6 +1116,7 @@ mod tests {
         let render = |original: Option<f64>, volume: f64, name: &str| {
             let out = dir.join(name);
             let composition = Composition {
+                captions: Vec::new(),
                 clips: clips.clone(),
                 grade: Grade::default(),
                 shape: Shape::Portrait,
@@ -1026,6 +1190,7 @@ mod tests {
         }
         clips[1].trim = Some((0.5, 1.5));
         let composition = Composition {
+            captions: Vec::new(),
             clips,
             shape: Shape::Portrait,
             fill: Fill::Crop,
@@ -1089,6 +1254,7 @@ mod tests {
             for fill in [Fill::Crop, Fill::Black, Fill::Blur] {
                 let out = dir.join(format!("{shape:?}-{fill:?}.mp4"));
                 let composition = Composition {
+                    captions: Vec::new(),
                     clips: vec![Segment::whole(norm.clone(), duration)],
                     shape,
                     fill,

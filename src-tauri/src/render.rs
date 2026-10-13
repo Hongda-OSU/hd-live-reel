@@ -44,11 +44,27 @@ pub fn composition(project: &Project) -> Result<Composition, String> {
         }),
         _ => None,
     };
+    // Captions with text whose PNG the frontend has rendered.
+    let captions = project
+        .clips
+        .iter()
+        .enumerate()
+        .filter_map(|(i, clip)| {
+            let caption = clip.caption.as_ref()?;
+            let image = caption.image.clone()?;
+            (!caption.text.trim().is_empty()).then_some(ffmpeg::Caption {
+                image,
+                clip: i,
+                show_for: caption.show_for,
+            })
+        })
+        .collect();
     let transition = match project.transition.kind {
         TransitionKind::None => 0.0,
         TransitionKind::Fade => project.transition.duration,
     };
     Ok(Composition {
+        captions,
         clips,
         shape: match project.output.aspect {
             p::Aspect::Portrait => Shape::Portrait,
@@ -237,6 +253,34 @@ mod tests {
         let title = composition(&project).unwrap().title.unwrap();
         assert_eq!(title.image, Path::new("/c/t.png"));
         assert_eq!((title.show_for, title.fade_out), (1.0, 0.3));
+    }
+
+    #[test]
+    fn captions_need_text_and_an_image() {
+        let caption = |text: &str, image: Option<&str>| {
+            Some(p::Caption {
+                text: text.into(),
+                show_for: Some(1.5),
+                image: image.map(PathBuf::from),
+                ..Default::default()
+            })
+        };
+        let mut clips = vec![clip((0.0, 2.0), false); 4];
+        clips[1].caption = caption("Day 2", Some("/t/day2.png"));
+        clips[2].caption = caption("  ", Some("/t/blank.png"));
+        clips[3].caption = caption("Lake", None);
+        let project = Project {
+            clips,
+            ..Default::default()
+        };
+        assert_eq!(
+            composition(&project).unwrap().captions,
+            [ffmpeg::Caption {
+                image: "/t/day2.png".into(),
+                clip: 1,
+                show_for: Some(1.5),
+            }]
+        );
     }
 
     #[test]

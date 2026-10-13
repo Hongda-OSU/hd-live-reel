@@ -58,6 +58,7 @@ fn matches_compose_py_baseline() {
     let out = work.join("out.mp4");
     compose(
         &Composition {
+            captions: Vec::new(),
             clips,
             shape: Shape::Portrait,
             fill: Fill::Crop,
