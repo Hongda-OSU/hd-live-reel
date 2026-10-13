@@ -1,10 +1,7 @@
 import { useEffect } from "react";
 import * as stylex from "@stylexjs/stylex";
 import { colors, shadows } from "../tokens.stylex";
-import { Button, Field, Seg, Switch, ui } from "../ui";
-
-/** Where AI picks from: the chosen days and scenes, or the ticked photos. */
-export type AiSource = "range" | "chosen";
+import { Button, Field, Switch, ui } from "../ui";
 
 /** Default and range of the AI target, in seconds; Live Photos run ~2 s. */
 export const TARGET = { initial: 40, min: 30, max: 45 };
@@ -28,10 +25,9 @@ const styles = stylex.create({
     margin: 0,
     fontSize: 14,
   },
-  range: {
+  pool: {
     margin: 0,
     fontSize: 12,
-    lineHeight: 1.5,
   },
   slider: {
     width: "100%",
@@ -52,12 +48,10 @@ const styles = stylex.create({
 });
 
 interface Props {
-  /** "今天 10:14–11:19 · 36 张" per scene in the range. */
-  range: string[];
-  source: AiSource;
-  /** Photos ticked in the grid. */
-  chosenCount: number;
-  onSource: (source: AiSource) => void;
+  /** Photos AI picks from: the ticked ones. */
+  poolSize: number;
+  /** Nothing was touched since the last run, so it reruns on that pool. */
+  again: boolean;
   target: number;
   people: boolean;
   busy: boolean;
@@ -68,22 +62,8 @@ interface Props {
 }
 
 /** Settings for AI selection, popped up under its button. It stays open
- * while the range is set in the grid, by clicking day and scene titles;
- * Esc, 取消 or the button close it. */
-export function AiPanel({
-  range,
-  source,
-  chosenCount,
-  onSource,
-  target,
-  people,
-  busy,
-  onTarget,
-  onPeople,
-  onRun,
-  onClose,
-}: Props) {
-  const ready = source === "chosen" ? chosenCount > 0 : range.length > 0;
+ * while photos are ticked in the grid; Esc, 取消 or the button close it. */
+export function AiPanel({ poolSize, again, target, people, busy, onTarget, onPeople, onRun, onClose }: Props) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -97,32 +77,13 @@ export function AiPanel({
       <h3 {...stylex.props(styles.heading)}>AI 选片</h3>
       {/* One block, so the fields' own spacing applies evenly. */}
       <div>
-        <Field label="范围">
-          <Seg<AiSource>
-            options={[
-              ["range", "日期 / 时段"],
-              ["chosen", `已勾选的 ${chosenCount} 张`],
-            ]}
-            value={source}
-            onChange={onSource}
-          />
-          {source === "chosen" ? (
-            <p {...stylex.props(ui.note)}>
-              {chosenCount
-                ? "只在这些照片里挑；没被选中的会取消勾选。"
-                : "还没有勾选照片：先在下面勾选或拖动连选一批。"}
-            </p>
-          ) : range.length ? (
-            <p {...stylex.props(styles.range)}>
-              {range.map((line) => (
-                <span key={line}>
-                  {line}
-                  <br />
-                </span>
-              ))}
+        <Field label="候选">
+          {poolSize ? (
+            <p {...stylex.props(styles.pool)}>
+              {again ? `重新从刚才的 ${poolSize} 张里挑` : `从已勾选的 ${poolSize} 张里挑`}
             </p>
           ) : (
-            <p {...stylex.props(ui.note)}>还没有选范围：点照片上方的日期或时段标题来选，可以选好几段。</p>
+            <p {...stylex.props(ui.note)}>还没有勾选照片：点日期或时段标题旁的圆圈整段勾选，或拖动连选。</p>
           )}
         </Field>
         <Field label="目标时长">
@@ -152,7 +113,7 @@ export function AiPanel({
         <Button onClick={onClose} disabled={busy}>
           取消
         </Button>
-        <Button variant="primary" onClick={onRun} disabled={busy || !ready}>
+        <Button variant="primary" onClick={onRun} disabled={busy || poolSize === 0}>
           {busy ? "挑选中…" : "开始挑选"}
         </Button>
       </div>

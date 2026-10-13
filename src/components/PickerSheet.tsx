@@ -7,7 +7,7 @@ import { colors, layout, shadows } from "../tokens.stylex";
 import { useDragSelect } from "../hooks/useDragSelect";
 import type { Library } from "../hooks/useLibrary";
 import { Button, Seg, ui, withStyle } from "../ui";
-import { AiPanel, TARGET, type AiSource } from "./AiPanel";
+import { AiPanel, TARGET } from "./AiPanel";
 
 type Filter = "all" | "live" | "video";
 
@@ -115,8 +115,8 @@ const styles = stylex.create({
   notice: {
     color: colors.muted,
   },
-  // Day and scene titles double as buttons that set AI selection's range.
-  rangeTitle: {
+  // Day and scene titles double as buttons that tick all their photos.
+  groupTitle: {
     display: "inline-flex",
     alignItems: "center",
     gap: 6,
@@ -135,17 +135,53 @@ const styles = stylex.create({
     color: colors.muted,
     fontSize: 12,
     fontWeight: 600,
-    cursor: "pointer",
+    cursor: {
+      default: "pointer",
+      ":disabled": "default",
+    },
   },
   sceneTitle: {
     fontWeight: 500,
   },
-  inRange: {
-    backgroundColor: {
-      default: colors.accentSoft,
-      ":hover": colors.accentSoft,
-    },
+  groupTitleOn: {
     color: colors.accent,
+  },
+  groupCheck: {
+    display: "grid",
+    placeItems: "center",
+    width: 14,
+    height: 14,
+    boxSizing: "border-box",
+    borderWidth: 1.5,
+    borderStyle: "solid",
+    borderColor: colors.muted,
+    borderRadius: "50%",
+  },
+  // Some of the group is ticked: a dash.
+  groupCheckSome: {
+    borderColor: colors.accent,
+    "::after": {
+      content: '""',
+      width: 6,
+      height: 1.5,
+      backgroundColor: colors.accent,
+    },
+  },
+  groupCheckAll: {
+    borderColor: colors.accent,
+    backgroundColor: colors.accent,
+    "::after": {
+      content: '""',
+      width: 6,
+      height: 3,
+      borderTopWidth: "0",
+      borderRightWidth: "0",
+      borderBottomWidth: "1.5px",
+      borderLeftWidth: "1.5px",
+      borderStyle: "solid",
+      borderColor: "#fff",
+      transform: "translateY(-1px) rotate(-45deg)",
+    },
   },
   grid: {
     display: "grid",
@@ -345,16 +381,15 @@ export function PickerSheet({
 }: Props) {
   const [filter, setFilter] = useState<Filter>("live");
   const [chosen, setChosen] = useState<Set<string>>(new Set());
-  /** Scenes AI selection picks from, by `Scene.key`. */
-  const [range, setRange] = useState<Set<string>>(new Set());
   const [target, setTarget] = useState(TARGET.initial);
   /** Off by default: reels are mostly the place, not the people. */
   const [people, setPeople] = useState(false);
   const [verdicts, setVerdicts] = useState<Map<string, AiVerdict>>(new Map());
   const [ai, setAi] = useState<{ busy: boolean; error: string | null }>({ busy: false, error: null });
   const [aiOpen, setAiOpen] = useState(false);
-  /** Pick from the chosen days and scenes, or narrow down the ticked photos. */
-  const [aiSource, setAiSource] = useState<AiSource>("range");
+  /** What the last AI run picked from and picked, so a rerun with other
+   * settings starts from the same photos rather than the picks. */
+  const [lastRun, setLastRun] = useState<{ pool: MediaItem[]; picks: Set<string> } | null>(null);
 
   useEffect(() => {
     if (open && library.state === "idle") onRefresh();
@@ -371,21 +406,21 @@ export function PickerSheet({
   }, [open, library, onLoadThumbs]);
 
   const items = useMemo(() => (library.state === "ready" ? library.items : []), [library]);
-  // Grouped before filtering, so scenes (and the range) stay put when the
-  // filter changes.
+  // Grouped before filtering, so scenes stay put when the filter changes.
   const days = useMemo(() => groupDays(items, (item) => dayLabel(item.createdAt)), [items]);
   const visible = (item: MediaItem) =>
     filter === "all" ||
     (filter === "live" && item.kind === "livePhoto") ||
     (filter === "video" && item.kind === "video");
 
-  function toggleRange(keys: string[]) {
-    setRange((current) => {
+  /** Ticks all of `ids`, or unticks them when they all are. */
+  function toggleGroup(ids: string[]) {
+    setChosen((current) => {
       const next = new Set(current);
-      const all = keys.every((k) => next.has(k));
-      for (const key of keys) {
-        if (all) next.delete(key);
-        else next.add(key);
+      const all = ids.every((id) => next.has(id));
+      for (const id of ids) {
+        if (all) next.delete(id);
+        else next.add(id);
       }
       return next;
     });
@@ -393,26 +428,19 @@ export function PickerSheet({
 
   const closeAi = useCallback(() => setAiOpen(false), []);
 
+  const again =
+    lastRun !== null && lastRun.picks.size === chosen.size && [...chosen].every((id) => lastRun.picks.has(id));
+  const pool = again ? lastRun.pool : items.filter((item) => chosen.has(item.id) && usable(item));
+
   async function runAi() {
-    const pool =
-      aiSource === "chosen"
-        ? items.filter((item) => chosen.has(item.id) && usable(item))
-        : days
-            .flatMap((day) => day.scenes)
-            .filter((scene) => range.has(scene.key))
-            .flatMap((scene) => scene.items)
-            .filter(usable);
     setAi({ busy: true, error: null });
     try {
       const result = await aiSelect(pool, target, people);
-      const inPool = new Set(pool.map((item) => item.id));
+      const picks = new Set(result.filter((v) => v.picked).map((v) => v.id));
       setVerdicts(new Map(result.map((v) => [v.id, v])));
-      // AI's picks replace whatever was ticked inside the range.
-      setChosen((current) => {
-        const next = new Set([...current].filter((id) => !inPool.has(id)));
-        for (const v of result) if (v.picked) next.add(v.id);
-        return next;
-      });
+      // AI's picks replace the ticked photos.
+      setChosen(picks);
+      setLastRun({ pool, picks });
       setAi({ busy: false, error: null });
       setAiOpen(false);
     } catch (e) {
@@ -460,22 +488,12 @@ export function PickerSheet({
     setWasOpen(open);
     if (!open) {
       setChosen(new Set());
-      setRange(new Set());
+      setLastRun(null);
       setVerdicts(new Map());
       setAi({ busy: false, error: null });
       setAiOpen(false);
     }
   }
-
-  // "今天 10:14–11:19 · 36 张" per scene in the range, for the AI panel.
-  const rangeLines = days.flatMap((day) =>
-    day.scenes
-      .filter((scene) => range.has(scene.key))
-      .map((scene) => {
-        const when = day.scenes.length > 1 ? `${day.label} ${sceneLabel(scene)}` : day.label;
-        return `${when} · ${scene.items.filter(usable).length} 张`;
-      }),
-  );
 
   const busy = adding !== null || ai.busy;
   const count = library.state === "ready" ? library.items.length : null;
@@ -515,22 +533,13 @@ export function PickerSheet({
           </Button>
           {/* The panel hangs from its button. */}
           <span {...stylex.props(styles.aiAnchor)}>
-            <Button
-              onClick={() => {
-                // Ticked photos and no range: narrow down the ticked ones.
-                if (!aiOpen) setAiSource(range.size === 0 && chosen.size > 0 ? "chosen" : "range");
-                setAiOpen((o) => !o);
-              }}
-              disabled={busy}
-            >
+            <Button onClick={() => setAiOpen((o) => !o)} disabled={busy}>
               {ai.busy ? "挑选中…" : "AI 选片…"}
             </Button>
             {aiOpen && (
               <AiPanel
-                range={rangeLines}
-                source={aiSource}
-                chosenCount={chosen.size}
-                onSource={setAiSource}
+                poolSize={pool.length}
+                again={again}
                 target={target}
                 people={people}
                 busy={ai.busy}
@@ -559,8 +568,8 @@ export function PickerSheet({
               key={day.label}
               day={day}
               visible={visible}
-              range={range}
-              onRange={toggleRange}
+              chosen={chosen}
+              onToggle={toggleGroup}
               renderTile={(item) => {
                 const on = chosen.has(item.id);
                 const thumb = thumbs[item.id];
@@ -611,7 +620,7 @@ export function PickerSheet({
                   ? progressLabel(adding)
                   : chosen.size
                     ? `已选 ${chosen.size} 项`
-                    : "勾选照片（按住拖动可连选），或点日期、时段标题选范围，再用「AI 选片…」挑出精选")}
+                    : "点击或拖动勾选照片，再让「AI 选片…」从中挑出精选")}
           </span>
           {chosen.size > 0 && (
             <Button variant="ghost" onClick={() => setChosen(new Set())} disabled={busy}>
@@ -631,54 +640,73 @@ export function PickerSheet({
 }
 
 /** A day's title and its pictures, split under scene titles when the day
- * has more than one scene. Either title toggles the range AI picks from. */
+ * has more than one scene. Either title ticks all its photos shown. */
 function DaySection({
   day,
   visible,
-  range,
-  onRange,
+  chosen,
+  onToggle,
   renderTile,
 }: {
   day: Day;
   visible: (item: MediaItem) => boolean;
-  range: Set<string>;
-  onRange: (keys: string[]) => void;
+  chosen: Set<string>;
+  onToggle: (ids: string[]) => void;
   renderTile: (item: MediaItem) => ReactNode;
 }) {
   const scenes = day.scenes
     .map((scene) => ({ scene, shown: scene.items.filter(visible) }))
     .filter(({ shown }) => shown.length > 0);
   if (scenes.length === 0) return null;
-  const keys = day.scenes.map((scene) => scene.key);
-  const dayOn = keys.every((key) => range.has(key));
   const split = day.scenes.length > 1;
   return (
     <section>
-      <button
-        title="选这一天作为 AI 选片的范围"
-        onClick={() => onRange(keys)}
-        {...stylex.props(styles.rangeTitle, dayOn && styles.inRange)}
-      >
-        {dayOn && "✓ "}
+      <GroupTitle items={scenes.flatMap(({ shown }) => shown)} chosen={chosen} onToggle={onToggle}>
         {day.label}
-      </button>
+      </GroupTitle>
       {scenes.map(({ scene, shown }) => (
         <div key={scene.key}>
           {split && (
             <div>
-              <button
-                title="只选这一段作为 AI 选片的范围"
-                onClick={() => onRange([scene.key])}
-                {...stylex.props(styles.rangeTitle, styles.sceneTitle, range.has(scene.key) && styles.inRange)}
-              >
-                {range.has(scene.key) && "✓ "}
+              <GroupTitle items={shown} chosen={chosen} onToggle={onToggle} scene>
                 {sceneLabel(scene)} · {shown.length} 张
-              </button>
+              </GroupTitle>
             </div>
           )}
           <div {...stylex.props(styles.grid)}>{shown.map(renderTile)}</div>
         </div>
       ))}
     </section>
+  );
+}
+
+/** A day or scene title with a check showing none, some or all of its
+ * usable photos ticked; clicking it ticks or unticks them all. */
+function GroupTitle({
+  items,
+  chosen,
+  onToggle,
+  scene = false,
+  children,
+}: {
+  items: MediaItem[];
+  chosen: Set<string>;
+  onToggle: (ids: string[]) => void;
+  scene?: boolean;
+  children: ReactNode;
+}) {
+  const ids = items.filter(usable).map((item) => item.id);
+  const ticked = ids.filter((id) => chosen.has(id)).length;
+  const all = ids.length > 0 && ticked === ids.length;
+  return (
+    <button
+      disabled={ids.length === 0}
+      title={all ? "取消勾选这一段" : "勾选这一段的全部照片"}
+      onClick={() => onToggle(ids)}
+      {...stylex.props(styles.groupTitle, scene && styles.sceneTitle, all && styles.groupTitleOn)}
+    >
+      <span {...stylex.props(styles.groupCheck, all ? styles.groupCheckAll : ticked > 0 && styles.groupCheckSome)} />
+      {children}
+    </button>
   );
 }
