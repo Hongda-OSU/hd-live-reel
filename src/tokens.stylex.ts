@@ -1,4 +1,4 @@
-// Design tokens from docs/design/ui-prototype.html. Light by default; the
+// Design tokens: colours, shadows and fixed sizes. Light by default; the
 // dark values follow the system appearance.
 import * as stylex from "@stylexjs/stylex";
 

@@ -3,5 +3,4 @@ dist
 src-tauri
 photos-helper
 binaries
-docs/design
 pnpm-lock.yaml
