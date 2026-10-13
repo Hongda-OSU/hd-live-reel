@@ -122,7 +122,7 @@ const styles = stylex.create({
   },
   transport: {
     display: "grid",
-    gridTemplateColumns: "auto auto 1fr auto",
+    gridTemplateColumns: "auto 1fr auto",
     gap: 16,
     alignItems: "center",
     justifySelf: "center",
@@ -149,35 +149,74 @@ const styles = stylex.create({
       ":disabled": 0.45,
     },
   },
+  // The clips as a filmstrip, each as wide as its share of the reel, like
+  // the timeline in Photos' video editor.
+  strip: {
+    position: "relative",
+    display: "flex",
+    gap: 2,
+    height: 40,
+    borderRadius: 7,
+    overflow: "hidden",
+    backgroundColor: colors.surface2,
+  },
+  tile: {
+    flexBasis: 0,
+    minWidth: 0,
+    backgroundColor: colors.surface2,
+    backgroundPosition: "center",
+    backgroundSize: "cover",
+  },
+  // The part not yet played is darkened.
+  unplayed: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0, 0, 0, 0.35)",
+    pointerEvents: "none",
+  },
+  playhead: {
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    width: 2,
+    marginLeft: -1,
+    borderRadius: 1,
+    backgroundColor: "#fff",
+    boxShadow: "0 0 0 0.5px rgba(0, 0, 0, 0.35), 0 1px 3px rgba(0, 0, 0, 0.4)",
+    pointerEvents: "none",
+  },
+  // An invisible range input over the strip does the seeking, so mouse
+  // and keyboard work as on any slider. A thumb as thin as the playhead
+  // keeps clicks landing where they point.
+  seek: {
+    position: "absolute",
+    inset: 0,
+    width: "100%",
+    height: "100%",
+    margin: 0,
+    opacity: 0,
+    appearance: "none",
+    cursor: {
+      default: "pointer",
+      ":disabled": "default",
+    },
+    "::-webkit-slider-thumb": {
+      appearance: "none",
+      width: 2,
+      height: 40,
+    },
+  },
+  readout: {
+    display: "grid",
+    justifyItems: "end",
+    gap: 2,
+  },
   time: {
     color: colors.muted,
     fontSize: 12,
     fontVariantNumeric: "tabular-nums",
-  },
-  scrub: {
-    position: "relative",
-    height: 20,
-  },
-  range: {
-    width: "100%",
-    margin: 0,
-    accentColor: colors.accent,
-  },
-  ticks: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 4,
-    pointerEvents: "none",
-  },
-  tick: {
-    position: "absolute",
-    top: 0,
-    width: 1,
-    height: 4,
-    backgroundColor: colors.muted,
-    opacity: 0.6,
   },
   quality: {
     color: colors.muted,
@@ -192,8 +231,10 @@ interface Props {
   /** False when clips are fitted whole (black bars, blur), so there is
    * nothing to drag. */
   croppable: boolean;
-  /** Clip lengths in order, for the boundary ticks under the scrubber. */
+  /** Clip lengths in order, for the widths in the filmstrip. */
   lengths: number[];
+  /** Each clip's thumbnail, in the same order, if loaded. */
+  thumbs: (string | undefined)[];
   /** Seconds to jump to; changes when a clip is picked in the list. */
   seekTo: { time: number; nonce: number } | null;
   busy: boolean;
@@ -225,7 +266,7 @@ const CROP_SLACK = 0.01;
 const clamp01 = (n: number) => Math.min(1, Math.max(0, n));
 
 export function Stage(props: Props) {
-  const { src, aspect, croppable, lengths, seekTo, busy, error, empty, crop } = props;
+  const { src, aspect, croppable, lengths, thumbs, seekTo, busy, error, empty, crop } = props;
   const frameAspect = aspect === "16:9" ? 16 / 9 : 9 / 16;
   const video = useRef<HTMLVideoElement>(null);
   const frame = useRef<HTMLDivElement>(null);
@@ -293,7 +334,7 @@ export function Stage(props: Props) {
 
   const total = lengths.reduce((a, b) => a + b, 0);
   // Where each clip ends, as a share of the whole; the last end is the edge.
-  const ticks = lengths.slice(0, -1).map((_, i) => lengths.slice(0, i + 1).reduce((a, b) => a + b, 0) / total);
+  const played = src && duration ? Math.min(1, time / duration) : 0;
 
   return (
     <section {...stylex.props(styles.area)}>
@@ -384,18 +425,25 @@ export function Stage(props: Props) {
             )}
           </Icon>
         </button>
-        <span {...stylex.props(styles.time)}>
-          {/* Without a preview, the last one's time and length are stale. */}
-          {src ? `${formatTime(time)} / ${formatTime(duration || total)}` : `${formatTime(0)} / ${formatTime(total)}`}
-        </span>
-        <div {...stylex.props(styles.scrub)}>
-          <div {...stylex.props(styles.ticks)}>
-            {ticks.map((t, i) => (
-              <i key={i} {...withStyle(stylex.props(styles.tick), { left: `${t * 100}%` })} />
-            ))}
-          </div>
+        <div {...stylex.props(styles.strip)}>
+          {lengths.map((length, i) => (
+            <span
+              key={i}
+              {...withStyle(stylex.props(styles.tile), {
+                flexGrow: length,
+                backgroundImage: thumbs[i] ? `url("${thumbs[i]}")` : undefined,
+              })}
+            />
+          ))}
+          {src && (
+            <>
+              <span {...withStyle(stylex.props(styles.unplayed), { left: `${played * 100}%` })} />
+              <span {...withStyle(stylex.props(styles.playhead), { left: `${played * 100}%` })} />
+            </>
+          )}
           <input
             type="range"
+            aria-label="播放位置"
             min={0}
             max={(src && duration) || 1}
             step={0.01}
@@ -404,10 +452,18 @@ export function Stage(props: Props) {
             onChange={(e) => {
               if (video.current) video.current.currentTime = Number(e.target.value);
             }}
-            {...stylex.props(styles.range)}
+            {...stylex.props(styles.seek)}
           />
         </div>
-        <span {...stylex.props(styles.quality)}>低清预览 · 导出为高清</span>
+        <div {...stylex.props(styles.readout)}>
+          {/* Without a preview, the last one's time and length are stale. */}
+          <span {...stylex.props(styles.time)}>
+            {src ? `${formatTime(time)} / ${formatTime(duration || total)}` : `${formatTime(0)} / ${formatTime(total)}`}
+          </span>
+          <span title="导出为 1080p 高清" {...stylex.props(styles.quality)}>
+            低清预览
+          </span>
+        </div>
       </div>
     </section>
   );

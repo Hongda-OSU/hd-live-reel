@@ -477,6 +477,7 @@ function App() {
             aspect={project.output.aspect}
             croppable={project.output.fill === "crop"}
             lengths={clipSpans(project)}
+            thumbs={project.clips.map((clip) => (clip.assetId ? thumbs[clip.assetId] : undefined))}
             seekTo={seekTo}
             busy={preview.busy}
             error={preview.error}
