@@ -469,6 +469,7 @@ mod tests {
             progress.iter().all(|p| (0.0..=1.0).contains(p)),
             "{progress:?}"
         );
+        assert!(progress.windows(2).all(|w| w[0] <= w[1]), "{progress:?}");
         assert!(*progress.last().unwrap() > 0.95, "{progress:?}");
     }
 

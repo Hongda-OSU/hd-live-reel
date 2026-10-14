@@ -43,7 +43,7 @@ impl Tool {
     }
 
     /// Runs FFmpeg, calling `on_time` with the seconds of output written so
-    /// far. Checks `cancel` at every progress report (5 a second) and, once
+    /// far, which never goes back. Checks `cancel` at every progress report (5 a second) and, once
     /// it is set, kills FFmpeg and returns `Error::Cancelled`.
     pub fn run_with_progress<I, S>(
         self,
@@ -72,14 +72,20 @@ impl Tool {
         });
 
         let stdout = child.stdout.take().expect("piped");
+        let mut furthest = 0.0;
         for line in BufReader::new(stdout).lines() {
             if cancel.load(Ordering::SeqCst) {
                 let _ = child.kill();
                 let _ = child.wait();
                 return Err(Error::Cancelled);
             }
+            // Near the end FFmpeg can report an earlier time again (a
+            // 28 s export went 27.6, 25.3, 28.1), so only move forward.
             if let Some(seconds) = line.ok().as_deref().and_then(progress_seconds) {
-                on_time(seconds);
+                if seconds > furthest {
+                    furthest = seconds;
+                    on_time(seconds);
+                }
             }
         }
         let status = child
