@@ -1,6 +1,6 @@
 # hd-live-reel
 
-Personal macOS desktop app that stitches iPhone Live Photos into one MP4 with original sound, an opening title and light filters.
+Personal macOS desktop app that stitches iPhone Live Photos into one MP4 with original sound, a title, captions and filters.
 
 ## Stack
 
@@ -24,7 +24,7 @@ Personal macOS desktop app that stitches iPhone Live Photos into one MP4 with or
 | Format everything                                                     | `pnpm format`                                                                |
 | Rust tests                                                            | `cargo test --manifest-path src-tauri/Cargo.toml`                            |
 | Personal-media tests (`baseline`, `ai_select`; env vars in each file) | `cargo test --manifest-path src-tauri/Cargo.toml --test <name> -- --ignored` |
-| Build Swift helper into `binaries/`                                   | `pnpm helper` (also run by `pnpm tauri dev`)                                 |
+| Build Swift helper into `binaries/`                                   | `pnpm helper` (also run by `pnpm tauri dev` and `build`)                     |
 | Run Swift helper                                                      | `./binaries/photos-helper-aarch64-apple-darwin list`                         |
 
 - `photos-helper` needs a USB-connected, unlocked iPhone for `list`, `download` and `thumbnails`.
@@ -50,7 +50,7 @@ Personal macOS desktop app that stitches iPhone Live Photos into one MP4 with or
 - Homebrew's default `ffmpeg` has no `zscale`; P3 → BT.709 and HDR → SDR need it.
 - Live Photo MOVs are ~2 s, 1920×1440, variable frame rate, mono and very quiet (−40 to −59 LUFS).
 - Live Photos are SDR (P3, 8-bit). Only regular iPhone videos are HDR (HLG) and need tone mapping.
-- iPhone "Transfer to Mac or PC" must be "Keep Originals", or files arrive as JPG. "Optimize iPhone Storage" can leave only thumbnails on the phone.
+- iPhone imports arriving as JPG or thumbnails: see the phone settings in README Usage.
 - "Invalid hook call" after adding a JS dependency is a stale Vite cache: delete `node_modules/.vite`, restart `pnpm tauri dev`.
 - Dev and installed apps share one project and cache; never run both.
 

@@ -6,11 +6,7 @@ A macOS desktop app that stitches iPhone Live Photos into one short video, keepi
 
 ## Demo
 
-
-
 https://github.com/user-attachments/assets/660dd1d7-65fa-4575-9734-6c60967294b3
-
-
 
 ## Features
 
@@ -44,7 +40,6 @@ git clone https://github.com/Hongda-OSU/hd-live-reel.git
 cd hd-live-reel
 pnpm install
 ./scripts/fetch-ffmpeg.sh
-pnpm helper
 ```
 
 ## Usage
@@ -56,7 +51,14 @@ pnpm tauri build
 ditto "src-tauri/target/release/bundle/macos/HD Live Reel.app" "/Applications/HD Live Reel.app"
 ```
 
-The bundle is ad-hoc signed, so it opens on the Mac that built it. Connect the iPhone with a cable and unlock it (or skip this and drag files in), then open HD Live Reel. Exports are saved to `~/Movies/HD Live Reel/` unless another folder is chosen in the Export tab of the settings panel.
+The bundle is ad-hoc signed, so it opens on the Mac that built it. To make a reel:
+
+1. Connect the iPhone with a cable and unlock it, or skip this and drag videos and Live Photos in from Finder.
+2. Add photos: tick a day or scene, optionally let AI pick from the ticked ones, then add them.
+3. Edit in the clip list and the settings panel: title, captions, filter, frame and music. Drag the preview to move the crop.
+4. Export from the toolbar. Reels are saved to `~/Movies/HD Live Reel/` unless another folder is chosen on the settings panel's Export page.
+
+In the iPhone's Photos settings, set Transfer to Mac or PC to Keep Originals, or photos arrive as JPG. With Optimize iPhone Storage on, open older photos on the phone first so their originals download.
 
 For development, run it from source instead:
 
