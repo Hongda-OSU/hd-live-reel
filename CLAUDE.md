@@ -19,6 +19,7 @@ Personal macOS desktop app that stitches iPhone Live Photos into one MP4 with or
 | Install JS deps                                                       | `pnpm install`                                                               |
 | Fetch FFmpeg sidecar                                                  | `./scripts/fetch-ffmpeg.sh`                                                  |
 | Run the app                                                           | `pnpm tauri dev`                                                             |
+| Build the `.app`                                                      | `pnpm tauri build`                                                           |
 | All checks (types, ESLint, Prettier, rustfmt, clippy, swift-format)   | `pnpm check`                                                                 |
 | Auto-format everything                                                | `pnpm format`                                                                |
 | Rust tests                                                            | `cargo test --manifest-path src-tauri/Cargo.toml`                            |
@@ -39,8 +40,8 @@ Personal macOS desktop app that stitches iPhone Live Photos into one MP4 with or
 - `src/ui/` holds generic controls that know nothing about Live Photos or projects; app-specific components go in `src/components/`, hooks in `src/hooks/`.
 - Never commit photos or videos; they carry GPS data. Test media stays outside the repo.
 - Ask before adding a dependency or changing the `project.json` schema. If a change touches more than three files, propose the approach first.
-- Run `pnpm check` before every commit. Do not commit if it fails.
-- After any code change, run the tests for the affected area before saying it's done.
+- Run `pnpm check` before every commit; never commit if it fails.
+- After code changes, run the affected tests before saying it's done.
 - Commits: Conventional Commits, atomic, subject and body lines ≤ 72 chars, body explains only why.
 - When commands or config change, update `README.md` (English only) in the same commit.
 

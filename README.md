@@ -48,3 +48,12 @@ pnpm tauri dev
 ```
 
 Exports are saved to `~/Movies/HD Live Reel/` unless another folder is chosen in the Export section of the settings panel.
+
+To use it as a regular app, build it once and copy it to Applications:
+
+```bash
+pnpm tauri build
+ditto "src-tauri/target/release/bundle/macos/HD Live Reel.app" "/Applications/HD Live Reel.app"
+```
+
+The bundle is ad-hoc signed, so it opens on the Mac that built it.
