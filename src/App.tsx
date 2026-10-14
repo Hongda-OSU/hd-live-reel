@@ -29,6 +29,7 @@ import {
   clipSpans,
   clipStart,
   crossfade,
+  FRAME,
   hasCaption,
   hasTitleText,
   reducer,
@@ -82,11 +83,52 @@ const styles = stylex.create({
     justifyContent: "flex-end",
     paddingRight: 14,
   },
-  // Export is a plain button like 添加照片, marked only by a blue icon, so
-  // the toolbar stays quiet and balanced.
+  // Export says what it will make before it is clicked: the button's
+  // right part, a shade darker, shows the size and length.
+  exportButton: {
+    display: "inline-flex",
+    alignItems: "stretch",
+    height: 30,
+    padding: 0,
+    overflow: "hidden",
+    borderWidth: 0,
+    borderRadius: 8,
+    backgroundColor: colors.accent,
+    boxShadow: "0 1px 2px rgba(0, 0, 0, 0.2)",
+    color: colors.onAccent,
+    whiteSpace: "nowrap",
+    cursor: {
+      default: "pointer",
+      ":disabled": "default",
+    },
+    filter: {
+      default: null,
+      ":hover:not(:disabled)": "brightness(1.08)",
+    },
+    opacity: {
+      default: 1,
+      ":disabled": 0.45,
+    },
+  },
+  exportMain: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 6,
+    paddingInline: 12,
+    fontWeight: 600,
+  },
+  exportInfo: {
+    display: "inline-flex",
+    alignItems: "center",
+    paddingInline: 10,
+    backgroundColor: "rgba(0, 0, 0, 0.16)",
+    fontSize: 11,
+    fontVariantNumeric: "tabular-nums",
+  },
   exportIcon: {
-    display: "flex",
-    color: colors.accent,
+    width: 15,
+    height: 15,
+    fill: "currentColor",
   },
   name: {
     width: 260,
@@ -500,14 +542,22 @@ function App() {
           </div>
         </div>
         <div data-tauri-drag-region {...stylex.props(styles.toolbarRight)}>
-          <Button disabled={project.clips.length === 0} onClick={() => setExportOpen(true)}>
-            <span {...stylex.props(styles.exportIcon)}>
-              <Icon>
-                <path d="M8 10V2.5M5 5.5 8 2.5l3 3M3 9.5v3.5h10V9.5" />
-              </Icon>
+          <button
+            disabled={project.clips.length === 0}
+            onClick={() => setExportOpen(true)}
+            {...stylex.props(styles.exportButton)}
+          >
+            <span {...stylex.props(styles.exportMain)}>
+              {/* A film frame with an up arrow. */}
+              <svg viewBox="0 0 16 16" aria-hidden {...stylex.props(styles.exportIcon)}>
+                <path d="M3 2h10a1.5 1.5 0 0 1 1.5 1.5v9A1.5 1.5 0 0 1 13 14H3a1.5 1.5 0 0 1-1.5-1.5v-9A1.5 1.5 0 0 1 3 2zm.3 1.6v1.2h1.2V3.6zm0 3.3v1.2h1.2V6.9zm0 3.3v1.2h1.2v-1.2zm8.2-6.6v1.2h1.2V3.6zm0 3.3v1.2h1.2V6.9zm0 3.3v1.2h1.2v-1.2zM8 4.6 5.8 7h1.5v4h1.4V7h1.5z" />
+              </svg>
+              导出
             </span>
-            导出
-          </Button>
+            <span {...stylex.props(styles.exportInfo)}>
+              {project.clips.length ? `${FRAME[project.output.aspect].join("×")} · ${Math.round(total)} 秒` : "—"}
+            </span>
+          </button>
         </div>
       </header>
 
