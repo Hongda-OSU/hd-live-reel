@@ -3,7 +3,7 @@ import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import * as stylex from "@stylexjs/stylex";
 import { cancelExport, EXPORT_CANCELLED, exportVideo, onExportProgress, type Project } from "../api";
 import { colors, shadows } from "../tokens.stylex";
-import { folderLabel, UNTITLED, type Action } from "../project";
+import { folderLabel, FRAME, UNTITLED, type Action } from "../project";
 import { Button, Field, ui, withStyle } from "../ui";
 
 type Phase =
@@ -192,8 +192,7 @@ function DialogBody({ project, dispatch, onClose }: Omit<Props, "open">) {
             <p {...stylex.props(ui.note)}>
               保存到「{folderLabel(project.output.folder)}」，重名会自动加编号。
               <br />
-              {project.output.aspect === "16:9" ? "1920 × 1080 横屏" : "1080 × 1920 竖屏"} · MP4（H.264 +
-              AAC），微信可以直接发送和播放。
+              {FRAME[project.output.aspect].join(" × ")} · MP4（H.264 + AAC），微信可以直接发送和播放。
             </p>
             {phase.step === "form" && phase.cancelled && <p {...stylex.props(ui.note)}>已取消，没有保存任何文件。</p>}
             {phase.step === "error" && <p {...stylex.props(ui.error)}>{phase.message}</p>}

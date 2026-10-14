@@ -68,6 +68,8 @@ pub fn composition(project: &Project) -> Result<Composition, String> {
         clips,
         shape: match project.output.aspect {
             p::Aspect::Portrait => Shape::Portrait,
+            p::Aspect::Photo => Shape::Photo,
+            p::Aspect::Square => Shape::Square,
             p::Aspect::Landscape => Shape::Landscape,
         },
         fill: match project.output.fill {

@@ -33,7 +33,7 @@ Personal macOS desktop app that stitches iPhone Live Photos into one MP4 with or
 
 - Preview and export use the same FFmpeg filter graph built from `project.json`; only resolution and encoder speed differ. Never emulate filters in CSS/WebGL.
 - Treat originals as read-only. Write intermediates only to `~/Library/Caches/<App>/`.
-- Normalize every clip on import to 30 fps, BT.709 SDR, stereo 48 kHz, keeping its shape; compose fits it to the 9:16 or 16:9 frame.
+- Normalize every clip on import to 30 fps, BT.709 SDR, stereo 48 kHz, keeping its shape; compose fits it to the output frame.
 - Lay out title and caption text in a frontend Canvas and overlay it as a transparent PNG. Do not use FFmpeg `drawtext`.
 - Rust owns timing (`Composition::length`, `crossfade`, `clip_windows`, `SCENE_GAP`); `clipSpans` in `src/project.ts` and `src/scenes.ts` must match it.
 - Style components with StyleX; colours and sizes come from `src/tokens.stylex.ts`. Only document-level resets go in `src/global.css`.

@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState, type PointerEvent } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type PointerEvent } from "react";
 import * as stylex from "@stylexjs/stylex";
 import { colors, shadows } from "../tokens.stylex";
 import { Icon, withStyle } from "../ui";
-import { formatTime } from "../project";
+import type { Output } from "../api";
+import { formatTime, FRAME } from "../project";
 import { CropLayer, fillFactor } from "./CropLayer";
 
 const styles = stylex.create({
@@ -37,13 +38,10 @@ const styles = stylex.create({
     touchAction: "none",
   },
   // As large as fits: the full width, unless that would be too tall.
-  portrait: {
-    width: "min(100cqw, 100cqh * 9 / 16)",
-    aspectRatio: "9 / 16",
-  },
-  landscape: {
-    width: "min(100cqw, 100cqh * 16 / 9)",
-    aspectRatio: "16 / 9",
+  // `--ratio` is the frame's width over its height.
+  shaped: {
+    width: "min(100cqw, 100cqh * var(--ratio))",
+    aspectRatio: "var(--ratio)",
   },
   grab: {
     cursor: "grab",
@@ -227,7 +225,7 @@ const styles = stylex.create({
 interface Props {
   /** Playable URL of the latest preview, or null before the first one. */
   src: string | null;
-  aspect: "9:16" | "16:9";
+  aspect: Output["aspect"];
   /** False when clips are fitted whole (black bars, blur), so there is
    * nothing to drag. */
   croppable: boolean;
@@ -267,7 +265,8 @@ const clamp01 = (n: number) => Math.min(1, Math.max(0, n));
 
 export function Stage(props: Props) {
   const { src, aspect, croppable, lengths, thumbs, seekTo, busy, error, empty, crop } = props;
-  const frameAspect = aspect === "16:9" ? 16 / 9 : 9 / 16;
+  const [frameWidth, frameHeight] = FRAME[aspect];
+  const frameAspect = frameWidth / frameHeight;
   const video = useRef<HTMLVideoElement>(null);
   const frame = useRef<HTMLDivElement>(null);
   const [time, setTime] = useState(0);
@@ -347,12 +346,15 @@ export function Stage(props: Props) {
           onPointerCancel={onPointerUp}
           onPointerEnter={() => setHovered(true)}
           onPointerLeave={() => setHovered(false)}
-          {...stylex.props(
-            styles.frame,
-            aspect === "16:9" ? styles.landscape : styles.portrait,
-            empty && styles.frameEmpty,
-            src !== null && croppable && styles.grab,
-            crop !== null && styles.cropping,
+          {...withStyle(
+            stylex.props(
+              styles.frame,
+              styles.shaped,
+              empty && styles.frameEmpty,
+              src !== null && croppable && styles.grab,
+              crop !== null && styles.cropping,
+            ),
+            { "--ratio": `${frameWidth} / ${frameHeight}` } as CSSProperties,
           )}
         >
           {src && (

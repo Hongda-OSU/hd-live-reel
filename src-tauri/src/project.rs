@@ -298,6 +298,11 @@ impl Default for Selection {
 pub enum Aspect {
     #[serde(rename = "9:16")]
     Portrait,
+    /// The shape of an iPhone photo.
+    #[serde(rename = "3:4")]
+    Photo,
+    #[serde(rename = "1:1")]
+    Square,
     #[serde(rename = "16:9")]
     Landscape,
 }
@@ -558,6 +563,9 @@ mod tests {
         project.clips.push(clip(0.0, 2.0, 0.5));
         let json = serde_json::to_value(&project).unwrap();
         assert_eq!(json["output"]["aspect"], "9:16");
+        for (aspect, ratio) in [(Aspect::Photo, "3:4"), (Aspect::Square, "1:1")] {
+            assert_eq!(serde_json::to_value(aspect).unwrap(), ratio);
+        }
         assert_eq!(json["transition"]["type"], "none");
         assert_eq!(json["title"]["showFor"], 1.0);
         assert_eq!(json["title"]["lineGap"], 18.0);

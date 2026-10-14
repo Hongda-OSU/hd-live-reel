@@ -2,13 +2,8 @@
 // transparent output-sized canvases. FFmpeg overlays the PNGs, so what is
 // drawn here is exactly what gets exported.
 import type { Caption, Output, Title, TitlePosition, TitleWeight } from "./api";
+import { FRAME } from "./project";
 
-/** Output frame in pixels. Font sizes are pixels on the 1080 short side,
- * so a title looks the same size in either shape. */
-const FRAME: Record<Output["aspect"], [number, number]> = {
-  "9:16": [1080, 1920],
-  "16:9": [1920, 1080],
-};
 /** Text never runs wider than this share of the frame. */
 const MAX_TEXT_SHARE = 0.86;
 const SUBTITLE_SCALE = 0.62;

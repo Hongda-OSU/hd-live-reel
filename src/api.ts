@@ -122,7 +122,7 @@ export interface Transition {
 }
 
 export interface Output {
-  aspect: "9:16" | "16:9";
+  aspect: "9:16" | "3:4" | "1:1" | "16:9";
   fill: "crop" | "black" | "blur";
   height: number;
   /** Folder exports are saved in; empty means Movies › HD Live Reel. */

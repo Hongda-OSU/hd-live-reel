@@ -80,6 +80,15 @@ export function reducer(project: Project | null, action: Action): Project | null
 
 export const clipLength = (clip: Clip) => clip.trimEnd - clip.trimStart;
 
+/** Output frame in pixels, matching `Shape::size` in Rust. The short side
+ * is always 1080, so text sized for it looks the same in every shape. */
+export const FRAME: Record<Aspect, [number, number]> = {
+  "9:16": [1080, 1920],
+  "3:4": [1080, 1440],
+  "1:1": [1080, 1080],
+  "16:9": [1920, 1080],
+};
+
 /** Shortest a trimmed clip may get, in seconds. */
 export const MIN_CLIP_LENGTH = 0.5;
 

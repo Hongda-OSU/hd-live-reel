@@ -56,11 +56,16 @@ pub enum Quality {
     Export,
 }
 
-/// Shape of the finished video.
+/// Shape of the finished video. The short side is always 1080, so text
+/// sized for it looks the same in every shape.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Shape {
     /// 9:16, 1080×1920.
     Portrait,
+    /// 3:4, 1080×1440.
+    Photo,
+    /// 1:1, 1080×1080.
+    Square,
     /// 16:9, 1920×1080.
     Landscape,
 }
@@ -70,6 +75,8 @@ impl Shape {
     pub fn size(self, quality: Quality) -> (u32, u32) {
         let (width, height) = match self {
             Shape::Portrait => (1080, 1920),
+            Shape::Photo => (1080, 1440),
+            Shape::Square => (1080, 1080),
             Shape::Landscape => (1920, 1080),
         };
         match quality {
@@ -746,6 +753,25 @@ mod tests {
     }
 
     #[test]
+    fn every_shape_has_a_1080_short_side_and_even_preview() {
+        for shape in [
+            Shape::Portrait,
+            Shape::Photo,
+            Shape::Square,
+            Shape::Landscape,
+        ] {
+            let (width, height) = shape.size(Quality::Export);
+            assert_eq!(width.min(height), 1080, "{shape:?}");
+            let (width, height) = shape.size(Quality::Preview);
+            // H.264 with 4:2:0 chroma needs even sides.
+            assert!(width % 2 == 0 && height % 2 == 0, "{shape:?}");
+        }
+        let mut photo = composition(None);
+        photo.shape = Shape::Photo;
+        assert!(filter_graph(&photo, Quality::Export).starts_with(&fit(0, 1080, 1440)));
+    }
+
+    #[test]
     fn landscape_frames_are_wide() {
         let mut wide = composition(None);
         wide.shape = Shape::Landscape;
@@ -1250,7 +1276,12 @@ mod tests {
         let duration = normalize(&src, &norm).unwrap().duration;
 
         let mut sizes = Vec::new();
-        for shape in [Shape::Portrait, Shape::Landscape] {
+        for shape in [
+            Shape::Portrait,
+            Shape::Photo,
+            Shape::Square,
+            Shape::Landscape,
+        ] {
             for fill in [Fill::Crop, Fill::Black, Fill::Blur] {
                 let out = dir.join(format!("{shape:?}-{fill:?}.mp4"));
                 let composition = Composition {

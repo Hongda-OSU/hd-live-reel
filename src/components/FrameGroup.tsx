@@ -22,8 +22,10 @@ export function FrameGroup({ output, dispatch }: Props) {
       <Field>
         <Seg<Output["aspect"]>
           options={[
-            ["9:16", "9:16 竖屏"],
-            ["16:9", "16:9 横屏"],
+            ["9:16", "9:16"],
+            ["3:4", "3:4"],
+            ["1:1", "1:1"],
+            ["16:9", "16:9"],
           ]}
           value={output.aspect}
           onChange={(aspect) => set({ aspect })}
