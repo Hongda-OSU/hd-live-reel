@@ -18,7 +18,10 @@ export type Action =
   | { type: "updateFilter"; patch: Partial<Filter> }
   | { type: "updateAudio"; patch: Partial<Audio> }
   | { type: "updateTransition"; patch: Partial<Transition> }
-  | { type: "updateOutput"; patch: Partial<Output> };
+  | { type: "updateOutput"; patch: Partial<Output> }
+  /** The settings panel back to a new project's, keeping what was chosen
+   * rather than tuned: title text, music track and export folder. */
+  | { type: "resetSettings"; defaults: Project };
 
 export function reducer(project: Project | null, action: Action): Project | null {
   if (action.type === "load") return action.project;
@@ -60,6 +63,18 @@ export function reducer(project: Project | null, action: Action): Project | null
       return { ...project, transition: { ...project.transition, ...action.patch } };
     case "updateOutput":
       return { ...project, output: { ...project.output, ...action.patch } };
+    case "resetSettings": {
+      const { title, audio, filter, transition, output } = action.defaults;
+      const { text, subtitle, textImage } = project.title;
+      return {
+        ...project,
+        title: { ...title, text, subtitle, textImage },
+        audio: { ...audio, musicPath: project.audio.musicPath },
+        filter,
+        transition,
+        output: { ...output, folder: project.output.folder },
+      };
+    }
   }
 }
 

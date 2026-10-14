@@ -162,6 +162,8 @@ export const MEDIA_EXTENSIONS = ["mov", "mp4", "m4v", "heic", "heif", "jpg", "jp
 
 export const loadProject = () => invoke<Project>("load_project");
 export const saveProject = (project: Project) => invoke<void>("save_project", { project });
+/** A new project, for its default settings. */
+export const defaultProject = () => invoke<Project>("default_project");
 
 export const listIphoneMedia = () => invoke<MediaItem[]>("list_iphone_media");
 /** Thumbnails for iPhone item ids and the asset ids of clips. */

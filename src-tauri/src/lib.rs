@@ -78,6 +78,12 @@ fn save_project(current: State<CurrentProject>, project: project::Project) -> Re
 }
 
 /// Photos, videos and Live Photos on the connected iPhone, newest first.
+/// A new project's settings, for resetting the open one's.
+#[tauri::command]
+fn default_project() -> project::Project {
+    project::Project::default()
+}
+
 #[tauri::command]
 async fn list_iphone_media() -> Result<Vec<iphone::MediaItem>, String> {
     blocking(|| iphone::list().map_err(|e| e.to_string())).await
@@ -257,6 +263,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             load_project,
             save_project,
+            default_project,
             list_iphone_media,
             thumbnails,
             add_iphone_clips,

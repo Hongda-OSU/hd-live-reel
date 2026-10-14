@@ -6,6 +6,7 @@ import {
   addFileClips,
   addIphoneClips,
   cropFrame,
+  defaultProject,
   fileUrl,
   loadProject,
   onClipsProgress,
@@ -404,6 +405,15 @@ function App() {
     setSelectedId(null);
   }
 
+  async function resetSettings() {
+    const confirmed = await ask(
+      "标题样式、声音、滤镜、转场和画幅会回到新工程的样子。标题文字、配乐文件和导出文件夹保留，片段不受影响。",
+      { title: "恢复默认设置", kind: "warning", okLabel: "恢复", cancelLabel: "取消" },
+    );
+    if (!confirmed) return;
+    dispatch({ type: "resetSettings", defaults: await defaultProject() });
+  }
+
   function selectClip(id: string) {
     if (!project) return;
     setSelectedId(id);
@@ -550,6 +560,7 @@ function App() {
           transition={project.transition}
           output={project.output}
           dispatch={dispatch}
+          onReset={resetSettings}
         />
       </main>
 

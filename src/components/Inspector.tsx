@@ -42,6 +42,12 @@ const styles = stylex.create({
     borderLeftColor: colors.border,
     backgroundColor: colors.window,
   },
+  reset: {
+    display: "flex",
+    justifyContent: "center",
+    paddingTop: "14px",
+    paddingBottom: "20px",
+  },
 });
 
 const NEUTRAL: Pick<Filter, "brightness" | "contrast" | "saturation"> = {
@@ -61,9 +67,11 @@ interface Props {
   transition: Transition;
   output: Output;
   dispatch: (action: Action) => void;
+  /** Asks, then puts every setting here back to a new project's. */
+  onReset: () => void;
 }
 
-export function Inspector({ title, audio, filter, transition, output, dispatch }: Props) {
+export function Inspector({ title, audio, filter, transition, output, dispatch, onReset }: Props) {
   const set = (patch: Partial<Title>) => dispatch({ type: "updateTitle", patch });
   const setFilter = (patch: Partial<Filter>) => dispatch({ type: "updateFilter", patch });
   const setTransition = (patch: Partial<Transition>) => dispatch({ type: "updateTransition", patch });
@@ -263,6 +271,11 @@ export function Inspector({ title, audio, filter, transition, output, dispatch }
       <FrameGroup output={output} dispatch={dispatch} />
 
       <ExportGroup output={output} dispatch={dispatch} />
+      <div {...stylex.props(styles.reset)}>
+        <Button variant="ghost" onClick={onReset}>
+          恢复默认设置
+        </Button>
+      </div>
     </aside>
   );
 }
