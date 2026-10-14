@@ -1,3 +1,5 @@
+<img src="src-tauri/icons/128x128@2x.png" width="128" height="128" alt="hd-live-reel app icon: a lake at sunset with the Live Photo mark">
+
 # hd-live-reel
 
 A macOS desktop app that stitches iPhone Live Photos into one short video, keeping the original sound and adding an opening title.
