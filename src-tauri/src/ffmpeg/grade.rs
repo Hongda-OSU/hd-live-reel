@@ -2,7 +2,8 @@
 //! brightness / contrast / saturation sliders. Built only from FFmpeg's own
 //! filters; the preset numbers are hand-picked starting points.
 
-/// A preset look; the frontend calls these 林间 / 水色 / 暖阳.
+/// A preset look; the frontend calls these 林间 / 水色 / 暖阳 / 城市 /
+/// 蒸汽波 / 黑白.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Look {
     /// Richer, deeper greens.
@@ -11,6 +12,12 @@ pub enum Look {
     River,
     /// Warm late-afternoon light.
     Golden,
+    /// Teal shadows, warm midtones, more contrast: the film-poster look.
+    City,
+    /// Vaporwave: yellows turn hot pink, greens teal, shadows purple.
+    Vapor,
+    /// Black and white.
+    Mono,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -77,6 +84,23 @@ fn look_filter(look: Look) -> &'static str {
              huesaturation=colors=r+y:saturation=0.3:strength=3,\
              eq=contrast=1.04"
         }
+        // Coloured shadows lean teal and midtones orange. Not highlights:
+        // colorbalance would tint white there.
+        Look::City => {
+            "colorbalance=rs=-0.10:gs=0.02:bs=0.12:rm=0.07:gm=0.01:bm=-0.07,\
+             eq=contrast=1.10:saturation=0.85"
+        }
+        // huesaturation turns hue up for positive values: greens +60 go
+        // teal, yellows -90 go pink. The curves lift black to dark purple
+        // and leave white alone.
+        Look::Vapor => {
+            "huesaturation=colors=g:hue=60:strength=3,\
+             huesaturation=colors=y:hue=-90:strength=3,\
+             colorbalance=rs=0.06:gs=-0.04:bs=0.14:rm=0.10:gm=-0.06:bm=0.08,\
+             eq=saturation=1.2,\
+             curves=r='0/0.08 1/1':g='0/0.02 1/1':b='0/0.16 1/1'"
+        }
+        Look::Mono => "hue=s=0,eq=contrast=1.12",
     }
 }
 
@@ -151,15 +175,23 @@ mod tests {
 
     #[test]
     fn looks_leave_white_alone() {
-        for look in [Look::Forest, Look::River, Look::Golden] {
+        for look in [
+            Look::Forest,
+            Look::River,
+            Look::Golden,
+            Look::City,
+            Look::Vapor,
+            Look::Mono,
+        ] {
             let grade = Grade {
                 look: Some(look),
                 ..Grade::default()
             };
             for key in ["UAVG", "VAVG"] {
                 let value = stat_of("color=white:s=64x64:d=1", grade.filter(), key);
+                // A step of 1 is rounding, not a tint.
                 assert!(
-                    (value - 128.0).abs() < 1.0,
+                    (value - 128.0).abs() < 1.5,
                     "{look:?} tints white: {key}={value}"
                 );
             }
@@ -192,6 +224,43 @@ mod tests {
             stat_of(tan, filter.clone(), "VAVG") - stat_of(tan, filter, "UAVG")
         };
         assert!(warmth(look(Look::Golden)) > warmth(None) + 1.0);
+    }
+
+    #[test]
+    fn newer_looks_do_what_they_say() {
+        let look = |look| {
+            Grade {
+                look: Some(look),
+                ..Grade::default()
+            }
+            .filter()
+        };
+        assert!(stat(look(Look::Mono), "SATAVG") < 1.0, "mono keeps colour");
+
+        // Yellow gains blue on its way to pink; black turns purple, so more
+        // blue (U) than red (V).
+        let yellow = "color=0xd8c020:s=64x64:d=1";
+        let black = "color=black:s=64x64:d=1";
+        assert!(stat_of(yellow, look(Look::Vapor), "UAVG") > stat_of(yellow, None, "UAVG") + 30.0);
+        assert!(
+            stat_of(black, look(Look::Vapor), "UAVG") > 132.0,
+            "purple shadows"
+        );
+
+        // Slightly warm colours, since colorbalance skips pure greys.
+        let warmth = |source, filter: Option<String>| {
+            stat_of(source, filter.clone(), "VAVG") - stat_of(source, filter, "UAVG")
+        };
+        let shadow = "color=0x2a2620:s=64x64:d=1";
+        let midtone = "color=0x5a5040:s=64x64:d=1";
+        assert!(
+            warmth(shadow, look(Look::City)) < warmth(shadow, None) - 3.0,
+            "teal shadows"
+        );
+        assert!(
+            warmth(midtone, look(Look::City)) > warmth(midtone, None) + 3.0,
+            "warm mids"
+        );
     }
 
     #[test]

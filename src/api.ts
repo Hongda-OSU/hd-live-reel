@@ -97,7 +97,7 @@ export interface Title {
 }
 
 export interface Filter {
-  preset: "none" | "forest" | "river" | "golden";
+  preset: "none" | "forest" | "river" | "golden" | "city" | "vapor" | "mono";
   /** Added to luma; 0 leaves it alone. */
   brightness: number;
   /** 1 leaves it alone. */

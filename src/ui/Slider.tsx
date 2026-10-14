@@ -7,6 +7,9 @@ const styles = stylex.create({
   row: {
     minHeight: 26,
   },
+  disabled: {
+    opacity: 0.45,
+  },
   // WebKit gives range inputs a 2px margin; without it the track lines
   // up with the fields above and below.
   range: {
@@ -23,6 +26,7 @@ export function Slider({
   step,
   value,
   shown,
+  disabled = false,
   onChange,
 }: {
   min: number;
@@ -30,16 +34,18 @@ export function Slider({
   step: number;
   value: number;
   shown: string;
+  disabled?: boolean;
   onChange: (value: number) => void;
 }) {
   return (
-    <div {...stylex.props(ui.inline, styles.row)}>
+    <div {...stylex.props(ui.inline, styles.row, disabled && styles.disabled)}>
       <input
         type="range"
         min={min}
         max={max}
         step={step}
         value={value}
+        disabled={disabled}
         onChange={(e) => onChange(Number(e.target.value))}
         {...stylex.props(styles.range)}
       />

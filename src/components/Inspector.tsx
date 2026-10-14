@@ -189,6 +189,8 @@ export function Inspector({ title, audio, filter, transition, output, dispatch, 
       <SoundGroup audio={audio} dispatch={dispatch} />
 
       <Group title="滤镜">
+        {/* Two rows; one value, so a pick in either row clears the other.
+            Natural looks first, styled ones below. */}
         <Field>
           <Seg<Filter["preset"]>
             options={[
@@ -196,6 +198,15 @@ export function Inspector({ title, audio, filter, transition, output, dispatch, 
               ["forest", "林间"],
               ["river", "水色"],
               ["golden", "暖阳"],
+            ]}
+            value={filter.preset}
+            onChange={(preset) => setFilter({ preset })}
+          />
+          <Seg<Filter["preset"]>
+            options={[
+              ["city", "城市"],
+              ["vapor", "蒸汽波"],
+              ["mono", "黑白"],
             ]}
             value={filter.preset}
             onChange={(preset) => setFilter({ preset })}
@@ -228,6 +239,7 @@ export function Inspector({ title, audio, filter, transition, output, dispatch, 
             step={0.01}
             value={filter.saturation}
             shown={signed(filter.saturation - 1)}
+            disabled={filter.preset === "mono"}
             onChange={(saturation) => setFilter({ saturation })}
           />
         </Field>

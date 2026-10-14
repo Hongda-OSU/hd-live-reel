@@ -195,6 +195,9 @@ pub enum Preset {
     Forest,
     River,
     Golden,
+    City,
+    Vapor,
+    Mono,
 }
 
 /// Values follow FFmpeg's `eq` filter: brightness is an offset around 0,
