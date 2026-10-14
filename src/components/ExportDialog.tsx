@@ -102,27 +102,6 @@ const styles = stylex.create({
     justifyContent: "space-between",
     fontVariantNumeric: "tabular-nums",
   },
-  done: {
-    display: "grid",
-    placeItems: "center",
-    width: 40,
-    height: 40,
-    marginBottom: 10,
-    borderRadius: "50%",
-    backgroundColor: colors.success,
-    "::after": {
-      content: '""',
-      width: 16,
-      height: 8,
-      borderTopWidth: "0",
-      borderRightWidth: "0",
-      borderBottomWidth: "3px",
-      borderLeftWidth: "3px",
-      borderStyle: "solid",
-      borderColor: "#fff",
-      transform: "translateY(-2px) rotate(-45deg)",
-    },
-  },
 });
 
 interface Props {
@@ -223,7 +202,6 @@ function DialogBody({ project, dispatch, onClose }: Omit<Props, "open">) {
         )}
         {phase.step === "done" && (
           <>
-            <div {...stylex.props(styles.done)} />
             <h2 {...stylex.props(styles.heading)}>导出完成</h2>
             <p {...stylex.props(ui.note)}>{phase.path.split("/").pop()}</p>
             <div {...stylex.props(styles.actions)}>
