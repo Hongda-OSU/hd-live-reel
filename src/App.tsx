@@ -37,6 +37,7 @@ import {
   titleImageKey,
   totalLength,
   UNTITLED,
+  type Action,
 } from "./project";
 import { renderCaptionPng, renderTitlePng } from "./title";
 import { colors, layout } from "./tokens.stylex";
@@ -225,7 +226,7 @@ function App() {
   const [addError, setAddError] = useState<string | null>(null);
   const [drop, setDrop] = useState<Drop | null>(null);
   const [preview, setPreview] = useState<Preview>({ url: null, busy: false, error: null });
-  const [seekTo, setSeekTo] = useState<{ time: number; nonce: number } | null>(null);
+  const [seekTo, setSeekTo] = useState<{ time: number; nonce: number; peek?: boolean } | null>(null);
   const [crop, setCrop] = useState<Crop | null>(null);
   /** Clip open in the large trim view, which takes the preview's place. */
   const [trimming, setTrimming] = useState<string | null>(null);
@@ -353,7 +354,9 @@ function App() {
           // Show the clip that was just cropped or trimmed, not the start.
           const clipId = applied?.phase === "rendering" ? applied.clipId : seekAfterRender.current;
           seekAfterRender.current = null;
-          if (clipId) setSeekTo({ time: clipStart(latest.current!, clipId), nonce: Date.now() });
+          if (clipId && rendered.clips.some((c) => c.id === clipId)) {
+            setSeekTo({ time: clipStart(rendered, clipId), nonce: Date.now(), peek: true });
+          }
         }
       } catch (e) {
         if (seq === renderSeq.current) {
@@ -456,6 +459,13 @@ function App() {
     dispatch({ type: "resetSettings", defaults: await defaultProject() });
   }
 
+  /** Edits in the clip panel, such as a caption, show on that clip once
+   * the preview has them, not back at the start. */
+  function clipDispatch(action: Action) {
+    if (action.type === "updateClip") seekAfterRender.current = action.id;
+    dispatch(action);
+  }
+
   function selectClip(id: string) {
     if (!project) return;
     setSelectedId(id);
@@ -504,8 +514,9 @@ function App() {
     setTrimming(null);
     if (!id || !project) return;
     // Back on the preview at the trimmed clip, once it shows the new trim.
-    if (shownKey.current === renderKey(project)) setSeekTo({ time: clipStart(project, id), nonce: Date.now() });
-    else seekAfterRender.current = id;
+    if (shownKey.current === renderKey(project)) {
+      setSeekTo({ time: clipStart(project, id), nonce: Date.now(), peek: true });
+    } else seekAfterRender.current = id;
   }
 
   if (loadError) return <p {...stylex.props(styles.fatal)}>无法打开工程：{loadError}</p>;
@@ -581,7 +592,7 @@ function App() {
               setCrop(null);
               setTrimming(id);
             }}
-            dispatch={dispatch}
+            dispatch={clipDispatch}
           />
         </aside>
         {trimClip ? (

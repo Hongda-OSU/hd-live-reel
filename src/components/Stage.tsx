@@ -268,8 +268,9 @@ interface Props {
   lengths: number[];
   /** Each clip's thumbnail, in the same order, if loaded. */
   thumbs: (string | undefined)[];
-  /** Seconds to jump to; changes when a clip is picked in the list. */
-  seekTo: { time: number; nonce: number } | null;
+  /** Seconds to jump to; changes when a clip is picked in the list. A
+   * `peek` only shows an edit there: playing then starts from the top. */
+  seekTo: { time: number; nonce: number; peek?: boolean } | null;
   busy: boolean;
   error: string | null;
   empty: boolean;
@@ -305,6 +306,15 @@ const STEPS = [
   "点右上角「导出」，直接发微信",
 ];
 
+/** Play or pause; play starts from the top while parked on an edit. */
+function toggle(video: HTMLVideoElement | null, rewind: { current: boolean }) {
+  if (!video) return;
+  if (!video.paused) return video.pause();
+  if (rewind.current) video.currentTime = 0;
+  rewind.current = false;
+  video.play();
+}
+
 export function Stage(props: Props) {
   const { src, aspect, croppable, lengths, thumbs, seekTo, busy, error, empty, crop } = props;
   const [frameWidth, frameHeight] = FRAME[aspect];
@@ -325,7 +335,10 @@ export function Stage(props: Props) {
   const nothingToCrop = overflow !== null && overflow.x < 1 + CROP_SLACK && overflow.y < 1 + CROP_SLACK;
   const press = useRef<{ x: number; y: number; dragging: boolean } | null>(null);
 
-  const togglePlay = () => (video.current?.paused ? video.current.play() : video.current?.pause());
+  /** Set while parked on an edit; cleared by any seek of the viewer's own. */
+  const rewind = useRef(false);
+
+  const togglePlay = () => toggle(video.current, rewind);
 
   function onPointerDown(e: PointerEvent<HTMLDivElement>) {
     if (!src || e.button !== 0 || crop?.applying) return;
@@ -341,6 +354,7 @@ export function Stage(props: Props) {
     if (!p.dragging) {
       if (!croppable || Math.hypot(dx, dy) < DRAG_THRESHOLD) return;
       p.dragging = true;
+      rewind.current = false;
       video.current?.pause();
       props.onCropStart(video.current?.currentTime ?? 0);
       return;
@@ -361,7 +375,9 @@ export function Stage(props: Props) {
   }
 
   useEffect(() => {
-    if (seekTo && video.current) video.current.currentTime = seekTo.time;
+    if (!seekTo) return;
+    rewind.current = !!seekTo.peek;
+    if (video.current) video.current.currentTime = seekTo.time;
   }, [seekTo]);
 
   useEffect(() => {
@@ -369,8 +385,7 @@ export function Stage(props: Props) {
       const typing = ["INPUT", "TEXTAREA"].includes((document.activeElement as HTMLElement)?.tagName);
       if (e.code === "Space" && !typing && video.current) {
         e.preventDefault();
-        if (video.current.paused) video.current.play();
-        else video.current.pause();
+        toggle(video.current, rewind);
       }
     };
     window.addEventListener("keydown", onKey);
@@ -502,6 +517,7 @@ export function Stage(props: Props) {
             value={src ? time : 0}
             disabled={!src}
             onChange={(e) => {
+              rewind.current = false;
               if (video.current) video.current.currentTime = Number(e.target.value);
             }}
             {...stylex.props(styles.seek)}
