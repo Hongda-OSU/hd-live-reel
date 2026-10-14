@@ -52,7 +52,7 @@ export function SoundGroup({ audio, dispatch }: Props) {
 
   const withMusic = audio.mode !== "original";
   return (
-    <Group title="声音">
+    <Group>
       <Field>
         <Seg<Audio["mode"]>
           options={[

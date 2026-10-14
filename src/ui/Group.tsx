@@ -37,25 +37,27 @@ const styles = stylex.create({
   },
 });
 
-/** A titled section of a settings panel. `dimmed` greys out the body but
- * keeps the heading and badge readable. */
+/** A section of a settings panel, titled unless it is alone on its page.
+ * `dimmed` greys out the body but keeps the heading and badge readable. */
 export function Group({
   title,
   badge,
   dimmed,
   children,
 }: {
-  title: string;
+  title?: string;
   badge?: string;
   dimmed?: boolean;
   children: ReactNode;
 }) {
   return (
     <div {...stylex.props(styles.group)}>
-      <h3 {...stylex.props(styles.heading)}>
-        {title}
-        {badge && <span {...stylex.props(styles.badge)}>{badge}</span>}
-      </h3>
+      {(title || badge) && (
+        <h3 {...stylex.props(styles.heading)}>
+          {title}
+          {badge && <span {...stylex.props(styles.badge)}>{badge}</span>}
+        </h3>
+      )}
       <div {...stylex.props(dimmed && styles.dimmed)}>{children}</div>
     </div>
   );

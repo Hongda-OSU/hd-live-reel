@@ -1,3 +1,4 @@
+import { useState } from "react";
 import * as stylex from "@stylexjs/stylex";
 import type { Audio, Filter, Output, Title, TitlePosition, TitleTextStyle, TitleWeight, Transition } from "../api";
 import type { Action } from "../project";
@@ -31,24 +32,48 @@ const COLOURS: [string, string][] = [
 ];
 
 const styles = stylex.create({
+  // A column, so the reset can sit at the bottom of short pages.
   panel: {
+    display: "flex",
+    flexDirection: "column",
     overflowY: "auto",
-    paddingTop: "6px",
-    paddingRight: "0",
-    paddingBottom: "20px",
-    paddingLeft: "0",
+    padding: 0,
     borderLeftWidth: 1,
     borderLeftStyle: "solid",
     borderLeftColor: colors.border,
     backgroundColor: colors.window,
   },
+  // The page switcher stays at the top while a long page scrolls.
+  tabs: {
+    position: "sticky",
+    top: 0,
+    zIndex: 1,
+    paddingBlock: "10px",
+    paddingInline: "16px",
+    borderBottomWidth: 1,
+    borderBottomStyle: "solid",
+    borderBottomColor: colors.border,
+    backgroundColor: colors.window,
+  },
+  // Resets every page, so it is on every page: at the bottom of the panel,
+  // staying in view when a long page scrolls.
   reset: {
+    position: "sticky",
+    bottom: 0,
     display: "flex",
     justifyContent: "center",
-    paddingTop: "14px",
-    paddingBottom: "20px",
+    marginTop: "auto",
+    paddingBlock: "10px",
+    borderTopWidth: 1,
+    borderTopStyle: "solid",
+    borderTopColor: colors.border,
+    backgroundColor: colors.window,
   },
 });
+
+/** One page of settings at a time, so none needs much scrolling: the
+ * title, the picture (frame, filter, transition), the sound, the export. */
+type Page = "title" | "picture" | "sound" | "export";
 
 const NEUTRAL: Pick<Filter, "brightness" | "contrast" | "saturation"> = {
   brightness: 0,
@@ -75,6 +100,7 @@ export function Inspector({ title, audio, filter, transition, output, dispatch, 
   const set = (patch: Partial<Title>) => dispatch({ type: "updateTitle", patch });
   const setFilter = (patch: Partial<Filter>) => dispatch({ type: "updateFilter", patch });
   const setTransition = (patch: Partial<Transition>) => dispatch({ type: "updateTransition", patch });
+  const [page, setPage] = useState<Page>("title");
   const adjusted =
     filter.brightness !== NEUTRAL.brightness ||
     filter.contrast !== NEUTRAL.contrast ||
@@ -82,207 +108,220 @@ export function Inspector({ title, audio, filter, transition, output, dispatch, 
 
   return (
     <aside {...stylex.props(styles.panel)}>
-      <Group title="标题">
-        <Field label="主标题">
-          <input
-            value={title.text}
-            aria-label="主标题"
-            placeholder="留空则不显示标题"
-            onChange={(e) => set({ text: e.target.value })}
-            {...stylex.props(ui.textInput)}
-          />
-        </Field>
-        <Field label="副标题">
-          <input
-            value={title.subtitle}
-            aria-label="副标题"
-            onChange={(e) => set({ subtitle: e.target.value })}
-            {...stylex.props(ui.textInput)}
-          />
-        </Field>
-        <Field label="字体">
-          <Select label="字体" options={FONTS} value={title.font} onChange={(font) => set({ font })} />
-        </Field>
-        <Field label="粗细">
-          <Seg<TitleWeight>
-            options={[
-              ["light", "细"],
-              ["regular", "常规"],
-              ["bold", "粗"],
-            ]}
-            value={title.weight}
-            onChange={(weight) => set({ weight })}
-          />
-        </Field>
-        <Field label="字号">
-          <Slider
-            min={40}
-            max={140}
-            step={2}
-            value={title.fontSize}
-            shown={String(title.fontSize)}
-            onChange={(fontSize) => set({ fontSize })}
-          />
-        </Field>
-        <Field label="行距">
-          <Slider
-            min={0}
-            max={80}
-            step={2}
-            value={title.lineGap}
-            shown={String(title.lineGap)}
-            onChange={(lineGap) => set({ lineGap })}
-          />
-        </Field>
-        <Field label="颜色">
-          <Swatches
-            options={COLOURS}
-            value={title.color}
-            onChange={(color) => set({ color })}
-            customLabel="自定义颜色"
-          />
-        </Field>
-        <Field label="文字效果">
-          <Seg<TitleTextStyle>
-            options={[
-              ["outline", "描边"],
-              ["shadow", "阴影"],
-              ["none", "无"],
-            ]}
-            value={title.textStyle}
-            onChange={(textStyle) => set({ textStyle })}
-          />
-        </Field>
-        <Field label="位置">
-          <Seg<TitlePosition>
-            options={[
-              ["top", "上"],
-              ["center", "中"],
-              ["bottom", "下"],
-            ]}
-            value={title.position}
-            onChange={(position) => set({ position })}
-          />
-        </Field>
-        <Field label="显示时长">
-          <Slider
-            min={0.5}
-            max={3}
-            step={0.1}
-            value={title.showFor}
-            shown={`${title.showFor.toFixed(1)} 秒`}
-            onChange={(showFor) => set({ showFor, fadeOut: Math.min(title.fadeOut, showFor) })}
-          />
-        </Field>
-        <Field label="消失方式">
-          <Seg
-            options={[
-              [0, "直接消失"],
-              [FADE, "淡出"],
-            ]}
-            value={title.fadeOut > 0 ? FADE : 0}
-            onChange={(fadeOut) => set({ fadeOut: Math.min(fadeOut, title.showFor) })}
-          />
-        </Field>
-      </Group>
-
-      <SoundGroup audio={audio} dispatch={dispatch} />
-
-      <Group title="滤镜">
-        {/* Two rows; one value, so a pick in either row clears the other.
-            Natural looks first, styled ones below. */}
-        <Field>
-          <Seg<Filter["preset"]>
-            options={[
-              ["none", "原片"],
-              ["forest", "林间"],
-              ["river", "水色"],
-              ["golden", "暖阳"],
-            ]}
-            value={filter.preset}
-            onChange={(preset) => setFilter({ preset })}
-          />
-          <Seg<Filter["preset"]>
-            options={[
-              ["city", "城市"],
-              ["vapor", "蒸汽波"],
-              ["mono", "黑白"],
-            ]}
-            value={filter.preset}
-            onChange={(preset) => setFilter({ preset })}
-          />
-        </Field>
-        <Field label="亮度">
-          <Slider
-            min={-0.2}
-            max={0.2}
-            step={0.01}
-            value={filter.brightness}
-            shown={signed(filter.brightness)}
-            onChange={(brightness) => setFilter({ brightness })}
-          />
-        </Field>
-        <Field label="对比度">
-          <Slider
-            min={0.7}
-            max={1.3}
-            step={0.01}
-            value={filter.contrast}
-            shown={signed(filter.contrast - 1)}
-            onChange={(contrast) => setFilter({ contrast })}
-          />
-        </Field>
-        <Field label="饱和度">
-          <Slider
-            min={0.5}
-            max={1.5}
-            step={0.01}
-            value={filter.saturation}
-            shown={signed(filter.saturation - 1)}
-            disabled={filter.preset === "mono"}
-            onChange={(saturation) => setFilter({ saturation })}
-          />
-        </Field>
-        {adjusted && (
-          <Button variant="ghost" onClick={() => setFilter(NEUTRAL)}>
-            重置滑块
-          </Button>
-        )}
-      </Group>
-
-      <Group title="转场">
-        <Field>
-          <Seg<Transition["type"]>
-            options={[
-              ["none", "硬切"],
-              ["fade", "淡入淡出"],
-            ]}
-            value={transition.type}
-            onChange={(type) =>
-              setTransition(type === "fade" && transition.duration <= 0 ? { type, duration: DISSOLVE } : { type })
-            }
-          />
-        </Field>
-        {transition.type === "fade" && (
-          <Field label="时长">
-            <Slider
-              min={0.2}
-              max={0.8}
-              step={0.1}
-              value={transition.duration}
-              shown={`${transition.duration.toFixed(1)} 秒`}
-              onChange={(duration) => setTransition({ duration })}
+      <div {...stylex.props(styles.tabs)}>
+        <Seg<Page>
+          options={[
+            ["title", "标题"],
+            ["picture", "画面"],
+            ["sound", "声音"],
+            ["export", "导出"],
+          ]}
+          value={page}
+          onChange={setPage}
+        />
+      </div>
+      {page === "title" && (
+        <Group>
+          <Field label="主标题">
+            <input
+              value={title.text}
+              aria-label="主标题"
+              placeholder="留空则不显示标题"
+              onChange={(e) => set({ text: e.target.value })}
+              {...stylex.props(ui.textInput)}
             />
           </Field>
-        )}
-        <p {...stylex.props(ui.note)}>
-          {transition.type === "fade" ? "相邻两段画面和声音交叠过渡，总长会相应变短。" : "片段之间直接切换。"}
-        </p>
-      </Group>
-
-      <FrameGroup output={output} dispatch={dispatch} />
-
-      <ExportGroup output={output} dispatch={dispatch} />
+          <Field label="副标题">
+            <input
+              value={title.subtitle}
+              aria-label="副标题"
+              onChange={(e) => set({ subtitle: e.target.value })}
+              {...stylex.props(ui.textInput)}
+            />
+          </Field>
+          <Field label="字体">
+            <Select label="字体" options={FONTS} value={title.font} onChange={(font) => set({ font })} />
+          </Field>
+          <Field label="粗细">
+            <Seg<TitleWeight>
+              options={[
+                ["light", "细"],
+                ["regular", "常规"],
+                ["bold", "粗"],
+              ]}
+              value={title.weight}
+              onChange={(weight) => set({ weight })}
+            />
+          </Field>
+          <Field label="字号">
+            <Slider
+              min={40}
+              max={140}
+              step={2}
+              value={title.fontSize}
+              shown={String(title.fontSize)}
+              onChange={(fontSize) => set({ fontSize })}
+            />
+          </Field>
+          <Field label="行距">
+            <Slider
+              min={0}
+              max={80}
+              step={2}
+              value={title.lineGap}
+              shown={String(title.lineGap)}
+              onChange={(lineGap) => set({ lineGap })}
+            />
+          </Field>
+          <Field label="颜色">
+            <Swatches
+              options={COLOURS}
+              value={title.color}
+              onChange={(color) => set({ color })}
+              customLabel="自定义颜色"
+            />
+          </Field>
+          <Field label="文字效果">
+            <Seg<TitleTextStyle>
+              options={[
+                ["outline", "描边"],
+                ["shadow", "阴影"],
+                ["none", "无"],
+              ]}
+              value={title.textStyle}
+              onChange={(textStyle) => set({ textStyle })}
+            />
+          </Field>
+          <Field label="位置">
+            <Seg<TitlePosition>
+              options={[
+                ["top", "上"],
+                ["center", "中"],
+                ["bottom", "下"],
+              ]}
+              value={title.position}
+              onChange={(position) => set({ position })}
+            />
+          </Field>
+          <Field label="显示时长">
+            <Slider
+              min={0.5}
+              max={3}
+              step={0.1}
+              value={title.showFor}
+              shown={`${title.showFor.toFixed(1)} 秒`}
+              onChange={(showFor) => set({ showFor, fadeOut: Math.min(title.fadeOut, showFor) })}
+            />
+          </Field>
+          <Field label="消失方式">
+            <Seg
+              options={[
+                [0, "直接消失"],
+                [FADE, "淡出"],
+              ]}
+              value={title.fadeOut > 0 ? FADE : 0}
+              onChange={(fadeOut) => set({ fadeOut: Math.min(fadeOut, title.showFor) })}
+            />
+          </Field>
+        </Group>
+      )}
+      {page === "picture" && (
+        <>
+          <FrameGroup output={output} dispatch={dispatch} />
+          <Group title="滤镜">
+            {/* Two rows; one value, so a pick in either row clears the other.
+              Natural looks first, styled ones below. */}
+            <Field>
+              <Seg<Filter["preset"]>
+                options={[
+                  ["none", "原片"],
+                  ["forest", "林间"],
+                  ["river", "水色"],
+                  ["golden", "暖阳"],
+                ]}
+                value={filter.preset}
+                onChange={(preset) => setFilter({ preset })}
+              />
+              <Seg<Filter["preset"]>
+                options={[
+                  ["city", "城市"],
+                  ["vapor", "蒸汽波"],
+                  ["mono", "黑白"],
+                ]}
+                value={filter.preset}
+                onChange={(preset) => setFilter({ preset })}
+              />
+            </Field>
+            <Field label="亮度">
+              <Slider
+                min={-0.2}
+                max={0.2}
+                step={0.01}
+                value={filter.brightness}
+                shown={signed(filter.brightness)}
+                onChange={(brightness) => setFilter({ brightness })}
+              />
+            </Field>
+            <Field label="对比度">
+              <Slider
+                min={0.7}
+                max={1.3}
+                step={0.01}
+                value={filter.contrast}
+                shown={signed(filter.contrast - 1)}
+                onChange={(contrast) => setFilter({ contrast })}
+              />
+            </Field>
+            <Field label="饱和度">
+              <Slider
+                min={0.5}
+                max={1.5}
+                step={0.01}
+                value={filter.saturation}
+                shown={signed(filter.saturation - 1)}
+                disabled={filter.preset === "mono"}
+                onChange={(saturation) => setFilter({ saturation })}
+              />
+            </Field>
+            {adjusted && (
+              <Button variant="ghost" onClick={() => setFilter(NEUTRAL)}>
+                重置滑块
+              </Button>
+            )}
+          </Group>
+          <Group title="转场">
+            <Field>
+              <Seg<Transition["type"]>
+                options={[
+                  ["none", "硬切"],
+                  ["fade", "淡入淡出"],
+                ]}
+                value={transition.type}
+                onChange={(type) =>
+                  setTransition(type === "fade" && transition.duration <= 0 ? { type, duration: DISSOLVE } : { type })
+                }
+              />
+            </Field>
+            {transition.type === "fade" && (
+              <Field label="时长">
+                <Slider
+                  min={0.2}
+                  max={0.8}
+                  step={0.1}
+                  value={transition.duration}
+                  shown={`${transition.duration.toFixed(1)} 秒`}
+                  onChange={(duration) => setTransition({ duration })}
+                />
+              </Field>
+            )}
+            <p {...stylex.props(ui.note)}>
+              {transition.type === "fade" ? "相邻两段画面和声音交叠过渡，总长会相应变短。" : "片段之间直接切换。"}
+            </p>
+          </Group>
+        </>
+      )}
+      {page === "sound" && <SoundGroup audio={audio} dispatch={dispatch} />}
+      {page === "export" && <ExportGroup output={output} dispatch={dispatch} />}
       <div {...stylex.props(styles.reset)}>
         <Button variant="ghost" onClick={onReset}>
           恢复默认设置

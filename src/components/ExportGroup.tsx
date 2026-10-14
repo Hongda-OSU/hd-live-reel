@@ -29,7 +29,7 @@ export function ExportGroup({ output, dispatch }: Props) {
   }
 
   return (
-    <Group title="导出">
+    <Group>
       <Field label="保存到">
         <div {...stylex.props(ui.inline)}>
           <span title={output.folder ?? undefined} {...stylex.props(styles.folder, ui.spacer)}>
