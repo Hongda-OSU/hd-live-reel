@@ -1,6 +1,6 @@
 # hd-live-reel
 
-Personal macOS desktop app that stitches iPhone Live Photos into one MP4 with original sound, an opening title and light filters. It must never modify originals on the iPhone or in the Photos library.
+Personal macOS desktop app that stitches iPhone Live Photos into one MP4 with original sound, an opening title and light filters.
 
 ## Stack
 
@@ -9,7 +9,7 @@ Personal macOS desktop app that stitches iPhone Live Photos into one MP4 with or
 - Core: Rust (`src-tauri/`) — project JSON, FFmpeg command building, AI selection
 - Photos: Swift CLI (`photos-helper/`) — ImageCaptureCore (iPhone over USB), Vision scores; prints JSON for Rust
 - Video: FFmpeg + ffprobe as Tauri sidecars (`binaries/`, fetched by `scripts/fetch-ffmpeg.sh`), built with libzimg
-- Package manager: **pnpm** (not npm, not yarn)
+- Package manager: **pnpm**
 - macOS 15+ only, all processing local; no cloud, login or database
 
 ## Commands
@@ -21,7 +21,7 @@ Personal macOS desktop app that stitches iPhone Live Photos into one MP4 with or
 | Run the app                                                           | `pnpm tauri dev`                                                             |
 | Build the `.app`                                                      | `pnpm tauri build`                                                           |
 | All checks (types, ESLint, Prettier, rustfmt, clippy, swift-format)   | `pnpm check`                                                                 |
-| Auto-format everything                                                | `pnpm format`                                                                |
+| Format everything                                                     | `pnpm format`                                                                |
 | Rust tests                                                            | `cargo test --manifest-path src-tauri/Cargo.toml`                            |
 | Personal-media tests (`baseline`, `ai_select`; env vars in each file) | `cargo test --manifest-path src-tauri/Cargo.toml --test <name> -- --ignored` |
 | Build Swift helper into `binaries/`                                   | `pnpm helper` (also run by `pnpm tauri dev`)                                 |
@@ -35,7 +35,7 @@ Personal macOS desktop app that stitches iPhone Live Photos into one MP4 with or
 - Treat originals as read-only. Write intermediates only to `~/Library/Caches/<App>/`.
 - Normalize every clip on import to 30 fps, BT.709 SDR, stereo 48 kHz, keeping its shape; compose fits it to the output frame.
 - Lay out title and caption text in a frontend Canvas and overlay it as a transparent PNG. Do not use FFmpeg `drawtext`.
-- Rust owns timing (`Composition::length`, `crossfade`, `clip_windows`, `SCENE_GAP`); `clipSpans` in `src/project.ts` and `src/scenes.ts` must match it.
+- Rust owns timing and frame sizes (`Composition::length`, `crossfade`, `clip_windows`, `SCENE_GAP`, `Shape::size`); `clipSpans` and `FRAME` in `src/project.ts` and `src/scenes.ts` must match it.
 - Style components with StyleX; colours and sizes come from `src/tokens.stylex.ts`. Only document-level resets go in `src/global.css`.
 - `src/ui/` holds generic controls that know nothing about Live Photos or projects; app-specific components go in `src/components/`, hooks in `src/hooks/`.
 - Never commit photos or videos; they carry GPS data. Test media stays outside the repo.
@@ -52,6 +52,7 @@ Personal macOS desktop app that stitches iPhone Live Photos into one MP4 with or
 - Live Photos are SDR (P3, 8-bit). Only regular iPhone videos are HDR (HLG) and need tone mapping.
 - iPhone "Transfer to Mac or PC" must be "Keep Originals", or files arrive as JPG. "Optimize iPhone Storage" can leave only thumbnails on the phone.
 - "Invalid hook call" after adding a JS dependency is a stale Vite cache: delete `node_modules/.vite`, restart `pnpm tauri dev`.
+- Dev and installed apps share one project and cache; never run both.
 
 ## Read these only when relevant (Notion MCP)
 

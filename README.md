@@ -1,6 +1,6 @@
-<img src="src-tauri/icons/128x128@2x.png" width="128" height="128" alt="hd-live-reel app icon: a lake at sunset with the Live Photo mark">
+<img src="src-tauri/icons/128x128@2x.png" width="128" height="128" alt="HD Live Reel app icon: a lake at sunset with the Live Photo mark">
 
-# hd-live-reel
+# HD Live Reel
 
 A macOS desktop app that stitches iPhone Live Photos into one short video, keeping the original sound and adding an opening title.
 
@@ -41,19 +41,19 @@ pnpm helper
 
 ## Usage
 
-Connect the iPhone with a cable and unlock it (or skip this and drag files in), then start the app:
-
-```bash
-pnpm tauri dev
-```
-
-Exports are saved to `~/Movies/HD Live Reel/` unless another folder is chosen in the Export section of the settings panel.
-
-To use it as a regular app, build it once and copy it to Applications:
+Build the app and copy it to Applications:
 
 ```bash
 pnpm tauri build
 ditto "src-tauri/target/release/bundle/macos/HD Live Reel.app" "/Applications/HD Live Reel.app"
 ```
 
-The bundle is ad-hoc signed, so it opens on the Mac that built it.
+The bundle is ad-hoc signed, so it opens on the Mac that built it. Connect the iPhone with a cable and unlock it (or skip this and drag files in), then open HD Live Reel. Exports are saved to `~/Movies/HD Live Reel/` unless another folder is chosen in the Export tab of the settings panel.
+
+For development, run it from source instead:
+
+```bash
+pnpm tauri dev
+```
+
+The development and installed apps share one project and cache, so quit one before opening the other.
