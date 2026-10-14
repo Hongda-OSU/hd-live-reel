@@ -126,7 +126,6 @@ export function Inspector({ title, audio, filter, transition, output, dispatch, 
             <input
               value={title.text}
               aria-label="主标题"
-              placeholder="留空则不显示标题"
               onChange={(e) => set({ text: e.target.value })}
               {...stylex.props(ui.textInput)}
             />
