@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent } from "react";
 import * as stylex from "@stylexjs/stylex";
+import { getVersion } from "@tauri-apps/api/app";
+import appIcon from "../../src-tauri/icons/icon.svg";
 import { colors, shadows } from "../tokens.stylex";
 import { Icon, withStyle } from "../ui";
 import type { Output } from "../api";
@@ -76,23 +78,56 @@ const styles = stylex.create({
     color: colors.muted,
     textAlign: "center",
   },
+  // A welcome page: the app's icon and name, what it does, and its three
+  // steps. Only an empty project shows it.
   emptyIcon: {
-    width: 56,
-    height: 56,
-    marginBottom: 8,
-    fill: "none",
-    stroke: "currentColor",
-    strokeWidth: 1.5,
+    width: 88,
+    height: 88,
   },
   emptyTitle: {
     margin: 0,
     color: colors.text,
-    fontSize: 15,
-    fontWeight: 600,
+    fontSize: 22,
+    fontWeight: 700,
+    letterSpacing: "-0.01em",
   },
   emptyText: {
     margin: 0,
     fontSize: 12,
+  },
+  steps: {
+    display: "grid",
+    gap: 6,
+    marginTop: 14,
+    marginBottom: 0,
+    padding: 0,
+    fontSize: 12,
+    listStyle: "none",
+    textAlign: "left",
+  },
+  step: {
+    display: "flex",
+    alignItems: "baseline",
+    gap: 8,
+  },
+  stepNumber: {
+    display: "inline-grid",
+    placeItems: "center",
+    flexShrink: 0,
+    width: 18,
+    height: 18,
+    borderRadius: "50%",
+    backgroundColor: colors.surface2,
+    color: colors.text,
+    fontSize: 10,
+    fontWeight: 600,
+  },
+  version: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 14,
+    fontSize: 10,
   },
   pill: {
     position: "absolute",
@@ -263,6 +298,13 @@ const CROP_SLACK = 0.01;
 
 const clamp01 = (n: number) => Math.min(1, Math.max(0, n));
 
+/** The welcome page's walk-through. */
+const STEPS = [
+  "点左上角「添加照片」从 iPhone 选，或把文件拖进来",
+  "在右边加标题、配乐和滤镜",
+  "点右上角「导出」，直接发微信",
+];
+
 export function Stage(props: Props) {
   const { src, aspect, croppable, lengths, thumbs, seekTo, busy, error, empty, crop } = props;
   const [frameWidth, frameHeight] = FRAME[aspect];
@@ -272,6 +314,10 @@ export function Stage(props: Props) {
   const [time, setTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [playing, setPlaying] = useState(false);
+  const [version, setVersion] = useState<string | null>(null);
+  useEffect(() => {
+    getVersion().then(setVersion, () => {});
+  }, []);
   const [hovered, setHovered] = useState(false);
   const [still, setStill] = useState<{ src: string; width: number; height: number } | null>(null);
   const stillSize = crop && still?.src === crop.frame ? still : null;
@@ -379,14 +425,18 @@ export function Stage(props: Props) {
           )}
           {empty && (
             <div {...stylex.props(styles.empty)}>
-              {/* The Live Photo mark: a dot, a ring and a dotted ring. */}
-              <svg viewBox="0 0 56 56" aria-hidden {...stylex.props(styles.emptyIcon)}>
-                <circle cx="28" cy="28" r="5" />
-                <circle cx="28" cy="28" r="13" />
-                <circle cx="28" cy="28" r="22" strokeDasharray="1.5 4.2" strokeLinecap="round" />
-              </svg>
-              <h3 {...stylex.props(styles.emptyTitle)}>把 Live Photo 拼成一段视频</h3>
-              <p {...stylex.props(styles.emptyText)}>点左上角「添加照片」，或把视频、Live Photo 拖到这里</p>
+              <img src={appIcon} alt="" {...stylex.props(styles.emptyIcon)} />
+              <h3 {...stylex.props(styles.emptyTitle)}>HD Live Reel</h3>
+              <p {...stylex.props(styles.emptyText)}>把 Live Photo 拼成一段视频</p>
+              <ol {...stylex.props(styles.steps)}>
+                {STEPS.map((step, i) => (
+                  <li key={i} {...stylex.props(styles.step)}>
+                    <span {...stylex.props(styles.stepNumber)}>{i + 1}</span>
+                    {step}
+                  </li>
+                ))}
+              </ol>
+              {version && <span {...stylex.props(styles.version)}>版本 {version}</span>}
             </div>
           )}
           {crop?.frame && (
