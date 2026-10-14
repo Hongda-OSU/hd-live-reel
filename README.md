@@ -4,6 +4,14 @@
 
 A macOS desktop app that stitches iPhone Live Photos into one short video, keeping the original sound and adding an opening title.
 
+## Demo
+
+
+
+https://github.com/user-attachments/assets/660dd1d7-65fa-4575-9734-6c60967294b3
+
+
+
 ## Features
 
 - Pick Live Photos and videos from a USB-connected iPhone, or drag them in from Finder
