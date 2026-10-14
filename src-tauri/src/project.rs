@@ -324,9 +324,11 @@ impl Default for Output {
     fn default() -> Self {
         Self {
             aspect: Aspect::Portrait,
-            // Whole pictures by default: a portrait clip cropped into 16:9
-            // keeps only a third of its height. Crop is a deliberate choice.
-            fill: Fill::Blur,
+            // Full screen, like the reels this app is for: iPhone portraits
+            // fill 9:16 as they are and landscape Live Photos crop well.
+            // Blur suits 16:9, where a cropped portrait keeps a third of its
+            // height; switching to it is a deliberate choice.
+            fill: Fill::Crop,
             height: 1080,
             folder: None,
         }
@@ -540,12 +542,13 @@ mod tests {
         assert_eq!(project.title.weight, Weight::Regular);
         assert_eq!(project.title.text_style, TextStyle::Outline);
         assert_eq!(project.output.folder, None, "default export folder");
-        assert_eq!(project.output.fill, Fill::Crop, "a saved fill is kept");
         assert_eq!(
             Project::default().output.fill,
-            Fill::Blur,
-            "new projects blur"
+            Fill::Crop,
+            "new projects fill the frame"
         );
+        let blurred: Output = serde_json::from_str(r#"{"fill": "blur"}"#).unwrap();
+        assert_eq!(blurred.fill, Fill::Blur, "a saved fill is kept");
         project.validate().unwrap();
     }
 
