@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <clipPath id="body"><rect x="100" y="100" width="824" height="824" rx="185" /></clipPath>
+    <filter id="drop" x="-10%" y="-10%" width="120%" height="125%">
+      <feDropShadow dx="0" dy="10" stdDeviation="14" flood-color="#000" flood-opacity="0.28" />
+    </filter>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffcf8a" />
+      <stop offset="0.5" stop-color="#ff9a76" />
+      <stop offset="1" stop-color="#e86f7c" />
+    </linearGradient>
+    <linearGradient id="water" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3d5f8f" />
+      <stop offset="1" stop-color="#1f3555" />
+    </linearGradient>
+  </defs>
+  <g filter="url(#drop)">
+    <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#sky)" />
+  </g>
+  <g clip-path="url(#body)">
+    <circle cx="512" cy="470" r="110" fill="#fff3d6" />
+    <path d="M100 600 L260 430 L360 520 L470 400 L600 540 L700 460 L924 620 V924 H100Z" fill="#5a3f63" />
+    <path d="M100 640 L230 540 L340 610 L450 520 L560 615 L690 545 L924 660 V924 H100Z" fill="#2f2a48" />
+    <rect x="100" y="680" width="824" height="244" fill="url(#water)" />
+    <g stroke="#fff3d6" stroke-opacity="0.55" stroke-linecap="round" stroke-width="12">
+      <path d="M440 730 H584" /><path d="M470 770 H554" /><path d="M492 806 H532" />
+    </g>
+  </g>
+  <g fill="none" stroke="#fff" stroke-linecap="round">
+    <circle cx="768" cy="256" r="22" fill="#fff" stroke="none" />
+    <circle cx="768" cy="256" r="54" stroke-width="15" />
+    <circle cx="768" cy="256" r="92" stroke-width="13" stroke-dasharray="0.5 22" />
+  </g>
+</svg>
