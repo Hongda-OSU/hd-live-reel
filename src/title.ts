@@ -140,7 +140,10 @@ async function renderLines(
   canvas.width = width;
   canvas.height = height;
   const ctx = canvas.getContext("2d")!;
-  ctx.textAlign = "center";
+  // Centred by hand: WebKit's textAlign "center" misplaces lines with an
+  // emoji variation selector ("🏀 ☁️" landed 89 px right), though
+  // measureText gets their width right.
+  ctx.textAlign = "left";
   ctx.textBaseline = "middle";
 
   for (const line of lines)
@@ -152,7 +155,8 @@ async function renderLines(
   let y = centre - blockHeight / 2;
   for (const line of lines) {
     ctx.font = fontSpec(line.weight, line.size, style.font);
-    drawLine(ctx, line.text, width / 2, y + line.size / 2, line.size, style);
+    const left = (width - ctx.measureText(line.text).width) / 2;
+    drawLine(ctx, line.text, left, y + line.size / 2, line.size, style);
     y += line.size + gap;
   }
   return encode(canvas);
