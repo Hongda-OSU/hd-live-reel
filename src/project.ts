@@ -13,8 +13,6 @@ export type Action =
   | { type: "removeClip"; id: string }
   /** Only the PNG, so text typed while it rendered is kept. */
   | { type: "setCaptionImage"; id: string; image: string }
-  /** Everything back to a new project's, clips included. */
-  | { type: "resetProject"; defaults: Project }
   | { type: "updateTitle"; patch: Partial<Title> }
   | { type: "updateFilter"; patch: Partial<Filter> }
   | { type: "updateAudio"; patch: Partial<Audio> }
@@ -54,8 +52,6 @@ export function reducer(project: Project | null, action: Action): Project | null
       };
     case "removeClip":
       return { ...project, clips: project.clips.filter((clip) => clip.id !== action.id) };
-    case "resetProject":
-      return action.defaults;
     case "updateTitle":
       return { ...project, title: { ...project.title, ...action.patch } };
     case "updateFilter":

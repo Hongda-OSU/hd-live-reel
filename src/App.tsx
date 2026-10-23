@@ -241,17 +241,22 @@ function App() {
   const [captionKeys, setCaptionKeys] = useState<Record<string, string>>({});
   /** Watermark fields the current `watermark.image` was rendered from. */
   const [markKey, setMarkKey] = useState<string | null>(null);
+  /** Puts `next` in place and marks only the PNGs it actually has as
+   * rendered, so a missing one is drawn even if its fields look unchanged. */
+  function adopt(next: Project) {
+    dispatch({ type: "load", project: next });
+    setImageKey(titleImageKey(next.title, next.output.aspect));
+    setCaptionKeys(renderedCaptionKeys(next));
+    setMarkKey(
+      !hasWatermark(next.watermark) || next.watermark.image
+        ? watermarkImageKey(next.watermark, next.output.aspect)
+        : null,
+    );
+  }
   useEffect(() => {
     loadProject()
       .then((loaded) => {
-        dispatch({ type: "load", project: loaded });
-        setImageKey(titleImageKey(loaded.title, loaded.output.aspect));
-        setCaptionKeys(renderedCaptionKeys(loaded));
-        setMarkKey(
-          !hasWatermark(loaded.watermark) || loaded.watermark.image
-            ? watermarkImageKey(loaded.watermark, loaded.output.aspect)
-            : null,
-        );
+        adopt(loaded);
         setSelectedId(loaded.clips[0]?.id ?? null);
         if (loaded.clips.length === 0) setPickerOpen(true);
       })
@@ -479,7 +484,7 @@ function App() {
       cancelLabel: "取消",
     });
     if (!confirmed) return;
-    dispatch({ type: "resetProject", defaults: await defaultProject() });
+    adopt(await defaultProject());
     setSelectedId(null);
   }
 
