@@ -362,7 +362,7 @@ pub struct Watermark {
 impl Default for Watermark {
     fn default() -> Self {
         Self {
-            text: String::new(),
+            text: "hd-live-reel".into(),
             position: Corner::BottomRight,
             size: 36,
             opacity: 0.7,
@@ -641,14 +641,11 @@ mod tests {
     }
 
     #[test]
-    fn watermark_defaults_to_none_and_keeps_its_fields() {
+    fn watermark_defaults_to_the_app_name_and_keeps_its_fields() {
         let mut project: Project = serde_json::from_str(DOC_EXAMPLE).unwrap();
-        assert_eq!(
-            project.watermark,
-            Watermark::default(),
-            "older projects have none"
-        );
-        assert!(project.watermark.text.is_empty());
+        assert_eq!(project.watermark, Watermark::default());
+        assert_eq!(project.watermark.text, "hd-live-reel");
+        assert_eq!(project.watermark.position, Corner::BottomRight);
 
         project.watermark.text = "@hd".into();
         project.watermark.position = Corner::TopLeft;

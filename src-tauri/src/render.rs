@@ -277,6 +277,7 @@ mod tests {
             ..Default::default()
         };
         project.watermark.image = Some("/t/mark.png".into());
+        project.watermark.text = "  ".into();
         assert_eq!(composition(&project).unwrap().watermark, None, "no text");
 
         project.watermark.text = "@hd".into();
