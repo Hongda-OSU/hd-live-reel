@@ -1,12 +1,23 @@
 import { useState } from "react";
 import * as stylex from "@stylexjs/stylex";
-import type { Audio, Filter, Output, Title, TitlePosition, TitleTextStyle, TitleWeight, Transition } from "../api";
+import type {
+  Audio,
+  Filter,
+  Output,
+  Title,
+  TitlePosition,
+  TitleTextStyle,
+  TitleWeight,
+  Transition,
+  Watermark,
+} from "../api";
 import type { Action } from "../project";
 import { colors } from "../tokens.stylex";
 import { Button, Field, Group, Select, Seg, Slider, Swatches, ui } from "../ui";
 import { ExportGroup } from "./ExportGroup";
 import { FrameGroup } from "./FrameGroup";
 import { SoundGroup } from "./SoundGroup";
+import { WatermarkGroup } from "./WatermarkGroup";
 
 /** Fade used by the "淡出" choice, in seconds. */
 const FADE = 0.3;
@@ -72,7 +83,8 @@ const styles = stylex.create({
 });
 
 /** One page of settings at a time, so none needs much scrolling: the
- * title, the picture (frame, filter, transition), the sound, the export. */
+ * title, the picture (frame, filter, transition, watermark), the sound,
+ * the export. */
 type Page = "title" | "picture" | "sound" | "export";
 
 const NEUTRAL: Pick<Filter, "brightness" | "contrast" | "saturation"> = {
@@ -91,12 +103,13 @@ interface Props {
   filter: Filter;
   transition: Transition;
   output: Output;
+  watermark: Watermark;
   dispatch: (action: Action) => void;
   /** Asks, then puts every setting here back to a new project's. */
   onReset: () => void;
 }
 
-export function Inspector({ title, audio, filter, transition, output, dispatch, onReset }: Props) {
+export function Inspector({ title, audio, filter, transition, output, watermark, dispatch, onReset }: Props) {
   const set = (patch: Partial<Title>) => dispatch({ type: "updateTitle", patch });
   const setFilter = (patch: Partial<Filter>) => dispatch({ type: "updateFilter", patch });
   const setTransition = (patch: Partial<Transition>) => dispatch({ type: "updateTransition", patch });
@@ -317,6 +330,7 @@ export function Inspector({ title, audio, filter, transition, output, dispatch, 
               {transition.type === "fade" ? "相邻两段画面和声音交叠过渡，总长会相应变短。" : "片段之间直接切换。"}
             </p>
           </Group>
+          <WatermarkGroup watermark={watermark} dispatch={dispatch} />
         </>
       )}
       {page === "sound" && <SoundGroup audio={audio} dispatch={dispatch} />}

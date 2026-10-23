@@ -1,6 +1,6 @@
 // Edits to the open project. The reducer is the only place the project
 // changes; App persists every new state.
-import type { Audio, Caption, Clip, ClipsProgress, Filter, Output, Project, Title, Transition } from "./api";
+import type { Audio, Caption, Clip, ClipsProgress, Filter, Output, Project, Title, Transition, Watermark } from "./api";
 
 type Aspect = Output["aspect"];
 
@@ -19,8 +19,10 @@ export type Action =
   | { type: "updateAudio"; patch: Partial<Audio> }
   | { type: "updateTransition"; patch: Partial<Transition> }
   | { type: "updateOutput"; patch: Partial<Output> }
+  | { type: "updateWatermark"; patch: Partial<Watermark> }
   /** The settings panel back to a new project's, keeping what was chosen
-   * rather than tuned: title text, music track and export folder. */
+   * rather than tuned: title and watermark text, music track and export
+   * folder. */
   | { type: "resetSettings"; defaults: Project };
 
 export function reducer(project: Project | null, action: Action): Project | null {
@@ -63,8 +65,10 @@ export function reducer(project: Project | null, action: Action): Project | null
       return { ...project, transition: { ...project.transition, ...action.patch } };
     case "updateOutput":
       return { ...project, output: { ...project.output, ...action.patch } };
+    case "updateWatermark":
+      return { ...project, watermark: { ...project.watermark, ...action.patch } };
     case "resetSettings": {
-      const { title, audio, filter, transition, output } = action.defaults;
+      const { title, audio, filter, transition, output, watermark } = action.defaults;
       const { text, subtitle, textImage } = project.title;
       return {
         ...project,
@@ -73,6 +77,7 @@ export function reducer(project: Project | null, action: Action): Project | null
         filter,
         transition,
         output: { ...output, folder: project.output.folder },
+        watermark: { ...watermark, text: project.watermark.text, image: project.watermark.image },
       };
     }
   }
@@ -197,9 +202,17 @@ export function captionImageKey(caption: Caption, title: Title, aspect: Aspect):
   });
 }
 
+export const hasWatermark = (watermark: Watermark) => watermark.text.trim() !== "";
+
+/** Watermark fields, and the frame shape, that change its rendered PNG. */
+export function watermarkImageKey(watermark: Watermark, aspect: Aspect): string {
+  const { position, size } = watermark;
+  return JSON.stringify({ text: watermark.text.trim(), position, size, aspect });
+}
+
 /** Everything that changes the rendered video; previews re-run when it does. */
 export function renderKey(project: Project): string {
-  const { clips, title, filter, audio, transition, output } = project;
+  const { clips, title, filter, audio, transition, output, watermark } = project;
   return JSON.stringify({
     clips: clips.map((c) => [
       c.normalizedPath,
@@ -211,6 +224,7 @@ export function renderKey(project: Project): string {
     ]),
     frame: [output.aspect, output.fill],
     title: hasTitleText(title) ? [title.textImage, title.showFor, title.fadeOut] : null,
+    watermark: hasWatermark(watermark) ? [watermark.image, watermark.opacity] : null,
     filter,
     audio,
     transition,

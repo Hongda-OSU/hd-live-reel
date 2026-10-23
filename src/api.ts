@@ -129,6 +129,20 @@ export interface Output {
   folder?: string | null;
 }
 
+export type WatermarkCorner = "topLeft" | "topRight" | "bottomLeft" | "bottomRight";
+
+/** A line of text in one corner for the whole video; empty text means none. */
+export interface Watermark {
+  text: string;
+  position: WatermarkCorner;
+  /** Font size in pixels on the frame's 1080 short side. */
+  size: number;
+  /** 0 is invisible, 1 fully opaque. */
+  opacity: number;
+  /** The laid-out text as a transparent PNG, rendered by the frontend. */
+  image?: string | null;
+}
+
 export interface Project {
   version: number;
   name: string;
@@ -139,6 +153,7 @@ export interface Project {
   transition: Transition;
   selection: { mode: "manual" | "ai"; targetSeconds: number };
   output: Output;
+  watermark: Watermark;
 }
 
 export interface ClipsProgress {

@@ -13,7 +13,7 @@ https://github.com/user-attachments/assets/660dd1d7-65fa-4575-9734-6c60967294b3
 - Pick Live Photos and videos from a USB-connected iPhone, or drag them in from Finder
 - Tick photos, a whole day or scene at a time, and let on-device AI narrow them to a reel's worth, with a reason and a score for each shot
 - Keep each clip's original sound, loudness-matched, or lay a music track under or over it
-- Trim, reorder, crop and mute clips; add a styled opening title, captions on single clips, colour filters and cross-dissolves
+- Trim, reorder, crop and mute clips; add a styled opening title, captions on single clips, a corner watermark, colour filters and cross-dissolves
 - Preview from the same FFmpeg pipeline as the export, with a filmstrip of the clips; export a 9:16, 3:4, 1:1 or 16:9 MP4 that WeChat plays directly
 
 ## Tech Stack

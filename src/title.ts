@@ -1,7 +1,7 @@
-// Lays out the opening title, and the captions over single clips, on
-// transparent output-sized canvases. FFmpeg overlays the PNGs, so what is
+// Lays out the opening title, the captions over single clips and the
+// watermark on transparent output-sized canvases. FFmpeg overlays the PNGs, so what is
 // drawn here is exactly what gets exported.
-import type { Caption, Output, Title, TitlePosition, TitleWeight } from "./api";
+import type { Caption, Output, Title, TitlePosition, TitleWeight, Watermark } from "./api";
 import { FRAME } from "./project";
 
 /** Text never runs wider than this share of the frame. */
@@ -100,6 +100,34 @@ export function renderCaptionPng(caption: Caption, title: Title, aspect: Output[
   return renderLines([line], title, caption.position, aspect);
 }
 
+/** Gap between the watermark and the frame's edges, as a share of the
+ * short side. */
+const WATERMARK_MARGIN = 0.04;
+
+/** White text with a soft shadow, so it reads on bright and dark frames
+ * alike; the opacity is applied when the video is composed. */
+export function renderWatermarkPng(watermark: Watermark, aspect: Output["aspect"]): Promise<Uint8Array> {
+  const [width, height] = FRAME[aspect];
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d")!;
+  const text = fixApostrophes(watermark.text.trim());
+  const size = fitFont(ctx, text, 600, watermark.size, "PingFang SC", width * 0.6);
+  const margin = Math.min(width, height) * WATERMARK_MARGIN;
+  const left = watermark.position.endsWith("Left");
+  const top = watermark.position.startsWith("top");
+  ctx.font = fontSpec(600, size, "PingFang SC");
+  ctx.textAlign = left ? "left" : "right";
+  ctx.textBaseline = top ? "top" : "bottom";
+  ctx.shadowColor = "rgba(0, 0, 0, 0.5)";
+  ctx.shadowBlur = size * 0.25;
+  ctx.shadowOffsetY = size * 0.06;
+  ctx.fillStyle = "#ffffff";
+  ctx.fillText(text, left ? margin : width - margin, top ? margin : height - margin);
+  return encode(canvas);
+}
+
 /** Draws `lines` centred around `position` and encodes them as a PNG. */
 async function renderLines(
   lines: Line[],
@@ -127,7 +155,10 @@ async function renderLines(
     drawLine(ctx, line.text, width / 2, y + line.size / 2, line.size, style);
     y += line.size + gap;
   }
+  return encode(canvas);
+}
 
+async function encode(canvas: HTMLCanvasElement): Promise<Uint8Array> {
   const blob = await new Promise<Blob>((resolve, reject) =>
     canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("could not encode text"))), "image/png"),
   );

@@ -35,11 +35,13 @@ import {
   reducer,
   renderKey,
   titleImageKey,
+  hasWatermark,
+  watermarkImageKey,
   totalLength,
   UNTITLED,
   type Action,
 } from "./project";
-import { renderCaptionPng, renderTitlePng } from "./title";
+import { renderCaptionPng, renderTitlePng, renderWatermarkPng } from "./title";
 import { colors, layout } from "./tokens.stylex";
 import { Button, Icon } from "./ui";
 import { useLibrary } from "./hooks/useLibrary";
@@ -237,12 +239,19 @@ function App() {
   const [imageKey, setImageKey] = useState<string | null>(null);
   /** Per clip, the caption fields its current `caption.image` was rendered from. */
   const [captionKeys, setCaptionKeys] = useState<Record<string, string>>({});
+  /** Watermark fields the current `watermark.image` was rendered from. */
+  const [markKey, setMarkKey] = useState<string | null>(null);
   useEffect(() => {
     loadProject()
       .then((loaded) => {
         dispatch({ type: "load", project: loaded });
         setImageKey(titleImageKey(loaded.title, loaded.output.aspect));
         setCaptionKeys(renderedCaptionKeys(loaded));
+        setMarkKey(
+          !hasWatermark(loaded.watermark) || loaded.watermark.image
+            ? watermarkImageKey(loaded.watermark, loaded.output.aspect)
+            : null,
+        );
         setSelectedId(loaded.clips[0]?.id ?? null);
         if (loaded.clips.length === 0) setPickerOpen(true);
       })
@@ -319,11 +328,35 @@ function App() {
     };
   }, [pendingCaptions]);
 
+  // ---------- watermark PNG ----------
+  // Same as the title: re-render when its text, corner or size changes.
+  const watermark = project?.watermark ?? null;
+  const watermarkKey = watermark ? watermarkImageKey(watermark, aspect) : null;
+  useEffect(() => {
+    if (!watermark || watermarkKey === markKey) return;
+    if (!hasWatermark(watermark)) {
+      setMarkKey(watermarkKey);
+      return;
+    }
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      const path = await saveTitleImage(await renderWatermarkPng(watermark, aspect));
+      if (cancelled) return;
+      dispatch({ type: "updateWatermark", patch: { image: path } });
+      setMarkKey(watermarkKey);
+    }, TITLE_DELAY);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [watermark, aspect, watermarkKey, markKey]);
+
   // ---------- preview ----------
   const key = project ? renderKey(project) : null;
   // Wait for the PNGs so a text edit never renders with the old text.
   const titleReady = titleKey !== null && titleKey === imageKey;
   const captionsReady = captionJobs.length === 0;
+  const watermarkReady = watermarkKey !== null && watermarkKey === markKey;
   const latest = useRef(project);
   latest.current = project;
   const latestCrop = useRef(crop);
@@ -335,7 +368,7 @@ function App() {
   const renderSeq = useRef(0);
   useEffect(() => {
     const current = latest.current;
-    if (!current || !titleReady || !captionsReady) return;
+    if (!current || !titleReady || !captionsReady || !watermarkReady) return;
     if (current.clips.length === 0) {
       setPreview({ url: null, busy: false, error: null });
       return;
@@ -366,7 +399,7 @@ function App() {
       }
     }, PREVIEW_DELAY);
     return () => clearTimeout(timer);
-  }, [key, titleReady, captionsReady]);
+  }, [key, titleReady, captionsReady, watermarkReady]);
 
   // ---------- thumbnails for the clip list ----------
   // Joined into one string so the effect runs only when the set changes;
@@ -620,6 +653,7 @@ function App() {
           filter={project.filter}
           transition={project.transition}
           output={project.output}
+          watermark={project.watermark}
           dispatch={dispatch}
           onReset={resetSettings}
         />
