@@ -5,6 +5,9 @@ import { colors } from "../tokens.stylex";
 const styles = stylex.create({
   field: {
     display: "grid",
+    // WebKit sizes an auto column to the row's full content, so a long
+    // music file name pushed the row past the panel; minmax(0, …) caps it.
+    gridTemplateColumns: "minmax(0, 1fr)",
     gap: 4,
     marginBottom: {
       default: 10,

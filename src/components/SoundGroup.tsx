@@ -51,6 +51,7 @@ export function SoundGroup({ audio, dispatch }: Props) {
   }
 
   const withMusic = audio.mode !== "original";
+  const track = audio.musicPath ? musicName(audio.musicPath) : null;
   return (
     <Group>
       <Field>
@@ -67,8 +68,8 @@ export function SoundGroup({ audio, dispatch }: Props) {
       {withMusic && (
         <Field label="配乐">
           <div {...stylex.props(ui.inline)}>
-            <span {...stylex.props(styles.track, ui.spacer)}>
-              {importing ? "正在导入…" : audio.musicPath ? musicName(audio.musicPath) : "还没选音乐"}
+            <span title={track ?? undefined} {...stylex.props(styles.track, ui.spacer)}>
+              {importing ? "正在导入…" : (track ?? "还没选音乐")}
             </span>
             <Button disabled={importing} onClick={chooseMusic}>
               {audio.musicPath ? "更换…" : "选择音乐…"}
