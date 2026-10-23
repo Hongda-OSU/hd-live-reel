@@ -59,6 +59,7 @@ fn matches_compose_py_baseline() {
     compose(
         &Composition {
             captions: Vec::new(),
+            watermark: None,
             clips,
             shape: Shape::Portrait,
             fill: Fill::Crop,

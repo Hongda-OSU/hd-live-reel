@@ -24,6 +24,7 @@ pub struct Project {
     pub transition: Transition,
     pub selection: Selection,
     pub output: Output,
+    pub watermark: Watermark,
 }
 
 impl Default for Project {
@@ -38,6 +39,7 @@ impl Default for Project {
             transition: Transition::default(),
             selection: Selection::default(),
             output: Output::default(),
+            watermark: Watermark::default(),
         }
     }
 }
@@ -343,6 +345,41 @@ impl Default for Output {
     }
 }
 
+/// A line of text in one corner for the whole video; empty text means none.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct Watermark {
+    pub text: String,
+    pub position: Corner,
+    /// Font size in pixels on the frame's 1080 short side.
+    pub size: u32,
+    /// 0 is invisible, 1 fully opaque.
+    pub opacity: f64,
+    /// The laid-out text as a transparent PNG, rendered by the frontend.
+    pub image: Option<PathBuf>,
+}
+
+impl Default for Watermark {
+    fn default() -> Self {
+        Self {
+            text: String::new(),
+            position: Corner::BottomRight,
+            size: 36,
+            opacity: 0.7,
+            image: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Corner {
+    TopLeft,
+    TopRight,
+    BottomLeft,
+    BottomRight,
+}
+
 impl Project {
     /// Rejects states the processing chain cannot render.
     pub fn validate(&self) -> Result<(), String> {
@@ -381,6 +418,9 @@ impl Project {
         }
         if self.audio.music_volume < 0.0 || self.audio.original_volume < 0.0 {
             return Err("volumes cannot be negative".into());
+        }
+        if !(0.0..=1.0).contains(&self.watermark.opacity) || self.watermark.size == 0 {
+            return Err("watermark needs a size and an opacity between 0 and 1".into());
         }
         Ok(())
     }
@@ -598,6 +638,29 @@ mod tests {
         // A whole-clip caption has no time limit to check.
         project.clips[0].caption.as_mut().unwrap().show_for = None;
         project.validate().unwrap();
+    }
+
+    #[test]
+    fn watermark_defaults_to_none_and_keeps_its_fields() {
+        let mut project: Project = serde_json::from_str(DOC_EXAMPLE).unwrap();
+        assert_eq!(
+            project.watermark,
+            Watermark::default(),
+            "older projects have none"
+        );
+        assert!(project.watermark.text.is_empty());
+
+        project.watermark.text = "@hd".into();
+        project.watermark.position = Corner::TopLeft;
+        let json = serde_json::to_value(&project).unwrap();
+        assert_eq!(json["watermark"]["text"], "@hd");
+        assert_eq!(json["watermark"]["position"], "topLeft");
+        assert_eq!(json["watermark"]["opacity"], 0.7);
+        let again: Project = serde_json::from_value(json).unwrap();
+        assert_eq!(again, project);
+
+        project.watermark.opacity = 1.5;
+        assert!(project.validate().is_err());
     }
 
     #[test]

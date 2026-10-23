@@ -63,8 +63,18 @@ pub fn composition(project: &Project) -> Result<Composition, String> {
         TransitionKind::None => 0.0,
         TransitionKind::Fade => project.transition.duration,
     };
+    // A watermark with text whose PNG the frontend has rendered.
+    let mark = &project.watermark;
+    let watermark = match (&mark.image, mark.text.trim().is_empty()) {
+        (Some(image), false) => Some(ffmpeg::Watermark {
+            image: image.clone(),
+            opacity: mark.opacity,
+        }),
+        _ => None,
+    };
     Ok(Composition {
         captions,
+        watermark,
         clips,
         shape: match project.output.aspect {
             p::Aspect::Portrait => Shape::Portrait,
@@ -258,6 +268,33 @@ mod tests {
         let title = composition(&project).unwrap().title.unwrap();
         assert_eq!(title.image, Path::new("/c/t.png"));
         assert_eq!((title.show_for, title.fade_out), (1.0, 0.3));
+    }
+
+    #[test]
+    fn watermark_needs_text_and_an_image() {
+        let mut project = Project {
+            clips: vec![clip((0.0, 2.0), false)],
+            ..Default::default()
+        };
+        project.watermark.image = Some("/t/mark.png".into());
+        assert_eq!(composition(&project).unwrap().watermark, None, "no text");
+
+        project.watermark.text = "@hd".into();
+        project.watermark.opacity = 0.5;
+        assert_eq!(
+            composition(&project).unwrap().watermark,
+            Some(ffmpeg::Watermark {
+                image: "/t/mark.png".into(),
+                opacity: 0.5,
+            })
+        );
+
+        project.watermark.image = None;
+        assert_eq!(
+            composition(&project).unwrap().watermark,
+            None,
+            "no image yet"
+        );
     }
 
     #[test]

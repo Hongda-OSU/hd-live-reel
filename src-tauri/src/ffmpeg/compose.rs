@@ -1,5 +1,5 @@
 //! Joins normalized clips into the final video, with an optional opening
-//! title and captions over single clips. Each clip is fitted to the output
+//! title, captions over single clips and a corner watermark. Each clip is fitted to the output
 //! frame here (crop, black bars or a blurred backdrop), so the
 //! intermediates keep their own shape. Preview and export share this graph;
 //! the preview just works at half size.
@@ -35,6 +35,14 @@ pub struct Caption {
     /// Seconds on screen once the clip is fully in; `None` keeps it until
     /// the clip starts to leave.
     pub show_for: Option<f64>,
+}
+
+/// A transparent PNG, sized like the output, laid over the whole video.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Watermark {
+    pub image: PathBuf,
+    /// 0 is invisible, 1 keeps the PNG as drawn.
+    pub opacity: f64,
 }
 
 /// A normalized music track laid under, or instead of, the clips' sound.
@@ -147,6 +155,7 @@ pub struct Composition {
     pub title: Option<Title>,
     /// Text over single clips, in any order.
     pub captions: Vec<Caption>,
+    pub watermark: Option<Watermark>,
     pub music: Option<Music>,
 }
 
@@ -263,6 +272,18 @@ fn args(composition: &Composition, quality: Quality, out: &Path) -> Vec<String> 
             caption.image.to_string_lossy().into_owned(),
         ]);
     }
+    if let Some(mark) = &composition.watermark {
+        args.extend([
+            "-loop".into(),
+            "1".into(),
+            "-framerate".into(),
+            FPS.to_string(),
+            "-t".into(),
+            format!("{:.3}", composition.length()),
+            "-i".into(),
+            mark.image.to_string_lossy().into_owned(),
+        ]);
+    }
     if let Some(music) = &composition.music {
         args.extend([
             "-stream_loop".into(),
@@ -341,12 +362,23 @@ fn filter_graph(composition: &Composition, quality: Quality) -> String {
         ));
         video = "titled".into();
     }
+    // Last among the PNG inputs, and on top of everything so text never
+    // hides it.
+    let watermark = first_caption + captions.len();
+    if let Some(mark) = &composition.watermark {
+        graph.push_str(&format!(
+            "[{watermark}:v]format=rgba{shrink},colorchannelmixer=aa={:.3}[mark];\
+             [{video}][mark]overlay=0:0[marked];",
+            mark.opacity
+        ));
+        video = "marked".into();
+    }
 
     graph.push_str(&format!("[{video}]null[v];"));
 
     let mut audio = "a0";
     if let Some(music) = &composition.music {
-        let input = first_caption + captions.len();
+        let input = watermark + usize::from(composition.watermark.is_some());
         let length = composition.length();
         let fade = MUSIC_FADE_OUT.min(length / 2.0);
         graph.push_str(&format!(
@@ -518,6 +550,7 @@ mod tests {
 
     fn composition(title: Option<Title>) -> Composition {
         Composition {
+            watermark: None,
             captions: Vec::new(),
             grade: Grade::default(),
             shape: Shape::Portrait,
@@ -658,8 +691,37 @@ mod tests {
     }
 
     #[test]
+    fn watermark_goes_on_top_for_the_whole_video_and_shifts_the_music_input() {
+        let mut with = composition(Some(title(0.0)));
+        with.captions = vec![caption(1, None)];
+        with.music = Some(music(None));
+        with.watermark = Some(Watermark {
+            image: "mark.png".into(),
+            opacity: 0.7,
+        });
+        let graph = filter_graph(&with, Quality::Preview);
+        // Inputs: two clips, the title (2), the caption (3), the
+        // watermark (4), the music (5).
+        assert!(
+            graph.contains(
+                "[4:v]format=rgba,scale=540:960,colorchannelmixer=aa=0.700[mark];\
+                 [titled][mark]overlay=0:0[marked];[marked]null[v];"
+            ),
+            "{graph}"
+        );
+        assert!(graph.contains("[5:a]volume"), "{graph}");
+        let args = args(&with, Quality::Export, Path::new("out.mp4"));
+        let input = args.iter().position(|a| a == "mark.png").unwrap();
+        assert_eq!(
+            args[input - 7..input],
+            ["-loop", "1", "-framerate", "30", "-t", "4.000", "-i"]
+        );
+    }
+
+    #[test]
     fn trims_and_mutes_only_the_segments_that_ask() {
         let composition = Composition {
+            watermark: None,
             captions: Vec::new(),
             grade: Grade::default(),
             shape: Shape::Portrait,
@@ -943,6 +1005,7 @@ mod tests {
         }
         let out = dir.join("out.mp4");
         let composition = Composition {
+            watermark: None,
             captions: Vec::new(),
             grade: Grade::default(),
             shape: Shape::Portrait,
@@ -1034,6 +1097,7 @@ mod tests {
             .map(|clip| Segment::whole(clip, 2.0))
             .collect();
         let without = Composition {
+            watermark: None,
             captions: Vec::new(),
             grade: Grade::default(),
             shape: Shape::Portrait,
@@ -1044,6 +1108,7 @@ mod tests {
             title: None,
         };
         let with = Composition {
+            watermark: None,
             captions: vec![Caption {
                 image: png.clone(),
                 clip: 1,
@@ -1056,19 +1121,39 @@ mod tests {
             music: None,
             clips,
             title: Some(Title {
-                image: png,
+                image: png.clone(),
                 show_for: 1.0,
                 fade_out: 0.0,
             }),
         };
+        let marked = Composition {
+            watermark: Some(Watermark {
+                image: png.clone(),
+                opacity: 0.6,
+            }),
+            ..without.clone()
+        };
+        let watermarked = dir.join("watermarked.mp4");
         compose(&without, Quality::Export, &plain).unwrap();
         compose(&with, Quality::Export, &titled).unwrap();
         compose(&with, Quality::Preview, &preview).unwrap();
+        compose(&marked, Quality::Export, &watermarked).unwrap();
 
         let info = crate::ffmpeg::probe(&titled).unwrap();
         let preview_info = crate::ffmpeg::probe(&preview).unwrap();
         let psnr = frame_psnr(&titled, &plain);
+        let marked_info = crate::ffmpeg::probe(&watermarked).unwrap();
+        let marked_psnr = frame_psnr(&watermarked, &plain);
         std::fs::remove_dir_all(&dir).unwrap();
+
+        // The watermark covers every frame and does not lengthen the video.
+        assert!(
+            (marked_info.duration - 4.0).abs() < 0.05,
+            "{}",
+            marked_info.duration
+        );
+        assert_eq!(marked_psnr.len(), 120);
+        assert!(marked_psnr.iter().all(|&p| p < 25.0), "{marked_psnr:?}");
 
         assert!((info.duration - 4.0).abs() < 0.05, "{}", info.duration);
         assert!(info.has_audio);
@@ -1142,6 +1227,7 @@ mod tests {
         let render = |original: Option<f64>, volume: f64, name: &str| {
             let out = dir.join(name);
             let composition = Composition {
+                watermark: None,
                 captions: Vec::new(),
                 clips: clips.clone(),
                 grade: Grade::default(),
@@ -1216,6 +1302,7 @@ mod tests {
         }
         clips[1].trim = Some((0.5, 1.5));
         let composition = Composition {
+            watermark: None,
             captions: Vec::new(),
             clips,
             shape: Shape::Portrait,
@@ -1285,6 +1372,7 @@ mod tests {
             for fill in [Fill::Crop, Fill::Black, Fill::Blur] {
                 let out = dir.join(format!("{shape:?}-{fill:?}.mp4"));
                 let composition = Composition {
+                    watermark: None,
                     captions: Vec::new(),
                     clips: vec![Segment::whole(norm.clone(), duration)],
                     shape,
