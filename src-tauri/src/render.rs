@@ -115,6 +115,8 @@ fn grade(filter: &Filter) -> Grade {
             Preset::Forest => Some(Look::Forest),
             Preset::River => Some(Look::River),
             Preset::Golden => Some(Look::Golden),
+            Preset::Sky => Some(Look::Sky),
+            Preset::Court => Some(Look::Court),
             Preset::City => Some(Look::City),
             Preset::Vapor => Some(Look::Vapor),
             Preset::Mono => Some(Look::Mono),

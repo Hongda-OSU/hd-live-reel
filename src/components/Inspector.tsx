@@ -250,12 +250,14 @@ export function Inspector({ title, audio, filter, transition, output, watermark,
                   ["forest", "林间"],
                   ["river", "水色"],
                   ["golden", "暖阳"],
+                  ["sky", "晴空"],
                 ]}
                 value={filter.preset}
                 onChange={(preset) => setFilter({ preset })}
               />
               <Seg<Filter["preset"]>
                 options={[
+                  ["court", "球场"],
                   ["city", "城市"],
                   ["vapor", "蒸汽波"],
                   ["mono", "黑白"],

@@ -2,8 +2,8 @@
 //! brightness / contrast / saturation sliders. Built only from FFmpeg's own
 //! filters; the preset numbers are hand-picked starting points.
 
-/// A preset look; the frontend calls these 林间 / 水色 / 暖阳 / 城市 /
-/// 蒸汽波 / 黑白.
+/// A preset look; the frontend calls these 林间 / 水色 / 暖阳 / 晴空 /
+/// 球场 / 城市 / 蒸汽波 / 黑白.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Look {
     /// Richer, deeper greens.
@@ -12,6 +12,10 @@ pub enum Look {
     River,
     /// Warm late-afternoon light.
     Golden,
+    /// Deeper blue sky with more defined clouds.
+    Sky,
+    /// Punchy colour and contrast for sport, a faint vignette.
+    Court,
     /// Teal shadows, warm midtones, more contrast: the film-poster look.
     City,
     /// Vaporwave: yellows turn hot pink, greens teal, shadows purple.
@@ -83,6 +87,22 @@ fn look_filter(look: Look) -> &'static str {
             "colorbalance=rs=0.06:bs=-0.07:rm=0.10:gm=0.02:bm=-0.10,\
              huesaturation=colors=r+y:saturation=0.3:strength=3,\
              eq=contrast=1.04"
+        }
+        // Deeper blues, and highlights pulled down so clouds keep their
+        // shape. An overcast grey sky has no blue to deepen, so it barely
+        // changes.
+        Look::Sky => {
+            "huesaturation=colors=c+b:saturation=1.0:intensity=-0.10:strength=3,\
+             curves=all='0/0 0.5/0.5 0.8/0.75 1/0.95',\
+             eq=contrast=1.08"
+        }
+        // More colour and contrast, oranges (the ball) lifted most, a light
+        // sharpen and a vignette faint enough not to dim the sky.
+        Look::Court => {
+            "eq=contrast=1.12:saturation=1.18,\
+             huesaturation=colors=r+y:saturation=0.4:strength=3,\
+             unsharp=5:5:0.6,\
+             vignette=angle=PI/9"
         }
         // Coloured shadows lean teal and midtones orange. Not highlights:
         // colorbalance would tint white there.
@@ -179,6 +199,8 @@ mod tests {
             Look::Forest,
             Look::River,
             Look::Golden,
+            Look::Sky,
+            Look::Court,
             Look::City,
             Look::Vapor,
             Look::Mono,
@@ -224,6 +246,11 @@ mod tests {
             stat_of(tan, filter.clone(), "VAVG") - stat_of(tan, filter, "UAVG")
         };
         assert!(warmth(look(Look::Golden)) > warmth(None) + 1.0);
+
+        assert!(sat(blue, look(Look::Sky)) > sat(blue, None) * 1.3);
+        assert!((sat(green, look(Look::Sky)) - sat(green, None)).abs() < 3.0);
+        let orange = "color=0xc8642a:s=64x64:d=1";
+        assert!(sat(orange, look(Look::Court)) > sat(orange, None) * 1.2);
     }
 
     #[test]

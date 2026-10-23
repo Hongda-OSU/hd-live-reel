@@ -197,6 +197,8 @@ pub enum Preset {
     Forest,
     River,
     Golden,
+    Sky,
+    Court,
     City,
     Vapor,
     Mono,
