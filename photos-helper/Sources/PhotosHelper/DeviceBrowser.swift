@@ -3,8 +3,9 @@ import ImageCaptureCore
 
 /// Finds cameras (including iPhones) connected over USB.
 final class DeviceBrowser: NSObject, ICDeviceBrowserDelegate {
-    /// iPhones can be added just after the "enumerated" callback, so keep
-    /// listening until no device has appeared for this long.
+    /// iPhones can be added over a second after the "enumerated" callback,
+    /// so wait for a camera, then keep listening until no device has
+    /// appeared for this long.
     private static let settleTime: TimeInterval = 0.5
 
     private let browser = ICDeviceBrowser()
@@ -12,7 +13,8 @@ final class DeviceBrowser: NSObject, ICDeviceBrowserDelegate {
     private var enumerated = false
     private var lastChange = Date()
 
-    /// Spins the main run loop until enumeration settles or `timeout` passes.
+    /// Spins the main run loop until a camera has appeared and enumeration
+    /// settles, or `timeout` passes.
     /// Keep the browser alive (and not stopped) while using the returned
     /// devices: stopping it removes them.
     func discover(timeout: TimeInterval) -> [ICCameraDevice] {
@@ -22,7 +24,8 @@ final class DeviceBrowser: NSObject, ICDeviceBrowserDelegate {
         )!
         browser.start()
         RunLoop.main.spin(until: Date().addingTimeInterval(timeout)) {
-            self.enumerated && Date().timeIntervalSince(self.lastChange) > Self.settleTime
+            self.enumerated && !self.cameras.isEmpty
+                && Date().timeIntervalSince(self.lastChange) > Self.settleTime
         }
         return cameras
     }

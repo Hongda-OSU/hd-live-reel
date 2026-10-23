@@ -39,7 +39,9 @@ func fail(_ message: String, code: Int32 = 1) -> Never {
 func withSession(_ body: (CameraSession) -> Void) {
     let browser = DeviceBrowser()
     defer { browser.stop() }
-    guard let camera = browser.discover(timeout: 5).first else {
+    // Right after another helper run releases the phone, it can take ~8 s
+    // to show up again.
+    guard let camera = browser.discover(timeout: 15).first else {
         fail("no device found")
     }
     let session = CameraSession(camera: camera)
