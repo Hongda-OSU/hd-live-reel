@@ -17,8 +17,7 @@ const styles = stylex.create({
   },
 });
 
-const NOTES: Record<Audio["mode"], string> = {
-  original: "每段已自动拉齐响度，接缝处不爆音。",
+const NOTES: Partial<Record<Audio["mode"], string>> = {
   music: "配乐自动裁到视频长度，结尾 2 秒淡出；比视频短会循环。",
   mix: "配乐为主，原声压低保留。",
 };
@@ -52,6 +51,7 @@ export function SoundGroup({ audio, dispatch }: Props) {
 
   const withMusic = audio.mode !== "original";
   const track = audio.musicPath ? musicName(audio.musicPath) : null;
+  const note = withMusic && !audio.musicPath ? "还没选音乐，现在播放的仍是原声。" : NOTES[audio.mode];
   return (
     <Group>
       <Field>
@@ -102,9 +102,7 @@ export function SoundGroup({ audio, dispatch }: Props) {
         </Field>
       )}
       {error && <p {...stylex.props(ui.error)}>{error}</p>}
-      <p {...stylex.props(ui.note)}>
-        {withMusic && !audio.musicPath ? "还没选音乐，现在播放的仍是原声。" : NOTES[audio.mode]}
-      </p>
+      {note && <p {...stylex.props(ui.note)}>{note}</p>}
     </Group>
   );
 }
