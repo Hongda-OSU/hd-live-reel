@@ -43,14 +43,15 @@ export function WatermarkGroup({ watermark, dispatch }: Props) {
           onChange={(size) => set({ size })}
         />
       </Field>
-      <Field label="不透明度">
+      <Field label="透明度">
+        {/* Shown as transparency, stored as opacity like FFmpeg's alpha. */}
         <Slider
-          min={0.2}
-          max={1}
+          min={0}
+          max={0.8}
           step={0.05}
-          value={watermark.opacity}
-          shown={`${Math.round(watermark.opacity * 100)}%`}
-          onChange={(opacity) => set({ opacity })}
+          value={1 - watermark.opacity}
+          shown={`${Math.round((1 - watermark.opacity) * 100)}%`}
+          onChange={(transparency) => set({ opacity: Math.round((1 - transparency) * 100) / 100 })}
         />
       </Field>
       <p {...stylex.props(ui.note)}>文字留空就不加水印。从第一帧到最后一帧都显示。</p>
