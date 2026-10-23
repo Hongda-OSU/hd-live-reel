@@ -470,16 +470,16 @@ function App() {
     return () => void stop.then((unlisten) => unlisten());
   }, [addFiles]);
 
-  async function clearClips() {
+  async function clearProject() {
     if (!project) return;
-    const confirmed = await ask(`清空全部 ${project.clips.length} 个片段？手机和 Mac 上的原片不受影响。`, {
-      title: "清空片段",
+    const confirmed = await ask("片段和所有设置都会清空，原片不受影响。", {
+      title: "清空工程？",
       kind: "warning",
       okLabel: "清空",
       cancelLabel: "取消",
     });
     if (!confirmed) return;
-    dispatch({ type: "clearClips" });
+    dispatch({ type: "resetProject", defaults: await defaultProject() });
     setSelectedId(null);
   }
 
@@ -610,7 +610,7 @@ function App() {
           <div {...stylex.props(styles.sectionTitle)}>
             <span>片段 {project.clips.length || ""}</span>
             {project.clips.length > 0 && (
-              <button onClick={clearClips} {...stylex.props(styles.clear)}>
+              <button onClick={clearProject} {...stylex.props(styles.clear)}>
                 清空
               </button>
             )}
