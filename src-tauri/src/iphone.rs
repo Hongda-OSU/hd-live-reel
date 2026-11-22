@@ -5,6 +5,7 @@ use std::ffi::OsStr;
 use std::fmt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::Mutex;
 
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
@@ -77,7 +78,7 @@ impl std::error::Error for Error {}
 
 /// Everything on the phone, newest first, each edited photo once.
 pub fn list() -> Result<Vec<MediaItem>, Error> {
-    run(["list"]).map(one_per_edit)
+    on_phone(["list"]).map(one_per_edit)
 }
 
 /// The phone keeps an edited photo twice: the original `IMG_2687.HEIC`
@@ -135,7 +136,7 @@ pub fn download(ids: &[String], dir: &Path) -> Result<Vec<Downloaded>, Error> {
     let mut args: Vec<&OsStr> = vec!["download".as_ref()];
     args.extend(ids.iter().map(OsStr::new));
     args.extend(["--to".as_ref(), dir.as_os_str()]);
-    run(args)
+    on_phone(args)
 }
 
 /// Writes thumbnails (longest side `max_pixels`) to `<dir>/<id>.jpg`.
@@ -158,7 +159,7 @@ pub fn thumbnails(ids: &[String], dir: &Path, max_pixels: u32) -> Result<Vec<Thu
             "--size".as_ref(),
             size.as_ref(),
         ]);
-        fetched = run(args)?;
+        fetched = on_phone(args)?;
     }
     Ok(ids
         .iter()
@@ -211,6 +212,23 @@ pub fn score(paths: &[PathBuf]) -> Result<Vec<Option<Score>>, Error> {
             })
         })
         .collect())
+}
+
+/// The phone serves one helper session at a time: a list and a thumbnail
+/// fetch running together each got a partial catalog or timed out.
+static PHONE: Mutex<()> = Mutex::new(());
+
+/// Runs a helper command that talks to the phone, one at a time.
+fn on_phone<T, I, S>(args: I) -> Result<T, Error>
+where
+    T: DeserializeOwned,
+    I: IntoIterator<Item = S>,
+    S: AsRef<OsStr>,
+{
+    let _turn = PHONE
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    run(args)
 }
 
 fn run<T, I, S>(args: I) -> Result<T, Error>

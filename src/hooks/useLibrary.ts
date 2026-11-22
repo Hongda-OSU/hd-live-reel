@@ -32,6 +32,8 @@ export function useLibrary() {
       const batch = todo.slice(i, i + BATCH);
       try {
         const results = await thumbnails(batch);
+        // Ones the phone did not deliver are asked for again next time.
+        for (const t of results) if (!t.path) requested.current.delete(t.id);
         setThumbs((current) => {
           const next = { ...current };
           for (const t of results) if (t.path) next[t.id] = fileUrl(t.path);
