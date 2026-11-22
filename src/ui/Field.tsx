@@ -18,14 +18,35 @@ const styles = stylex.create({
     fontSize: 11,
     color: colors.muted,
   },
+  heading: {
+    display: "flex",
+    alignItems: "baseline",
+    justifyContent: "space-between",
+    gap: 8,
+  },
 });
+
+interface Props {
+  label?: string;
+  /** Shown at the right of the label, e.g. a slider's current value. */
+  aside?: ReactNode;
+  children: ReactNode;
+}
 
 /** A labelled form row. A div, not a label: a label wrapping buttons
  * would click the first one whenever its text is clicked. */
-export function Field({ label, children }: { label?: string; children: ReactNode }) {
+export function Field({ label, aside, children }: Props) {
+  const title = label && <span {...stylex.props(styles.label)}>{label}</span>;
   return (
     <div {...stylex.props(styles.field)}>
-      {label && <span {...stylex.props(styles.label)}>{label}</span>}
+      {aside ? (
+        <div {...stylex.props(styles.heading)}>
+          {title}
+          {aside}
+        </div>
+      ) : (
+        title
+      )}
       {children}
     </div>
   );

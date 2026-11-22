@@ -4,8 +4,13 @@ import { colors, shadows } from "../tokens.stylex";
 import { Button, Field, Switch, ui } from "../ui";
 
 /** Default and range of the AI target, in seconds; Live Photos run ~2 s. */
-export const TARGET = { initial: 40, min: 15, max: 90, step: 5 };
+export const TARGET = { initial: 40, min: 15, max: 180, step: 5 };
 const SECONDS_PER_PICK = 2;
+/** A tick every 30 s, plus the minimum; minutes are labelled. */
+const MARKS = [TARGET.min, 30, 60, 90, 120, 150, 180];
+/** WebKit's range thumb is 24 px wide and its centre stops half of
+ * that short of each end, so ticks span the track less the thumb. */
+const THUMB = 24;
 
 const styles = stylex.create({
   panel: {
@@ -30,9 +35,33 @@ const styles = stylex.create({
     fontSize: 12,
   },
   slider: {
+    display: "block",
     width: "100%",
     margin: 0,
     accentColor: colors.accent,
+  },
+  scale: {
+    position: "relative",
+    height: 22,
+    marginTop: 2,
+  },
+  tick: (at: number) => ({
+    position: "absolute",
+    top: 0,
+    left: `calc(${THUMB / 2}px + (100% - ${THUMB}px) * ${at})`,
+    width: 1,
+    height: 5,
+    backgroundColor: colors.muted,
+    opacity: 0.6,
+  }),
+  tickLabel: {
+    position: "absolute",
+    top: 8,
+    left: 0,
+    transform: "translateX(-50%)",
+    color: colors.muted,
+    fontSize: 10,
+    whiteSpace: "nowrap",
   },
   row: {
     display: "flex",
@@ -86,8 +115,15 @@ export function AiPanel({ poolSize, again, target, people, busy, onTarget, onPeo
             <p {...stylex.props(ui.note)}>还没有勾选照片：点日期或时段标题旁的圆圈整段勾选，或拖动连选。</p>
           )}
         </Field>
-        <Field label="目标时长">
-          <div {...stylex.props(styles.row)}>
+        <Field
+          label="目标时长"
+          aside={
+            <span {...stylex.props(ui.value)}>
+              {target} 秒 ≈ {Math.round(target / SECONDS_PER_PICK)} 张
+            </span>
+          }
+        >
+          <div>
             <input
               type="range"
               aria-label="目标时长"
@@ -98,9 +134,13 @@ export function AiPanel({ poolSize, again, target, people, busy, onTarget, onPeo
               onChange={(e) => onTarget(Number(e.target.value))}
               {...stylex.props(styles.slider)}
             />
-            <span {...stylex.props(ui.value)}>
-              {target} 秒 ≈ {Math.round(target / SECONDS_PER_PICK)} 张
-            </span>
+            <div aria-hidden {...stylex.props(styles.scale)}>
+              {MARKS.map((s) => (
+                <span key={s} {...stylex.props(styles.tick((s - TARGET.min) / (TARGET.max - TARGET.min)))}>
+                  {s % 60 === 0 && <span {...stylex.props(styles.tickLabel)}>{s / 60} 分</span>}
+                </span>
+              ))}
+            </div>
           </div>
         </Field>
         <Field label="包含人像">
