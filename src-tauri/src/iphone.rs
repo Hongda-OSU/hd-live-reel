@@ -141,7 +141,9 @@ pub fn download(ids: &[String], dir: &Path) -> Result<Vec<Downloaded>, Error> {
 
 /// Writes thumbnails (longest side `max_pixels`) to `<dir>/<id>.jpg`.
 /// Ones already on disk are returned without asking the phone, so this
-/// works for cached items even when no iPhone is connected.
+/// works for cached items even when no iPhone is connected; if the phone
+/// can't be reached, the rest come back as errors rather than failing the
+/// cached ones too. It fails only when nothing was on disk.
 pub fn thumbnails(ids: &[String], dir: &Path, max_pixels: u32) -> Result<Vec<Thumbnail>, Error> {
     let cached = |id: &String| {
         let path = dir.join(format!("{id}.jpg"));
@@ -149,6 +151,7 @@ pub fn thumbnails(ids: &[String], dir: &Path, max_pixels: u32) -> Result<Vec<Thu
     };
     let missing: Vec<&String> = ids.iter().filter(|id| cached(id).is_none()).collect();
     let mut fetched: Vec<Thumbnail> = Vec::new();
+    let mut unreachable: Option<String> = None;
     if !missing.is_empty() {
         let size = max_pixels.to_string();
         let mut args: Vec<&OsStr> = vec!["thumbnails".as_ref()];
@@ -159,7 +162,11 @@ pub fn thumbnails(ids: &[String], dir: &Path, max_pixels: u32) -> Result<Vec<Thu
             "--size".as_ref(),
             size.as_ref(),
         ]);
-        fetched = on_phone(args)?;
+        match on_phone(args) {
+            Ok(found) => fetched = found,
+            Err(e) if missing.len() < ids.len() => unreachable = Some(e.to_string()),
+            Err(e) => return Err(e),
+        }
     }
     Ok(ids
         .iter()
@@ -176,7 +183,7 @@ pub fn thumbnails(ids: &[String], dir: &Path, max_pixels: u32) -> Result<Vec<Thu
                 .unwrap_or_else(|| Thumbnail {
                     id: id.clone(),
                     path: None,
-                    error: Some("no thumbnail".into()),
+                    error: Some(unreachable.clone().unwrap_or_else(|| "no thumbnail".into())),
                 }),
         })
         .collect())
