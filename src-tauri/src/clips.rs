@@ -30,11 +30,14 @@ pub struct Progress {
     pub current: f64,
 }
 
-/// Downloads `ids` from the phone and returns ready-to-edit clips in the
-/// same order. Normalized files are cached per item.
+/// Downloads `ids` from the phone into `originals` and returns
+/// ready-to-edit clips in the same order. Normalized files are cached per
+/// item. The downloads are the only copies on the Mac, so `originals` must
+/// be outside the cache, which macOS may clear.
 pub fn add_from_iphone(
     ids: &[String],
     cache: &Path,
+    originals: &Path,
     report: impl Fn(Progress),
 ) -> Result<Vec<Clip>, String> {
     if ids.is_empty() {
@@ -47,7 +50,7 @@ pub fn add_from_iphone(
         total,
         current: 0.0,
     });
-    let downloads = iphone::download(ids, &cache.join("originals")).map_err(|e| e.to_string())?;
+    let downloads = iphone::download(ids, originals).map_err(|e| e.to_string())?;
 
     let stamp = stamp()?;
     let mut clips = Vec::with_capacity(total);
@@ -144,17 +147,7 @@ pub fn add_from_files(
             taken_at,
         };
         let clip = prepare(cache, unique, Source::File, &id, item, progress)?;
-        let thumb = thumbnail_path(cache, &id);
-        if !thumb.is_file() {
-            std::fs::create_dir_all(thumb.parent().unwrap()).map_err(|e| e.to_string())?;
-            ffmpeg::still_frame(
-                clip.normalized_path.as_deref().unwrap(),
-                &thumb,
-                clip.duration / 2.0,
-                THUMBNAIL_SIDE,
-            )
-            .map_err(|e| format!("{id}: {e}"))?;
-        }
+        clip_thumbnail(cache, &clip)?;
         clips.push(clip);
     }
     Ok(Added {
@@ -323,27 +316,109 @@ fn thumbnail_path(cache: &Path, id: &str) -> PathBuf {
     cache.join("thumbs").join(format!("{id}.jpg"))
 }
 
-/// Clips prepared before intermediates kept their own shape point at
-/// portrait-cropped files. Re-normalizes those from the cached original so
-/// every aspect and fill works; returns whether any clip changed.
-pub fn upgrade(clips: &mut [Clip], cache: &Path) -> Result<bool, String> {
+/// Makes the clip list's thumbnail of `clip` from its normalized file,
+/// unless it is already there: the only source for files from the Mac,
+/// and for iPhone clips it saves plugging the phone in after the cache
+/// was cleared.
+fn clip_thumbnail(cache: &Path, clip: &Clip) -> Result<(), String> {
+    let (Some(id), Some(normalized)) = (&clip.asset_id, &clip.normalized_path) else {
+        return Ok(());
+    };
+    let thumb = thumbnail_path(cache, id);
+    if !thumb.is_file() {
+        std::fs::create_dir_all(thumb.parent().unwrap()).map_err(|e| e.to_string())?;
+        ffmpeg::still_frame(normalized, &thumb, clip.duration / 2.0, THUMBNAIL_SIDE)
+            .map_err(|e| format!("{id}: {e}"))?;
+    }
+    Ok(())
+}
+
+/// Gets a reopened project's clips ready to render again; macOS may have
+/// cleared the cache since. iPhone originals still in the cache, where
+/// they used to be downloaded, move to `originals`. A clip whose
+/// intermediate is missing or portrait-cropped (made before
+/// intermediates kept their own shape) is normalized again from its
+/// original; if the original is gone too, its `normalized_path` is
+/// cleared so the clip list asks for it to be imported again; so is one
+/// that fails to normalize, rather than failing the whole project.
+/// Returns whether any clip changed.
+pub fn restore(clips: &mut [Clip], cache: &Path, originals: &Path) -> Result<bool, String> {
+    let old_originals = cache.join("originals");
     let mut changed = false;
     for clip in clips {
-        let current = clip
-            .normalized_path
-            .as_deref()
-            .is_some_and(|path| path.to_string_lossy().ends_with(NORMALIZED_SUFFIX));
+        for path in [Some(&mut clip.video_path), clip.still_path.as_mut()]
+            .into_iter()
+            .flatten()
+        {
+            changed |= move_out_of_cache(path, &old_originals, originals)?;
+        }
         let Some(id) = clip.asset_id.clone() else {
             continue;
         };
-        if current || !clip.video_path.is_file() {
-            continue;
+        let exists = clip.normalized_path.as_deref().is_some_and(Path::is_file);
+        let current = exists
+            && clip
+                .normalized_path
+                .as_deref()
+                .is_some_and(|path| path.to_string_lossy().ends_with(NORMALIZED_SUFFIX));
+        if !current {
+            let rebuilt = clip
+                .video_path
+                .is_file()
+                .then(|| normalize_cached(cache, &id, &clip.video_path, |_| {}).ok())
+                .flatten();
+            if let Some((normalized, _)) = rebuilt {
+                clip.normalized_path = Some(normalized);
+                changed = true;
+            } else if !exists && clip.normalized_path.take().is_some() {
+                changed = true;
+            }
         }
-        let (normalized, _) = normalize_cached(cache, &id, &clip.video_path, |_| {})?;
-        clip.normalized_path = Some(normalized);
-        changed = true;
+        // Only a missing picture; not worth failing the load over.
+        let _ = clip_thumbnail(cache, clip);
     }
     Ok(changed)
+}
+
+/// Deletes the files under `dir` that are not in `keep`, then the folders
+/// left empty; returns how many files went. For the app's own copies of
+/// media (iPhone downloads, imported music), which only the one project
+/// refers to, so they don't pile up once clips are removed. A missing
+/// `dir` is fine.
+pub fn prune(dir: &Path, keep: &[&Path]) -> Result<usize, String> {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return Ok(0);
+    };
+    let mut removed = 0;
+    for entry in entries {
+        let path = entry.map_err(|e| e.to_string())?.path();
+        if path.is_dir() {
+            removed += prune(&path, keep)?;
+            // Fails while something is left inside, which is fine.
+            let _ = std::fs::remove_dir(&path);
+        } else if !keep.contains(&path.as_path()) {
+            std::fs::remove_file(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+            removed += 1;
+        }
+    }
+    Ok(removed)
+}
+
+/// Moves `path` from under `from` to the same place under `to` and points
+/// it there; returns whether `path` changed. A file already gone stays as
+/// it is.
+fn move_out_of_cache(path: &mut PathBuf, from: &Path, to: &Path) -> Result<bool, String> {
+    let Ok(rest) = path.strip_prefix(from) else {
+        return Ok(false);
+    };
+    if !path.is_file() {
+        return Ok(false);
+    }
+    let moved = to.join(rest);
+    std::fs::create_dir_all(moved.parent().unwrap()).map_err(|e| e.to_string())?;
+    std::fs::rename(&*path, &moved).map_err(|e| format!("{}: {e}", path.display()))?;
+    *path = moved;
+    Ok(true)
 }
 
 /// The uncropped picture of `clip` at `at` seconds into it, for the crop
@@ -424,6 +499,28 @@ mod tests {
         );
     }
 
+    /// A clip under a fake device id whose files were never made.
+    fn landscape_clip_unmade() -> Clip {
+        Clip {
+            id: "c".into(),
+            source: Source::Iphone,
+            kind: ClipKind::Video,
+            asset_id: Some("dev/IMG_0001.MOV".into()),
+            still_path: None,
+            video_path: PathBuf::new(),
+            normalized_path: None,
+            taken_at: None,
+            duration: 1.0,
+            trim_start: 0.2,
+            trim_end: 0.8,
+            muted: false,
+            crop_offset: 0.5,
+            ai_score: None,
+            ai_reason: None,
+            caption: None,
+        }
+    }
+
     /// A 640×480 test pattern under a fake device id.
     fn landscape_clip(cache: &Path) -> Clip {
         let src = cache.join("src.mov");
@@ -464,7 +561,7 @@ mod tests {
     }
 
     #[test]
-    fn upgrade_replaces_cropped_intermediates_once() {
+    fn restore_replaces_cropped_intermediates_once() {
         let cache =
             std::env::temp_dir().join(format!("hd-live-reel-upgrade-{}", std::process::id()));
         std::fs::create_dir_all(&cache).unwrap();
@@ -472,11 +569,14 @@ mod tests {
             normalized_path: Some(cache.join("clips/dev/IMG_0001.c50.norm.mov")),
             ..landscape_clip(&cache)
         }];
+        std::fs::create_dir_all(cache.join("clips/dev")).unwrap();
+        std::fs::write(cache.join("clips/dev/IMG_0001.c50.norm.mov"), b"").unwrap();
+        let originals = cache.join("originals-kept");
 
-        let changed = upgrade(&mut clips, &cache).unwrap();
+        let changed = restore(&mut clips, &cache, &originals).unwrap();
         let path = clips[0].normalized_path.clone().unwrap();
         let size = crate::ffmpeg::probe(&path).unwrap().video.unwrap();
-        let again = upgrade(&mut clips, &cache).unwrap();
+        let again = restore(&mut clips, &cache, &originals).unwrap();
         let frame = crop_frame(&clips[0], 0.3, &cache).unwrap();
         std::fs::remove_dir_all(&cache).unwrap();
 
@@ -497,6 +597,71 @@ mod tests {
         );
         assert!(!again, "already current");
         assert!(frame.ends_with("frames/dev/IMG_0001.300.jpg"), "{frame:?}");
+    }
+
+    #[test]
+    fn restore_rebuilds_cleared_intermediates_and_moves_originals() {
+        let dir = std::env::temp_dir().join(format!("hd-live-reel-restore-{}", std::process::id()));
+        let (cache, originals) = (dir.join("cache"), dir.join("data/originals"));
+        std::fs::create_dir_all(cache.join("originals/dev")).unwrap();
+        let made = landscape_clip(&cache).video_path;
+        let old = cache.join("originals/dev/IMG_0001.MOV");
+        std::fs::rename(&made, &old).unwrap();
+        let mut clips = vec![Clip {
+            video_path: old,
+            // Cleared by macOS: the path is saved but the file is gone.
+            normalized_path: Some(cache.join("clips/dev/IMG_0001.full.norm.mov")),
+            ..landscape_clip(&dir)
+        }];
+
+        let changed = restore(&mut clips, &cache, &originals).unwrap();
+        let rebuilt = clips[0].normalized_path.clone().unwrap();
+        let rebuilt_exists = rebuilt.is_file();
+        std::fs::remove_dir_all(&dir).unwrap();
+
+        assert!(changed);
+        assert_eq!(clips[0].video_path, originals.join("dev/IMG_0001.MOV"));
+        assert!(rebuilt_exists, "{rebuilt:?}");
+    }
+
+    #[test]
+    fn prune_keeps_only_what_the_project_uses() {
+        let dir = std::env::temp_dir().join(format!("hd-live-reel-prune-{}", std::process::id()));
+        let (used, unused, other) = (
+            dir.join("dev/IMG_0001.MOV"),
+            dir.join("dev/IMG_0002.MOV"),
+            dir.join("old/IMG_0003.HEIC"),
+        );
+        for path in [&used, &unused, &other] {
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, b"x").unwrap();
+        }
+
+        let removed = prune(&dir, &[used.as_path()]).unwrap();
+        let (kept, gone, emptied) = (used.is_file(), !unused.exists(), !dir.join("old").exists());
+        let missing = prune(&dir.join("nowhere"), &[]).unwrap();
+        std::fs::remove_dir_all(&dir).unwrap();
+
+        assert_eq!(removed, 2);
+        assert!(kept && gone && emptied);
+        assert_eq!(missing, 0);
+    }
+
+    #[test]
+    fn restore_marks_clips_whose_original_is_gone() {
+        let cache = std::env::temp_dir().join(format!("hd-live-reel-gone-{}", std::process::id()));
+        let mut clips = vec![Clip {
+            video_path: cache.join("nowhere/IMG_0001.MOV"),
+            normalized_path: Some(cache.join("clips/dev/IMG_0001.full.norm.mov")),
+            ..landscape_clip_unmade()
+        }];
+
+        let changed = restore(&mut clips, &cache, &cache.join("originals")).unwrap();
+        let again = restore(&mut clips, &cache, &cache.join("originals")).unwrap();
+
+        assert!(changed);
+        assert_eq!(clips[0].normalized_path, None, "needs importing again");
+        assert!(!again);
     }
 
     #[test]
@@ -633,7 +798,10 @@ mod tests {
 
     #[test]
     fn nothing_to_add_is_not_an_error() {
-        assert_eq!(add_from_iphone(&[], Path::new("/c"), |_| {}), Ok(vec![]));
+        assert_eq!(
+            add_from_iphone(&[], Path::new("/c"), Path::new("/o"), |_| {}),
+            Ok(vec![])
+        );
     }
 
     #[test]

@@ -24,7 +24,7 @@ Personal macOS desktop app that stitches iPhone Live Photos into one MP4 with or
 | Format everything                                                     | `pnpm format`                                                                |
 | Rust tests                                                            | `cargo test --manifest-path src-tauri/Cargo.toml`                            |
 | Personal-media tests (`baseline`, `ai_select`; env vars in each file) | `cargo test --manifest-path src-tauri/Cargo.toml --test <name> -- --ignored` |
-| Build Swift helper into `binaries/`                                   | `pnpm helper` (also run by `pnpm tauri dev` and `build`)                     |
+| Build Swift helper into `binaries/`                                   | `pnpm helper` (also run by `tauri dev`/`build`)                              |
 | Run Swift helper                                                      | `./binaries/photos-helper-aarch64-apple-darwin list`                         |
 
 - `photos-helper` needs a USB-connected, unlocked iPhone for `list`, `download` and `thumbnails`.
@@ -32,7 +32,7 @@ Personal macOS desktop app that stitches iPhone Live Photos into one MP4 with or
 ## Rules
 
 - Preview and export use the same FFmpeg filter graph built from `project.json`; only resolution and encoder speed differ. Never emulate filters in CSS/WebGL.
-- Treat originals as read-only. Write intermediates only to `~/Library/Caches/<App>/`.
+- Originals are read-only. Intermediates go in `~/Library/Caches/<App>/` (macOS may clear it; `load_project` rebuilds them); our only copies (iPhone downloads, music) in `~/Library/Application Support/<App>/`.
 - Normalize every clip on import to 30 fps, BT.709 SDR, stereo 48 kHz, keeping its shape; compose fits it to the output frame.
 - Lay out title, caption and watermark text in a frontend Canvas and overlay it as a transparent PNG. Do not use FFmpeg `drawtext`.
 - Rust owns timing and frame sizes (`Composition::length`, `crossfade`, `clip_windows`, `SCENE_GAP`, `Shape::size`); `clipSpans` and `FRAME` in `src/project.ts` and `src/scenes.ts` must match it.
@@ -52,7 +52,7 @@ Personal macOS desktop app that stitches iPhone Live Photos into one MP4 with or
 - Live Photos are SDR (P3, 8-bit). Only regular iPhone videos are HDR (HLG) and need tone mapping.
 - iPhone imports arriving as JPG or thumbnails: see the phone settings in README Usage.
 - "Invalid hook call" after adding a JS dependency is a stale Vite cache: delete `node_modules/.vite`, restart `pnpm tauri dev`.
-- Dev and installed apps share one project and cache; never run both.
+- Dev and installed apps share one project; never run both.
 
 ## Read these only when relevant (Notion MCP)
 

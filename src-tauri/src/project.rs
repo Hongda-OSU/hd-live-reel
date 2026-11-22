@@ -428,6 +428,29 @@ impl Project {
     }
 }
 
+impl Project {
+    /// Clears the paths of title, caption and watermark images whose files
+    /// are gone (they live in the cache, which macOS may clear); the
+    /// frontend draws a missing one again. Returns whether any changed.
+    pub fn forget_missing_images(&mut self) -> bool {
+        let images = [&mut self.title.text_image, &mut self.watermark.image]
+            .into_iter()
+            .chain(
+                self.clips
+                    .iter_mut()
+                    .filter_map(|clip| clip.caption.as_mut().map(|caption| &mut caption.image)),
+            );
+        let mut changed = false;
+        for image in images {
+            if image.as_deref().is_some_and(|path| !path.is_file()) {
+                *image = None;
+                changed = true;
+            }
+        }
+        changed
+    }
+}
+
 pub fn load(path: &Path) -> Result<Project, String> {
     let text = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
     let project: Project =
@@ -753,5 +776,53 @@ mod tests {
         // The fresh file may reuse the deleted name if created in the same ms.
         assert!(fresh_saved);
         assert_eq!(fresh, Project::default());
+    }
+
+    #[test]
+    fn forgets_text_images_whose_files_are_gone() {
+        let dir = std::env::temp_dir().join(format!("hd-live-reel-images-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let kept = dir.join("title.png");
+        std::fs::write(&kept, b"png").unwrap();
+        let mut project = Project::default();
+        project.title.text_image = Some(kept.clone());
+        project.watermark.image = Some(dir.join("gone.png"));
+        project.clips.push(Clip {
+            caption: Some(Caption {
+                image: Some(dir.join("gone-too.png")),
+                ..Caption::default()
+            }),
+            ..clip_for_images()
+        });
+
+        let changed = project.forget_missing_images();
+        let again = project.forget_missing_images();
+        std::fs::remove_dir_all(&dir).unwrap();
+
+        assert!(changed && !again);
+        assert_eq!(project.title.text_image, Some(kept));
+        assert_eq!(project.watermark.image, None);
+        assert_eq!(project.clips[0].caption.as_ref().unwrap().image, None);
+    }
+
+    fn clip_for_images() -> Clip {
+        Clip {
+            id: "c".into(),
+            source: Source::Iphone,
+            kind: ClipKind::LivePhoto,
+            asset_id: None,
+            still_path: None,
+            video_path: PathBuf::from("/c/a.mov"),
+            normalized_path: None,
+            taken_at: None,
+            duration: 2.0,
+            trim_start: 0.0,
+            trim_end: 2.0,
+            muted: false,
+            crop_offset: 0.5,
+            ai_score: None,
+            ai_reason: None,
+            caption: None,
+        }
     }
 }

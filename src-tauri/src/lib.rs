@@ -7,7 +7,7 @@ pub mod render;
 pub mod select;
 mod sidecar;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -36,6 +36,12 @@ fn cache_dir(app: &AppHandle) -> Result<PathBuf, String> {
     app.path().app_cache_dir().map_err(|e| e.to_string())
 }
 
+/// Where the only copies of media live (iPhone downloads, imported music):
+/// Application Support, which macOS never clears, unlike the cache.
+fn media_dir(app: &AppHandle) -> Result<PathBuf, String> {
+    app.path().app_data_dir().map_err(|e| e.to_string())
+}
+
 /// Runs slow work (FFmpeg, the photos helper) off the main thread.
 async fn blocking<T, F>(work: F) -> Result<T, String>
 where
@@ -48,20 +54,38 @@ where
 }
 
 /// Reopens the last project (or starts a new one) and makes it current.
-/// Clips still on the old portrait-cropped intermediates are re-prepared
-/// first, which takes a few seconds once.
+/// Whatever macOS cleared from the cache is put back first (see
+/// `clips::restore`), which can take a few seconds; text images that are
+/// gone are dropped for the frontend to draw again. Copies of media the
+/// project no longer uses are deleted; originals only while it has clips,
+/// so a project that failed to open (and came back empty) loses nothing.
 #[tauri::command]
 async fn load_project(
     app: AppHandle,
     current: State<'_, CurrentProject>,
 ) -> Result<project::Project, String> {
     let (path, mut project) = project_store(&app)?.open_last()?;
-    let cache = cache_dir(&app)?;
+    let (cache, media) = (cache_dir(&app)?, media_dir(&app)?);
     let save_to = path.clone();
     let project = blocking(move || {
-        if clips::upgrade(&mut project.clips, &cache)? {
+        let mut changed = clips::restore(&mut project.clips, &cache, &media.join("originals"))?;
+        changed |= music::restore(&mut project.audio.music_path, &cache, &media)?;
+        changed |= project.forget_missing_images();
+        if changed {
             project::save(&save_to, &project)?;
         }
+        // Housekeeping only; a file in use elsewhere stays for next time.
+        if !project.clips.is_empty() {
+            let used: Vec<&Path> = project
+                .clips
+                .iter()
+                .flat_map(|clip| [Some(clip.video_path.as_path()), clip.still_path.as_deref()])
+                .flatten()
+                .collect();
+            let _ = clips::prune(&media.join("originals"), &used);
+        }
+        let music: Vec<&Path> = project.audio.music_path.as_deref().into_iter().collect();
+        let _ = clips::prune(&media.join("music"), &music);
         Ok(project)
     })
     .await?;
@@ -144,9 +168,9 @@ async fn ai_select(
 /// Downloads and prepares iPhone items as clips. Emits `clips-progress`.
 #[tauri::command]
 async fn add_iphone_clips(app: AppHandle, ids: Vec<String>) -> Result<Vec<project::Clip>, String> {
-    let cache = cache_dir(&app)?;
+    let (cache, media) = (cache_dir(&app)?, media_dir(&app)?);
     blocking(move || {
-        clips::add_from_iphone(&ids, &cache, |progress| {
+        clips::add_from_iphone(&ids, &cache, &media.join("originals"), |progress| {
             let _ = app.emit("clips-progress", progress);
         })
     })
@@ -174,11 +198,12 @@ async fn crop_frame(app: AppHandle, clip: project::Clip, at: f64) -> Result<Path
     blocking(move || clips::crop_frame(&clip, at, &cache)).await
 }
 
-/// Normalizes a chosen music file into the cache; returns the cached path.
+/// Normalizes a chosen music file into Application Support; returns the
+/// stored path.
 #[tauri::command]
 async fn import_music(app: AppHandle, path: PathBuf) -> Result<PathBuf, String> {
-    let cache = cache_dir(&app)?;
-    blocking(move || music::import(&path, &cache)).await
+    let media = media_dir(&app)?;
+    blocking(move || music::import(&path, &media)).await
 }
 
 /// Stores the title PNG the frontend laid out; returns its path.

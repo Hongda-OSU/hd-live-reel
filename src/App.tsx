@@ -245,7 +245,10 @@ function App() {
    * rendered, so a missing one is drawn even if its fields look unchanged. */
   function adopt(next: Project) {
     dispatch({ type: "load", project: next });
-    setImageKey(titleImageKey(next.title, next.output.aspect));
+    // A title whose PNG is gone (cleared with the cache) is drawn again.
+    setImageKey(
+      !hasTitleText(next.title) || next.title.textImage ? titleImageKey(next.title, next.output.aspect) : null,
+    );
     setCaptionKeys(renderedCaptionKeys(next));
     setMarkKey(
       !hasWatermark(next.watermark) || next.watermark.image

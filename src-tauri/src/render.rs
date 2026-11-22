@@ -18,11 +18,13 @@ pub fn composition(project: &Project) -> Result<Composition, String> {
     let clips = project
         .clips
         .iter()
-        .map(|clip| {
+        .enumerate()
+        .map(|(i, clip)| {
+            // Cleared by load_project when the original is gone as well.
             let path = clip
                 .normalized_path
                 .clone()
-                .ok_or_else(|| format!("{}: not prepared yet", clip.id))?;
+                .ok_or_else(|| format!("第 {} 段的原件找不到了，需要重新导入", i + 1))?;
             let whole = clip.trim_start <= 0.0 && clip.trim_end >= clip.duration - 1e-6;
             Ok(Segment {
                 path,
@@ -390,7 +392,7 @@ mod tests {
             clips: vec![unprepared],
             ..Default::default()
         };
-        assert!(composition(&project).unwrap_err().contains("not prepared"));
+        assert!(composition(&project).unwrap_err().contains("第 1 段"));
     }
 
     #[test]
