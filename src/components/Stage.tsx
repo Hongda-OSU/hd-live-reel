@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent } from "react";
 import * as stylex from "@stylexjs/stylex";
 import { getVersion } from "@tauri-apps/api/app";
-import appIcon from "../../src-tauri/icons/icon.svg";
+import appIcon from "../../src-tauri/icons/128x128@2x.png";
 import { colors, shadows } from "../tokens.stylex";
 import { Icon, withStyle } from "../ui";
 import type { Output } from "../api";

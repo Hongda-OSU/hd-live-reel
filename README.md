@@ -1,4 +1,4 @@
-<img src="src-tauri/icons/128x128@2x.png" width="128" height="128" alt="HD Live Reel app icon: a lake at sunset with the Live Photo mark">
+<img src="src-tauri/icons/128x128@2x.png" width="128" height="128" alt="HD Live Reel app icon: a pixel-art floating island with an autumn mountain, a snowy blue mountain and a river falling off its edge">
 
 # HD Live Reel
 
