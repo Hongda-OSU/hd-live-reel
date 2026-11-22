@@ -9,12 +9,16 @@ use crate::iphone::MediaKind;
 /// A new scene starts after this long without a picture, in seconds. The
 /// picker splits days into scenes the same way (`src/scenes.ts`).
 pub const SCENE_GAP: i64 = 30 * 60;
-/// Feature-print distance under which two pictures count as the same shot.
-/// Measured on real bursts: 0.30 near-identical, 0.45 the same view
-/// slightly turned, 0.60 a different framing. Lake views from one outing
-/// sit around 0.45, and a hand-picked reel kept several of them, so only
-/// true repeats are dropped.
-pub const DUPLICATE_DISTANCE: f32 = 0.35;
+/// Feature-print distance under which two pictures count as the same shot,
+/// whenever they were taken. Measured on real bursts: 0.24 near-identical,
+/// 0.38 to 0.40 the same view slightly turned, 0.60 a different framing.
+pub const DUPLICATE_DISTANCE: f32 = 0.42;
+/// Pictures taken this close together, in seconds, are one stop on the
+/// trail, so a looser `SAME_SPOT_DISTANCE` makes them repeats: a step to
+/// the side in a gorge measured 0.53, a lake shot upright then sideways
+/// 0.65. Views of one place hours apart stay apart.
+pub const SAME_SPOT_SECONDS: i64 = 3 * 60;
+pub const SAME_SPOT_DISTANCE: f32 = 0.66;
 /// Below this `detail` a picture is mostly empty sky or wall; Vision still
 /// scores those well. An empty sky measured 1.3, hand-picked shots 11+.
 pub const PLAIN_DETAIL: f32 = 4.0;
@@ -129,10 +133,15 @@ pub fn select(candidates: &[Candidate], target_seconds: f64, people: bool) -> Ve
             continue;
         }
         let print = &candidates[i].score.feature_print;
-        match representatives
-            .iter()
-            .find(|&&r| distance(print, &candidates[r].score.feature_print) < DUPLICATE_DISTANCE)
-        {
+        let repeats = |r: usize| {
+            let apart = distance(print, &candidates[r].score.feature_print);
+            let same_spot = match (time(i), time(r)) {
+                (Some(a), Some(b)) => (a - b).abs() <= SAME_SPOT_SECONDS,
+                _ => false,
+            };
+            apart < DUPLICATE_DISTANCE || (same_spot && apart < SAME_SPOT_DISTANCE)
+        };
+        match representatives.iter().find(|&&r| repeats(r)) {
             Some(&r) => {
                 reasons[i] = Some(Reason::Duplicate {
                     of: candidates[r].id.clone(),
@@ -300,6 +309,22 @@ mod tests {
         assert_eq!(picked(&verdicts), ["a2", "b"]);
         assert_eq!(verdicts[0].reason, Reason::Duplicate { of: "a2".into() });
         assert_eq!(verdicts[1].reason, Reason::BestInScene);
+    }
+
+    #[test]
+    fn one_stop_on_the_trail_counts_once() {
+        // 0.55 rad apart is 0.54 apart: a step to the side.
+        let verdicts = select(
+            &[
+                photo("gorge", 0, 0.5, 0.0),
+                photo("gorge2", 2, 0.45, 0.55),
+                photo("later", 60, 0.4, 0.55),
+            ],
+            6.0,
+            true,
+        );
+        assert_eq!(picked(&verdicts), ["gorge", "later"]);
+        assert_eq!(verdicts[1].reason, Reason::Duplicate { of: "gorge".into() });
     }
 
     #[test]
