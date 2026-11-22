@@ -485,6 +485,14 @@ export function PickerSheet({
     });
   }
 
+  /** Rereads the phone. AI's verdicts were about the old list, so they go;
+   * ticks stay. */
+  function refresh() {
+    setVerdicts(new Map());
+    setLastRun(null);
+    onRefresh();
+  }
+
   function add() {
     // Capture order, oldest first.
     const ids = items
@@ -563,7 +571,7 @@ export function PickerSheet({
               />
             )}
           </span>
-          <Button onClick={onRefresh} disabled={busy || library.state === "loading"}>
+          <Button onClick={refresh} disabled={busy || library.state === "loading"}>
             刷新
           </Button>
         </div>
