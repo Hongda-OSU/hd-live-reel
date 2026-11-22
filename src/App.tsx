@@ -32,6 +32,9 @@ import {
   FRAME,
   hasCaption,
   hasTitleText,
+  isMissing,
+  missingLabel,
+  playable,
   reducer,
   renderKey,
   titleImageKey,
@@ -360,7 +363,8 @@ function App() {
   }, [watermark, aspect, watermarkKey, markKey]);
 
   // ---------- preview ----------
-  const key = project ? renderKey(project) : null;
+  // The preview leaves lost clips out (export refuses them instead).
+  const key = project ? renderKey(playable(project)) : null;
   // Wait for the PNGs so a text edit never renders with the old text.
   const titleReady = titleKey !== null && titleKey === imageKey;
   const captionsReady = captionJobs.length === 0;
@@ -375,7 +379,7 @@ function App() {
   const shownKey = useRef<string | null>(null);
   const renderSeq = useRef(0);
   useEffect(() => {
-    const current = latest.current;
+    const current = latest.current && playable(latest.current);
     if (!current || !titleReady || !captionsReady || !watermarkReady) return;
     if (current.clips.length === 0) {
       setPreview({ url: null, busy: false, error: null });
@@ -385,7 +389,7 @@ function App() {
     const timer = setTimeout(async () => {
       setPreview((p) => ({ ...p, busy: true }));
       try {
-        const rendered = latest.current!;
+        const rendered = playable(latest.current!);
         const path = await renderPreview(rendered);
         if (seq === renderSeq.current) {
           setPreview({ url: fileUrl(path), busy: false, error: null });
@@ -413,10 +417,17 @@ function App() {
   // Joined into one string so the effect runs only when the set changes;
   // asset ids ("<folder>/<name>") never contain "|".
   const clipAssetKey = project?.clips.map((c) => c.assetId ?? "").join("|") ?? "";
+  // Lost clips show a warning instead, and asking for theirs would hold
+  // the rest up while the phone is looked for.
+  const thumbKey = project
+    ? playable(project)
+        .clips.map((c) => c.assetId ?? "")
+        .join("|")
+    : "";
   useEffect(() => {
-    const ids = clipAssetKey.split("|").filter(Boolean);
+    const ids = thumbKey.split("|").filter(Boolean);
     if (ids.length) loadThumbs(ids);
-  }, [clipAssetKey, loadThumbs]);
+  }, [thumbKey, loadThumbs]);
   // Marked in the picker, so a photo isn't added twice by accident.
   const added = useMemo(() => new Set(clipAssetKey.split("|").filter(Boolean)), [clipAssetKey]);
 
@@ -511,21 +522,24 @@ function App() {
     if (!project) return;
     setSelectedId(id);
     setTrimming((open) => open && id);
-    setSeekTo({ time: clipStart(project, id), nonce: Date.now() });
+    const shown = playable(project);
+    if (shown.clips.some((c) => c.id === id)) setSeekTo({ time: clipStart(shown, id), nonce: Date.now() });
   }
 
   // ---------- crop ----------
   function startCrop(time: number) {
     if (!project) return;
-    const spans = clipSpans(project);
+    // Times on the preview, which leaves lost clips out.
+    const shown = playable(project);
+    const spans = clipSpans(shown);
     const found = spans.findIndex((_, i) => time < spans.slice(0, i + 1).reduce((a, b) => a + b, 0));
-    const index = found === -1 ? project.clips.length - 1 : found;
-    const clip = project.clips[index];
+    const index = found === -1 ? shown.clips.length - 1 : found;
+    const clip = shown.clips[index];
     if (!clip) return;
     // The same moment inside the clip's own file: the time into its span,
     // plus the half dissolve its span starts after, plus its trimmed head.
     const spanStart = spans.slice(0, index).reduce((a, b) => a + b, 0);
-    const into = time - spanStart + (index > 0 ? crossfade(project) / 2 : 0);
+    const into = time - spanStart + (index > 0 ? crossfade(shown) / 2 : 0);
     const at = Math.min(clip.trimStart + Math.max(0, into), clip.trimEnd);
     setSelectedId(clip.id);
     setCrop({ clipId: clip.id, frame: null, start: clip.cropOffset, offset: clip.cropOffset, phase: "drag" });
@@ -555,8 +569,9 @@ function App() {
     setTrimming(null);
     if (!id || !project) return;
     // Back on the preview at the trimmed clip, once it shows the new trim.
-    if (shownKey.current === renderKey(project)) {
-      setSeekTo({ time: clipStart(project, id), nonce: Date.now(), peek: true });
+    const shown = playable(project);
+    if (shownKey.current === renderKey(shown)) {
+      setSeekTo({ time: clipStart(shown, id), nonce: Date.now(), peek: true });
     } else seekAfterRender.current = id;
   }
 
@@ -564,6 +579,10 @@ function App() {
   if (!project) return null;
 
   const total = totalLength(project);
+  const shown = playable(project);
+  const selectedIndex = project.clips.findIndex((c) => c.id === selectedId);
+  const selectedLost =
+    selectedIndex >= 0 && isMissing(project.clips[selectedIndex]) ? project.clips[selectedIndex] : null;
   // Gone if the clip was removed while open.
   const trimClip = trimming ? project.clips.find((c) => c.id === trimming) : undefined;
   return (
@@ -643,12 +662,24 @@ function App() {
             src={preview.url}
             aspect={project.output.aspect}
             croppable={project.output.fill === "crop"}
-            lengths={clipSpans(project)}
-            thumbs={project.clips.map((clip) => (clip.assetId ? thumbs[clip.assetId] : undefined))}
+            lengths={clipSpans(shown)}
+            thumbs={shown.clips.map((clip) => (clip.assetId ? thumbs[clip.assetId] : undefined))}
             seekTo={seekTo}
             busy={preview.busy}
             error={preview.error}
             empty={project.clips.length === 0}
+            skipped={missingLabel(project.clips)}
+            missing={
+              selectedLost && {
+                title: `第 ${selectedIndex + 1} 段的原件找不到了`,
+                reason:
+                  selectedLost.source === "file"
+                    ? "原来的文件被移动或删除了，找到它再添加一次。"
+                    : "缓存被系统清理过，插上 iPhone 重新添加这一张，会放回原来的位置。",
+                onRemove: () => dispatch({ type: "removeClip", id: selectedLost.id }),
+                onReadd: () => (selectedLost.source === "file" ? void pickFiles() : setPickerOpen(true)),
+              }
+            }
             crop={crop && { ...crop, applying: crop.phase !== "drag" }}
             onCropStart={startCrop}
             onCropChange={(offset) => setCrop((c) => c && { ...c, offset })}

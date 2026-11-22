@@ -17,6 +17,8 @@ export const colors = stylex.defineVars({
   muted: { default: "#6e6e73", [DARK]: "#98989f" },
   stage: { default: "#e9e9ed", [DARK]: "#161618" },
   danger: { default: "#ff3b30", [DARK]: "#ff453a" },
+  /** Something needs attention but nothing broke, e.g. a lost original. */
+  warning: { default: "#c75c00", [DARK]: "#ff9f0a" },
   success: "#30d158",
   trimHandle: "#ffd60a",
   hover: "rgba(127, 127, 127, 0.1)",

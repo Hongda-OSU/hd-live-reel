@@ -2,10 +2,11 @@ import { useEffect, useRef, useState, type CSSProperties, type PointerEvent } fr
 import * as stylex from "@stylexjs/stylex";
 import { getVersion } from "@tauri-apps/api/app";
 import { colors, shadows } from "../tokens.stylex";
-import { Icon, withStyle } from "../ui";
+import { Button, Icon, withStyle } from "../ui";
 import type { Output } from "../api";
 import { formatTime, FRAME } from "../project";
 import { CropLayer, fillFactor } from "./CropLayer";
+import { WarningIcon } from "./WarningIcon";
 
 const styles = stylex.create({
   area: {
@@ -138,6 +139,40 @@ const styles = stylex.create({
     top: "auto",
     bottom: 14,
   },
+  notice: {
+    display: "flex",
+    alignItems: "center",
+    gap: 6,
+  },
+  // Covers the picture while a lost clip is selected.
+  missing: {
+    position: "absolute",
+    inset: 0,
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    padding: 24,
+    backgroundColor: colors.surface,
+    textAlign: "center",
+  },
+  missingTitle: {
+    margin: 0,
+    fontSize: 15,
+    fontWeight: 600,
+  },
+  missingText: {
+    margin: 0,
+    color: colors.muted,
+    fontSize: 12,
+    lineHeight: 1.5,
+  },
+  missingActions: {
+    display: "flex",
+    gap: 8,
+    marginTop: 6,
+  },
   errorPill: {
     maxWidth: "90%",
     whiteSpace: "normal",
@@ -248,6 +283,13 @@ const styles = stylex.create({
   },
 });
 
+export interface MissingView {
+  title: string;
+  reason: string;
+  onRemove: () => void;
+  onReadd: () => void;
+}
+
 interface Props {
   /** Playable URL of the latest preview, or null before the first one. */
   src: string | null;
@@ -265,6 +307,11 @@ interface Props {
   busy: boolean;
   error: string | null;
   empty: boolean;
+  /** Which clips the preview leaves out because their originals are
+   * lost, e.g. "第 3 段"; null when none are. */
+  skipped: string | null;
+  /** Set while a lost clip is selected: why, and what to do about it. */
+  missing: MissingView | null;
   /** The crop being dragged or applied, if any. */
   crop: CropView | null;
   /** A drag began on the picture at this preview time. */
@@ -307,7 +354,7 @@ function toggle(video: HTMLVideoElement | null, rewind: { current: boolean }) {
 }
 
 export function Stage(props: Props) {
-  const { src, aspect, croppable, lengths, thumbs, seekTo, busy, error, empty, crop } = props;
+  const { src, aspect, croppable, lengths, thumbs, seekTo, busy, error, empty, crop, skipped, missing } = props;
   const [frameWidth, frameHeight] = FRAME[aspect];
   const frameAspect = frameWidth / frameHeight;
   const video = useRef<HTMLVideoElement>(null);
@@ -465,6 +512,26 @@ export function Stage(props: Props) {
             busy && <div {...stylex.props(styles.pill)}>正在更新预览…</div>
           )}
           {error && !busy && <div {...stylex.props(styles.pill, styles.errorPill)}>{error}</div>}
+          {skipped && !missing && !error && !busy && !crop && !playing && (
+            <div {...stylex.props(styles.pill, styles.notice)}>
+              <WarningIcon size={12} />
+              {skipped}原件丢失，预览里先跳过
+            </div>
+          )}
+          {missing && (
+            // Its buttons must not start a crop drag on the frame below.
+            <div onPointerDown={(e) => e.stopPropagation()} {...stylex.props(styles.missing)}>
+              <WarningIcon size={28} />
+              <h3 {...stylex.props(styles.missingTitle)}>{missing.title}</h3>
+              <p {...stylex.props(styles.missingText)}>{missing.reason}</p>
+              <div {...stylex.props(styles.missingActions)}>
+                <Button onClick={missing.onRemove}>移除这一段</Button>
+                <Button variant="primary" onClick={missing.onReadd}>
+                  重新添加…
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
       <div {...stylex.props(styles.transport)}>

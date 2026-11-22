@@ -10,12 +10,14 @@ import {
   clipLength,
   formatTime,
   hasCaption,
+  isMissing,
   NEW_CAPTION,
   trimPatch,
   type Action,
 } from "../project";
 import { colors, shadows } from "../tokens.stylex";
 import { Button, Seg, Switch, ui, withStyle } from "../ui";
+import { WarningIcon } from "./WarningIcon";
 
 const styles = stylex.create({
   list: {
@@ -64,6 +66,13 @@ const styles = stylex.create({
     backgroundColor: colors.surface2,
     backgroundPosition: "center",
     backgroundSize: "cover",
+  },
+  thumbMissing: {
+    display: "grid",
+    placeItems: "center",
+  },
+  lost: {
+    color: colors.warning,
   },
   // Lets the caption excerpt shrink instead of widening the row.
   info: {
@@ -209,6 +218,7 @@ interface RowProps {
 function ClipRow({ clip, index, selected, thumb, noOriginalSound, onSelect, onTrim, dispatch }: RowProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: clip.id });
   const thumbImage = thumb ? { backgroundImage: `url("${thumb}")` } : undefined;
+  const missing = isMissing(clip);
 
   return (
     <li
@@ -222,7 +232,13 @@ function ClipRow({ clip, index, selected, thumb, noOriginalSound, onSelect, onTr
       <span {...attributes} {...listeners} aria-label="拖动排序" {...stylex.props(styles.grip)}>
         ⋮⋮
       </span>
-      <span {...withStyle(stylex.props(styles.thumb), thumbImage)} />
+      {missing ? (
+        <span {...stylex.props(styles.thumb, styles.thumbMissing)}>
+          <WarningIcon size={16} />
+        </span>
+      ) : (
+        <span {...withStyle(stylex.props(styles.thumb), thumbImage)} />
+      )}
       <span {...stylex.props(styles.info)}>
         <div {...stylex.props(styles.label, clip.muted && styles.mutedLabel)}>
           {index + 1}. {clipLabel(clip)}
@@ -230,9 +246,16 @@ function ClipRow({ clip, index, selected, thumb, noOriginalSound, onSelect, onTr
         <div {...stylex.props(styles.sub)}>
           {clipLength(clip).toFixed(1)} 秒{clip.kind === "video" ? " · 视频" : ""}
           {hasCaption(clip) && ` · ${clip.caption!.text.trim()}`}
+          {missing && (
+            <>
+              {" · "}
+              <span {...stylex.props(styles.lost)}>原件丢失</span>
+            </>
+          )}
         </div>
       </span>
-      {selected && (
+      {/* A lost clip has nothing to edit; the stage says what to do. */}
+      {selected && !missing && (
         <div onClick={(e) => e.stopPropagation()} {...stylex.props(styles.detail)}>
           <div {...stylex.props(styles.detailRow)}>
             <span {...stylex.props(styles.head)}>剪辑</span>

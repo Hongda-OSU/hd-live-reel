@@ -3,8 +3,9 @@ import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import * as stylex from "@stylexjs/stylex";
 import { cancelExport, EXPORT_CANCELLED, exportVideo, onExportProgress, type Project } from "../api";
 import { colors, shadows } from "../tokens.stylex";
-import { folderLabel, FRAME, UNTITLED, type Action } from "../project";
+import { folderLabel, FRAME, isMissing, missingLabel, UNTITLED, type Action } from "../project";
 import { Button, Field, ui, withStyle } from "../ui";
+import { WarningIcon } from "./WarningIcon";
 
 type Phase =
   | { step: "form"; cancelled: boolean }
@@ -65,6 +66,17 @@ const styles = stylex.create({
     marginLeft: "0",
     fontSize: 15,
   },
+  lost: {
+    display: "flex",
+    alignItems: "flex-start",
+    gap: 8,
+    marginTop: 12,
+    padding: 10,
+    borderRadius: 8,
+    backgroundColor: colors.surface2,
+    fontSize: 12,
+    lineHeight: 1.5,
+  },
   actions: {
     display: "flex",
     justifyContent: "flex-end",
@@ -118,8 +130,15 @@ export function ExportDialog({ open, ...rest }: Props) {
 
 function DialogBody({ project, dispatch, onClose }: Omit<Props, "open">) {
   const [phase, setPhase] = useState<Phase>({ step: "form", cancelled: false });
+  // A reel never goes out a clip short: lost clips are dealt with first.
+  const lost = missingLabel(project.clips);
+
+  function removeLost() {
+    for (const clip of project.clips.filter(isMissing)) dispatch({ type: "removeClip", id: clip.id });
+  }
 
   async function run() {
+    if (lost) return;
     const startedAt = Date.now();
     setPhase({ step: "running", progress: 0, remaining: null, cancelling: false });
     const unlisten = await onExportProgress((progress) =>
@@ -175,9 +194,16 @@ function DialogBody({ project, dispatch, onClose }: Omit<Props, "open">) {
             </p>
             {phase.step === "form" && phase.cancelled && <p {...stylex.props(ui.note)}>已取消，没有保存任何文件。</p>}
             {phase.step === "error" && <p {...stylex.props(ui.error)}>{phase.message}</p>}
+            {lost && (
+              <p {...stylex.props(styles.lost)}>
+                <WarningIcon />
+                <span>{lost}的原件找不到了。先重新添加，或者移除后再导出。</span>
+              </p>
+            )}
             <div {...stylex.props(styles.actions)}>
               <Button onClick={onClose}>取消</Button>
-              <Button variant="primary" onClick={run}>
+              {lost && <Button onClick={removeLost}>移除丢失的片段</Button>}
+              <Button variant="primary" onClick={run} disabled={!!lost}>
                 导出
               </Button>
             </div>

@@ -30,8 +30,19 @@ export function reducer(project: Project | null, action: Action): Project | null
   switch (action.type) {
     case "rename":
       return { ...project, name: action.name };
-    case "addClips":
-      return { ...project, clips: [...project.clips, ...action.clips] };
+    case "addClips": {
+      // A lost clip added again takes its old place and keeps its edits.
+      const fresh = [...action.clips];
+      const clips = project.clips.map((clip) => {
+        const i = isMissing(clip) ? fresh.findIndex((c) => c.assetId && c.assetId === clip.assetId) : -1;
+        if (i === -1) return clip;
+        const [found] = fresh.splice(i, 1);
+        const trimEnd = Math.min(clip.trimEnd, found.duration);
+        const { id, muted, cropOffset, caption } = clip;
+        return { ...found, id, muted, cropOffset, caption, trimStart: Math.min(clip.trimStart, trimEnd), trimEnd };
+      });
+      return { ...project, clips: [...clips, ...fresh] };
+    }
     case "moveClip": {
       const clips = [...project.clips];
       const [moved] = clips.splice(action.from, 1);
@@ -81,6 +92,24 @@ export function reducer(project: Project | null, action: Action): Project | null
 }
 
 export const clipLength = (clip: Clip) => clip.trimEnd - clip.trimStart;
+
+/** Its original went too when macOS cleared the cache; `load_project`
+ * clears the intermediate's path then. */
+export const isMissing = (clip: Clip) => !clip.normalizedPath;
+
+/** The project as the preview plays it, lost clips left out. Export
+ * refuses them instead, so a reel never goes out a clip short. */
+export function playable(project: Project): Project {
+  const clips = project.clips.filter((clip) => !isMissing(clip));
+  return clips.length === project.clips.length ? project : { ...project, clips };
+}
+
+/** "第 3 段" for one lost clip, "2 段" for several; null for none. */
+export function missingLabel(clips: Clip[]): string | null {
+  const lost = clips.flatMap((clip, i) => (isMissing(clip) ? [i + 1] : []));
+  if (lost.length === 0) return null;
+  return lost.length === 1 ? `第 ${lost[0]} 段` : `${lost.length} 段`;
+}
 
 /** Output frame in pixels, matching `Shape::size` in Rust. The short side
  * is always 1080, so text sized for it looks the same in every shape. */
