@@ -4,7 +4,7 @@ import { colors, shadows } from "../tokens.stylex";
 import { Button, Field, Switch, ui } from "../ui";
 
 /** Default and range of the AI target, in seconds; Live Photos run ~2 s. */
-export const TARGET = { initial: 40, min: 30, max: 45 };
+export const TARGET = { initial: 40, min: 15, max: 90, step: 5 };
 const SECONDS_PER_PICK = 2;
 
 const styles = stylex.create({
@@ -93,6 +93,7 @@ export function AiPanel({ poolSize, again, target, people, busy, onTarget, onPeo
               aria-label="目标时长"
               min={TARGET.min}
               max={TARGET.max}
+              step={TARGET.step}
               value={target}
               onChange={(e) => onTarget(Number(e.target.value))}
               {...stylex.props(styles.slider)}
