@@ -57,14 +57,17 @@ where
 /// Whatever macOS cleared from the cache is put back first (see
 /// `clips::restore`), which can take a few seconds; text images that are
 /// gone are dropped for the frontend to draw again. Copies of media the
-/// project no longer uses are deleted; originals only while it has clips,
-/// so a project that failed to open (and came back empty) loses nothing.
+/// project no longer uses are deleted, but only while no other project
+/// file fails to open: `open_last` swaps such a project for an empty one,
+/// and the file left behind still needs its originals and music. Even
+/// then originals are kept while the project has no clips.
 #[tauri::command]
 async fn load_project(
     app: AppHandle,
     current: State<'_, CurrentProject>,
 ) -> Result<project::Project, String> {
-    let (path, mut project) = project_store(&app)?.open_last()?;
+    let store = project_store(&app)?;
+    let (path, mut project) = store.open_last()?;
     let (cache, media) = (cache_dir(&app)?, media_dir(&app)?);
     let save_to = path.clone();
     let project = blocking(move || {
@@ -75,6 +78,9 @@ async fn load_project(
             project::save(&save_to, &project)?;
         }
         // Housekeeping only; a file in use elsewhere stays for next time.
+        if store.has_unreadable_other(&save_to) {
+            return Ok(project);
+        }
         if !project.clips.is_empty() {
             let used: Vec<&Path> = project
                 .clips

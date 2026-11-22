@@ -527,6 +527,22 @@ impl Store {
         .map_err(|e| e.to_string())
     }
 
+    /// Whether a project file other than `current` can't be opened
+    /// (damaged, or saved by a newer version of the app). `open_last`
+    /// replaces such a project with an empty one, but the file stays and
+    /// still needs its media, so nothing may be cleaned up while it is
+    /// there.
+    pub fn has_unreadable_other(&self, current: &Path) -> bool {
+        let Ok(entries) = std::fs::read_dir(self.dir.join("projects")) else {
+            return false;
+        };
+        entries
+            .flatten()
+            .map(|entry| entry.path())
+            .filter(|path| path.extension().is_some_and(|ext| ext == "json") && path != current)
+            .any(|path| load(&path).is_err())
+    }
+
     fn last_path(&self) -> Option<PathBuf> {
         std::fs::read_to_string(self.dir.join("last-project"))
             .ok()
@@ -776,6 +792,30 @@ mod tests {
         // The fresh file may reuse the deleted name if created in the same ms.
         assert!(fresh_saved);
         assert_eq!(fresh, Project::default());
+    }
+
+    #[test]
+    fn an_unopenable_project_is_noticed_until_it_is_gone() {
+        let dir = temp_dir("unreadable");
+        let store = Store::new(dir.clone());
+        let (old, mut project) = store.open_last().unwrap();
+        project.name = "Old".into();
+        save(&old, &project).unwrap();
+        let readable_only = store.has_unreadable_other(&old);
+
+        // Damaged: the next launch falls back to a new, empty project.
+        std::fs::write(&old, b"{ not json").unwrap();
+        let (fresh, empty) = store.open_last().unwrap();
+        let damaged = store.has_unreadable_other(&fresh);
+        std::fs::remove_file(&old).unwrap();
+        let cleared = store.has_unreadable_other(&fresh);
+        std::fs::remove_dir_all(&dir).unwrap();
+
+        assert!(!readable_only);
+        assert_ne!(fresh, old);
+        assert_eq!(empty, Project::default());
+        assert!(damaged, "the old file still holds media");
+        assert!(!cleared);
     }
 
     #[test]
