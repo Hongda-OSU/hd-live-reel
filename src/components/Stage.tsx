@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent } from "react";
 import * as stylex from "@stylexjs/stylex";
 import { getVersion } from "@tauri-apps/api/app";
-import appIcon from "../../src-tauri/icons/128x128@2x.png";
 import { colors, shadows } from "../tokens.stylex";
 import { Icon, withStyle } from "../ui";
 import type { Output } from "../api";
@@ -57,15 +56,11 @@ const styles = stylex.create({
     width: "100%",
     height: "100%",
   },
-  // Nothing to play yet: an outline of the reel's shape, not a black
-  // video that looks like it failed to load.
+  // Nothing to play yet: no black video that looks like it failed to
+  // load, and no frame either, just the welcome text on the stage.
   frameEmpty: {
     backgroundColor: "transparent",
     boxShadow: "none",
-    outlineWidth: 1.5,
-    outlineStyle: "dashed",
-    outlineColor: `color-mix(in srgb, ${colors.muted} 45%, transparent)`,
-    outlineOffset: -1.5,
   },
   empty: {
     position: "absolute",
@@ -78,12 +73,8 @@ const styles = stylex.create({
     color: colors.muted,
     textAlign: "center",
   },
-  // A welcome page: the app's icon and name, what it does, and its three
-  // steps. Only an empty project shows it.
-  emptyIcon: {
-    width: 88,
-    height: 88,
-  },
+  // A welcome page: the app's name, what it does, and its three steps.
+  // Only an empty project shows it.
   emptyTitle: {
     margin: 0,
     color: colors.text,
@@ -98,7 +89,7 @@ const styles = stylex.create({
   steps: {
     display: "grid",
     gap: 6,
-    marginTop: 14,
+    marginTop: 24,
     marginBottom: 0,
     padding: 0,
     fontSize: 12,
@@ -440,7 +431,6 @@ export function Stage(props: Props) {
           )}
           {empty && (
             <div {...stylex.props(styles.empty)}>
-              <img src={appIcon} alt="" {...stylex.props(styles.emptyIcon)} />
               <h3 {...stylex.props(styles.emptyTitle)}>HD Live Reel</h3>
               <p {...stylex.props(styles.emptyText)}>把 Live Photo 拼成一段视频</p>
               <ol {...stylex.props(styles.steps)}>
