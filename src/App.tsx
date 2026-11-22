@@ -567,7 +567,7 @@ function App() {
     <div {...stylex.props(styles.app)}>
       <header data-tauri-drag-region {...stylex.props(styles.toolbar)}>
         <div data-tauri-drag-region {...stylex.props(styles.toolbarLeft)}>
-          <Button onClick={() => setPickerOpen(true)}>
+          <Button variant="ghost" onClick={() => setPickerOpen(true)}>
             <Icon>
               <path d="M8 3v10M3 8h10" />
             </Icon>
