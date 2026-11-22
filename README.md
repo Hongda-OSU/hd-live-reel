@@ -58,7 +58,7 @@ The bundle is ad-hoc signed, so it opens on the Mac that built it. To make a ree
 3. Edit in the clip list and the settings panel: title, captions, filter, frame and music. Drag the preview to move the crop.
 4. Export from the toolbar. Reels are saved to `~/Movies/HD Live Reel/` unless another folder is chosen on the settings panel's Export page.
 
-In the iPhone's Photos settings, set Transfer to Mac or PC to Keep Originals, or photos arrive as JPG. With Optimize iPhone Storage on, open older photos on the phone first so their originals download.
+In the iPhone's Photos settings, set Transfer to Mac or PC to Keep Originals, or photos arrive as JPG. Also choose Download and Keep Originals: with Optimize iPhone Storage on, photos whose originals are only in iCloud don't show up over the cable.
 
 For development, run it from source instead:
 
