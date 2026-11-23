@@ -6,7 +6,7 @@ import { groupDays, sceneLabel, type Day } from "../scenes";
 import { colors, layout, shadows } from "../tokens.stylex";
 import { useDragSelect } from "../hooks/useDragSelect";
 import type { Library } from "../hooks/useLibrary";
-import { Button, Seg, ui, withStyle } from "../ui";
+import { Button, Icon, Seg, ui, withStyle } from "../ui";
 import { AiPanel, TARGET } from "./AiPanel";
 
 type Filter = "all" | "live" | "video";
@@ -92,7 +92,7 @@ const styles = stylex.create({
   bar: {
     display: "flex",
     alignItems: "center",
-    gap: 12,
+    gap: 8,
     paddingTop: "0",
     paddingRight: "20px",
     paddingBottom: "12px",
@@ -106,6 +106,14 @@ const styles = stylex.create({
   },
   aiAnchor: {
     position: "relative",
+  },
+  // The one action this bar leads to, so it alone is in the accent colour.
+  aiLabel: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 6,
+    color: colors.accent,
+    fontWeight: 600,
   },
   scroll: {
     overflowY: "auto",
@@ -535,6 +543,17 @@ export function PickerSheet({
             {library.state === "ready" && `iPhone · 已连接 · ${count?.toLocaleString()} 项`}
             {library.state === "loading" && "正在读取 iPhone…"}
             {library.state === "error" && "未连接"}
+            <Button
+              variant="ghost"
+              onClick={refresh}
+              disabled={busy || library.state === "loading"}
+              aria-label="刷新"
+              title="刷新"
+            >
+              <Icon>
+                <path d="M13.2 8a5.2 5.2 0 1 1-1.6-3.7M13.3 2.4v2.9h-2.9" />
+              </Icon>
+            </Button>
           </span>
         </header>
         <div {...stylex.props(styles.bar)}>
@@ -549,13 +568,21 @@ export function PickerSheet({
             xstyle={styles.filter}
           />
           <span {...stylex.props(ui.spacer)} />
-          <Button onClick={onPickFiles} disabled={busy}>
+          <Button variant="ghost" onClick={onPickFiles} disabled={busy}>
+            <Icon>
+              <path d="M1.8 4.2A1.2 1.2 0 0 1 3 3h3.2l1.5 1.6H13a1.2 1.2 0 0 1 1.2 1.2v6.2a1.2 1.2 0 0 1-1.2 1.2H3a1.2 1.2 0 0 1-1.2-1.2z" />
+            </Icon>
             从 Mac 选择…
           </Button>
           {/* The panel hangs from its button. */}
           <span {...stylex.props(styles.aiAnchor)}>
-            <Button onClick={() => setAiOpen((o) => !o)} disabled={busy}>
-              {ai.busy ? "挑选中…" : "AI 选片…"}
+            <Button variant="ghost" onClick={() => setAiOpen((o) => !o)} disabled={busy}>
+              <span {...stylex.props(styles.aiLabel)}>
+                <Icon>
+                  <path d="M6.5 1.8 7.6 5.4l3.6 1.1-3.6 1.1-1.1 3.6-1.1-3.6-3.6-1.1 3.6-1.1zM12.3 9.8l.5 1.6 1.6.5-1.6.5-.5 1.6-.5-1.6-1.6-.5 1.6-.5z" />
+                </Icon>
+                {ai.busy ? "挑选中…" : "AI 选片…"}
+              </span>
             </Button>
             {aiOpen && (
               <AiPanel
@@ -571,15 +598,12 @@ export function PickerSheet({
               />
             )}
           </span>
-          <Button onClick={refresh} disabled={busy || library.state === "loading"}>
-            刷新
-          </Button>
         </div>
         <div ref={scroller} {...stylex.props(styles.scroll)}>
           {library.state === "error" && (
             <div {...stylex.props(styles.notice)}>
               <p>{library.message}</p>
-              <p {...stylex.props(ui.note)}>用数据线连接 iPhone 并解锁，然后点「刷新」。</p>
+              <p {...stylex.props(ui.note)}>用数据线连接 iPhone 并解锁，然后点「未连接」旁边的刷新按钮。</p>
               <p {...stylex.props(ui.note)}>文件已经在 Mac 上：点「从 Mac 选择…」，或直接把文件、文件夹拖进窗口。</p>
             </div>
           )}
