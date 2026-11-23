@@ -27,7 +27,8 @@ xcuserdata/
 # FFmpeg sidecar binaries (large; fetched locally, not committed)
 /binaries/
 
-# Personal media: Live Photos carry location metadata
+# Personal media: photos and videos carry location metadata, music is
+# usually copyrighted
 *.heic
 *.HEIC
 *.mov
@@ -36,6 +37,28 @@ xcuserdata/
 *.MP4
 *.jpg
 *.JPG
+*.jpeg
+*.JPEG
+*.heif
+*.HEIF
+*.m4v
+*.M4V
+*.mp3
+*.MP3
+*.m4a
+*.M4A
+*.aac
+*.AAC
+*.wav
+*.WAV
+*.aif
+*.AIF
+*.aiff
+*.AIFF
+*.flac
+*.FLAC
+*.ogg
+*.OGG
 
 # Claude Code local settings
 .claude/settings.local.json
