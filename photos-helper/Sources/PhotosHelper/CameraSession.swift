@@ -27,7 +27,23 @@ final class CameraSession: NSObject, ICCameraDeviceDelegate {
         for attempt in 1...2 {
             openError = nil
             camera.requestOpenSession()
-            RunLoop.main.spin(until: deadline) { self.ready || self.openError != nil }
+            // The phone sometimes stops sending its catalog part way (seen as
+            // "0 Preflighted" in ptpcamerad's log) and never recovers until
+            // it is plugged in again, so give up once it stops progressing.
+            var progress = catalogProgress
+            var lastProgress = Date()
+            RunLoop.main.spin(until: deadline) {
+                if self.catalogProgress != progress {
+                    progress = self.catalogProgress
+                    lastProgress = Date()
+                }
+                return self.ready || self.openError != nil
+                    || Date().timeIntervalSince(lastProgress) > Self.stallTimeout
+            }
+            if !ready && openError == nil && Date() < deadline {
+                throw HelperError(
+                    "iPhone stopped sending its photo list; unlock it or plug it in again, then try again")
+            }
             guard let error = openError else { break }
 
             if attempt == 1 && Self.isPasscodeLocked(error) {
@@ -44,6 +60,15 @@ final class CameraSession: NSObject, ICCameraDeviceDelegate {
         guard ready else {
             throw HelperError("timed out waiting for the device catalog")
         }
+    }
+
+    /// How long the catalog may go without progress before the phone counts
+    /// as stuck.
+    private static let stallTimeout: TimeInterval = 15
+
+    /// Changes whenever the device sends more of its catalog.
+    private var catalogProgress: [Int] {
+        [camera.contentCatalogPercentCompleted, camera.mediaFiles?.count ?? 0]
     }
 
     private static func isPasscodeLocked(_ error: Error) -> Bool {
