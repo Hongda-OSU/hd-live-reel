@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties, type PointerEvent } fr
 import * as stylex from "@stylexjs/stylex";
 import { getVersion } from "@tauri-apps/api/app";
 import { colors, shadows } from "../tokens.stylex";
-import { Button, withStyle } from "../ui";
+import { Button, Icon, withStyle } from "../ui";
 import type { Output } from "../api";
 import type { Playback } from "../hooks/usePlayback";
 import { FRAME } from "../project";
@@ -102,7 +102,10 @@ const styles = stylex.create({
     alignItems: "baseline",
     gap: 8,
   },
+  // The two ways in, side by side; step 1 above names them only once.
   welcomeAdd: {
+    display: "flex",
+    gap: 10,
     marginTop: 20,
   },
   stepNumber: {
@@ -200,8 +203,10 @@ interface Props {
   croppable: boolean;
   /** Play state; the timeline holds the controls. */
   playback: Playback;
-  /** Opens the picker, from the welcome page. */
+  /** Opens the iPhone picker, from the welcome page. */
   onAdd: () => void;
+  /** Opens the file dialog, from the welcome page. */
+  onPickFiles: () => void;
   busy: boolean;
   error: string | null;
   empty: boolean;
@@ -236,7 +241,11 @@ const CROP_SLACK = 0.01;
 const clamp01 = (n: number) => Math.min(1, Math.max(0, n));
 
 /** The welcome page's walk-through. */
-const STEPS = ["从 iPhone 选照片，或把文件拖进窗口", "在右边加标题、配乐和滤镜", "在右边「导出」页导出，直接发微信"];
+const STEPS = [
+  "选照片（下面两种都行，也可以直接拖进窗口）",
+  "在右边加标题、配乐和滤镜",
+  "在右边「导出」页导出，直接发微信",
+];
 
 export function Stage(props: Props) {
   const { src, aspect, croppable, playback, busy, error, empty, crop, skipped, missing } = props;
@@ -325,11 +334,21 @@ export function Stage(props: Props) {
                   </li>
                 ))}
               </ol>
-              <span {...stylex.props(styles.welcomeAdd)}>
+              <div {...stylex.props(styles.welcomeAdd)}>
                 <Button variant="primary" onClick={props.onAdd}>
-                  添加照片…
+                  <Icon>
+                    <rect x="4.5" y="1.5" width="7" height="13" rx="1.6" />
+                    <path d="M7.2 12.4h1.6" />
+                  </Icon>
+                  从 iPhone 选择…
                 </Button>
-              </span>
+                <Button onClick={props.onPickFiles}>
+                  <Icon>
+                    <path d="M1.8 4.2A1.2 1.2 0 0 1 3 3h3.2l1.5 1.6H13a1.2 1.2 0 0 1 1.2 1.2v6.2a1.2 1.2 0 0 1-1.2 1.2H3a1.2 1.2 0 0 1-1.2-1.2z" />
+                  </Icon>
+                  从 Mac 选择…
+                </Button>
+              </div>
               {version && <span {...stylex.props(styles.version)}>版本 {version}</span>}
             </div>
           )}

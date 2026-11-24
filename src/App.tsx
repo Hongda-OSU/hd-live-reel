@@ -717,6 +717,7 @@ function App() {
             croppable={project.output.fill === "crop"}
             playback={playback}
             onAdd={() => setPickerOpen(true)}
+            onPickFiles={() => void pickFiles()}
             busy={preview.busy}
             error={preview.error}
             empty={project.clips.length === 0}
