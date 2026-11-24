@@ -26,6 +26,12 @@ export interface Playback {
   seek: (time: number) => void;
 }
 
+/** WebKit's player, left paused for a while, can take a seek without
+ * drawing the new frame (or without finishing it at all), though the
+ * whole preview is loaded. If no frame reaches the screen within this
+ * many ms, the video is reloaded and sent to the latest target. */
+const SEEK_TIMEOUT = 700;
+
 /** The preview's play state, shared by the stage that shows the video and
  * the timeline that controls it. `seekTo` jumps when it changes. */
 export function usePlayback(seekTo: SeekTo | null): Playback {
@@ -35,6 +41,30 @@ export function usePlayback(seekTo: SeekTo | null): Playback {
   const [playing, setPlaying] = useState(false);
   /** Set while parked on an edit; cleared by any seek of the viewer's own. */
   const rewind = useRef(false);
+  /** Pending check on the first seek not yet finished, and where the
+   * latest one is headed: clicks in a row do not restart the wait. */
+  const stuckSeek = useRef<number | undefined>(undefined);
+  const target = useRef(0);
+
+  /** Moves the video to `to`, reloading it if no frame is drawn. */
+  function jump(to: number) {
+    const v = video.current;
+    if (!v) return;
+    target.current = to;
+    if (Math.abs(v.currentTime - to) < 0.001 && !v.seeking) return;
+    v.currentTime = to;
+    v.requestVideoFrameCallback(() => {
+      window.clearTimeout(stuckSeek.current);
+      stuckSeek.current = undefined;
+    });
+    if (stuckSeek.current !== undefined) return;
+    stuckSeek.current = window.setTimeout(() => {
+      stuckSeek.current = undefined;
+      if (v !== video.current) return;
+      v.addEventListener("loadedmetadata", () => (v.currentTime = target.current), { once: true });
+      v.load();
+    }, SEEK_TIMEOUT);
+  }
 
   function toggle() {
     const v = video.current;
@@ -48,13 +78,13 @@ export function usePlayback(seekTo: SeekTo | null): Playback {
   function seek(to: number) {
     rewind.current = false;
     setTime(to);
-    if (video.current) video.current.currentTime = to;
+    jump(to);
   }
 
   useEffect(() => {
     if (!seekTo) return;
     rewind.current = !!seekTo.peek;
-    if (video.current) video.current.currentTime = seekTo.time;
+    jump(seekTo.time);
   }, [seekTo]);
 
   // `timeupdate` comes four times a second; the playhead moves every frame.
