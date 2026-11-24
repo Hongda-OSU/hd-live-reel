@@ -1,5 +1,18 @@
-import { DndContext, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
-import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import * as stylex from "@stylexjs/stylex";
 import type { Clip } from "../api";
@@ -16,6 +29,8 @@ const styles = stylex.create({
     padding: 0,
     listStyle: "none",
   },
+  // The whole row drags (rows hold nothing else to press), and takes
+  // keyboard focus for reordering with the arrow keys.
   row: {
     display: "grid",
     gridTemplateColumns: "16px 30px 1fr",
@@ -28,6 +43,11 @@ const styles = stylex.create({
       default: "transparent",
       ":hover": colors.hover,
     },
+    outline: {
+      default: "none",
+      ":focus-visible": `2px solid ${colors.accent}`,
+    },
+    touchAction: "none",
   },
   selected: {
     backgroundColor: {
@@ -40,13 +60,14 @@ const styles = stylex.create({
     zIndex: 2,
     backgroundColor: colors.surface,
     boxShadow: shadows.lifted,
+    cursor: "grabbing",
   },
+  // Only a hint now that the whole row drags.
   grip: {
     color: colors.muted,
     cursor: "grab",
     fontSize: 11,
     textAlign: "center",
-    touchAction: "none",
   },
   thumb: {
     width: 30,
@@ -93,7 +114,11 @@ interface Props {
 
 export function ClipList({ clips, selectedId, thumbs, onSelect, dispatch }: Props) {
   // A small move threshold keeps plain clicks as clicks.
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    // Space picks a focused row up, the arrows move it, space drops it.
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
 
   function onDragEnd({ active, over }: DragEndEvent) {
     if (!over || active.id === over.id) return;
@@ -141,12 +166,16 @@ function ClipRow({ clip, index, selected, thumb, onSelect }: RowProps) {
     <li
       ref={setNodeRef}
       onClick={onSelect}
+      {...attributes}
+      {...listeners}
+      aria-roledescription="可拖动排序的片段"
       {...withStyle(stylex.props(styles.row, selected && styles.selected, isDragging && styles.dragging), {
-        transform: CSS.Transform.toString(transform),
+        // Up and down only: the list is one column.
+        transform: CSS.Transform.toString(transform && { ...transform, x: 0 }),
         transition,
       })}
     >
-      <span {...attributes} {...listeners} aria-label="拖动排序" {...stylex.props(styles.grip)}>
+      <span aria-hidden {...stylex.props(styles.grip)}>
         ⋮⋮
       </span>
       {missing ? (
