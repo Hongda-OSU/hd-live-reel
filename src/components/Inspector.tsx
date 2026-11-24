@@ -14,7 +14,6 @@ import type {
 import type { Action } from "../project";
 import { colors } from "../tokens.stylex";
 import { Button, Field, Group, Select, Seg, Slider, Swatches, ui } from "../ui";
-import { ExportGroup } from "./ExportGroup";
 import { FrameGroup } from "./FrameGroup";
 import { SoundGroup } from "./SoundGroup";
 import { WatermarkGroup } from "./WatermarkGroup";
@@ -109,6 +108,8 @@ interface Props {
   onPage: (page: InspectorPage) => void;
   /** The 片段 page, which edits the selected clip. */
   clip: ReactNode;
+  /** The 导出 page, which names, places and makes the video. */
+  exportPage: ReactNode;
   dispatch: (action: Action) => void;
   /** Asks, then puts every setting here back to a new project's. */
   onReset: () => void;
@@ -124,6 +125,7 @@ export function Inspector({
   page,
   onPage,
   clip,
+  exportPage,
   dispatch,
   onReset,
 }: Props) {
@@ -354,7 +356,7 @@ export function Inspector({
         </>
       )}
       {page === "sound" && <SoundGroup audio={audio} dispatch={dispatch} />}
-      {page === "export" && <ExportGroup output={output} dispatch={dispatch} />}
+      {page === "export" && exportPage}
       {/* Resets the project's settings, which the 片段 page has none of. */}
       {page !== "clip" && (
         <div {...stylex.props(styles.reset)}>

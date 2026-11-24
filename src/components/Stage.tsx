@@ -236,7 +236,7 @@ const CROP_SLACK = 0.01;
 const clamp01 = (n: number) => Math.min(1, Math.max(0, n));
 
 /** The welcome page's walk-through. */
-const STEPS = ["从 iPhone 选照片，或把文件拖进窗口", "在右边加标题、配乐和滤镜", "点右上角「导出」，直接发微信"];
+const STEPS = ["从 iPhone 选照片，或把文件拖进窗口", "在右边加标题、配乐和滤镜", "在右边「导出」页导出，直接发微信"];
 
 export function Stage(props: Props) {
   const { src, aspect, croppable, playback, busy, error, empty, crop, skipped, missing } = props;

@@ -18,7 +18,7 @@ import {
   type Project,
 } from "./api";
 import { DropOverlay, type Drop } from "./components/DropOverlay";
-import { ExportDialog } from "./components/ExportDialog";
+import { ExportPanel } from "./components/ExportPanel";
 import { ClipGrid } from "./components/ClipGrid";
 import { ClipPanel } from "./components/ClipPanel";
 import { Inspector, type InspectorPage } from "./components/Inspector";
@@ -31,7 +31,6 @@ import {
   clipSpans,
   clipStart,
   crossfade,
-  FRAME,
   hasCaption,
   hasTitleText,
   isMissing,
@@ -50,6 +49,7 @@ import { renderCaptionPng, renderTitlePng, renderWatermarkPng } from "./title";
 import { colors, layout } from "./tokens.stylex";
 import { Icon } from "./ui";
 import { useAppMenu } from "./hooks/useAppMenu";
+import { useExport } from "./hooks/useExport";
 import { useLibrary } from "./hooks/useLibrary";
 import { usePlayback, type SeekTo } from "./hooks/usePlayback";
 
@@ -90,58 +90,8 @@ const styles = stylex.create({
     display: "grid",
     justifyItems: "center",
   },
-  toolbarRight: {
-    display: "flex",
-    justifyContent: "flex-end",
-    paddingRight: 14,
-  },
   // Export says what it will make before it is clicked: the button's
   // right part, a shade darker, shows the size and length.
-  exportButton: {
-    display: "inline-flex",
-    alignItems: "stretch",
-    height: 30,
-    padding: 0,
-    overflow: "hidden",
-    borderWidth: 0,
-    borderRadius: 8,
-    backgroundColor: colors.accent,
-    boxShadow: "0 1px 2px rgba(0, 0, 0, 0.2)",
-    color: colors.onAccent,
-    whiteSpace: "nowrap",
-    cursor: {
-      default: "pointer",
-      ":disabled": "default",
-    },
-    filter: {
-      default: null,
-      ":hover:not(:disabled)": "brightness(1.08)",
-    },
-    opacity: {
-      default: 1,
-      ":disabled": 0.45,
-    },
-  },
-  exportMain: {
-    display: "inline-flex",
-    alignItems: "center",
-    gap: 6,
-    paddingInline: 12,
-    fontWeight: 600,
-  },
-  exportInfo: {
-    display: "inline-flex",
-    alignItems: "center",
-    paddingInline: 10,
-    backgroundColor: "rgba(0, 0, 0, 0.16)",
-    fontSize: 11,
-    fontVariantNumeric: "tabular-nums",
-  },
-  exportIcon: {
-    width: 15,
-    height: 15,
-    fill: "currentColor",
-  },
   name: {
     width: 260,
     paddingBlock: "1px",
@@ -264,7 +214,6 @@ function App() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [exportOpen, setExportOpen] = useState(false);
   const [adding, setAdding] = useState<ClipsProgress | "starting" | null>(null);
   const [addError, setAddError] = useState<string | null>(null);
   const [drop, setDrop] = useState<Drop | null>(null);
@@ -649,7 +598,7 @@ function App() {
   const onMoveKey = useEffectEvent((e: KeyboardEvent) => {
     if (!e.altKey || e.metaKey || e.ctrlKey || (e.key !== "ArrowLeft" && e.key !== "ArrowRight")) return;
     if (e.target instanceof HTMLElement && e.target.closest("input, textarea")) return;
-    if (pickerOpen || exportOpen) return;
+    if (pickerOpen) return;
     e.preventDefault();
     moveSelected({ by: e.key === "ArrowLeft" ? -1 : 1 });
   });
@@ -659,14 +608,16 @@ function App() {
   }, []);
 
   // The menu bar works over dialogs, so it waits for them to close.
-  const idle = project !== null && !pickerOpen && !exportOpen;
+  const exporter = useExport();
+  const exporting = exporter.phase.step === "running";
+  const idle = project !== null && !pickerOpen;
   const clipCount = project?.clips.length ?? 0;
   const canMove = idle && clipCount > 1 && project!.clips.some((c) => c.id === selectedId);
   useAppMenu(
     {
       add: idle,
       export: idle && clipCount > 0,
-      clear: idle && clipCount > 0,
+      clear: idle && clipCount > 0 && !exporting,
       first: canMove,
       last: canMove,
       sidebar: clipCount > 0,
@@ -675,7 +626,7 @@ function App() {
     (command) => {
       if (command === "sidebar") toggleSidebar();
       else if (command === "add") setPickerOpen(true);
-      else if (command === "export") setExportOpen(true);
+      else if (command === "export") setInspectorPage("export");
       else if (command === "clear") void clearProject();
       else moveSelected({ to: command === "first" ? 0 : clipCount - 1 });
     },
@@ -720,24 +671,7 @@ function App() {
                 : "空工程"}
           </div>
         </div>
-        <div data-tauri-drag-region {...stylex.props(styles.toolbarRight)}>
-          <button
-            disabled={project.clips.length === 0}
-            onClick={() => setExportOpen(true)}
-            {...stylex.props(styles.exportButton)}
-          >
-            <span {...stylex.props(styles.exportMain)}>
-              {/* A film frame with an up arrow. */}
-              <svg viewBox="0 0 16 16" aria-hidden {...stylex.props(styles.exportIcon)}>
-                <path d="M3 2h10a1.5 1.5 0 0 1 1.5 1.5v9A1.5 1.5 0 0 1 13 14H3a1.5 1.5 0 0 1-1.5-1.5v-9A1.5 1.5 0 0 1 3 2zm.3 1.6v1.2h1.2V3.6zm0 3.3v1.2h1.2V6.9zm0 3.3v1.2h1.2v-1.2zm8.2-6.6v1.2h1.2V3.6zm0 3.3v1.2h1.2V6.9zm0 3.3v1.2h1.2v-1.2zM8 4.6 5.8 7h1.5v4h1.4V7h1.5z" />
-              </svg>
-              导出
-            </span>
-            <span {...stylex.props(styles.exportInfo)}>
-              {project.clips.length ? `${FRAME[project.output.aspect].join("×")} · ${Math.round(total)} 秒` : "—"}
-            </span>
-          </button>
-        </div>
+        <div data-tauri-drag-region />
       </header>
 
       <main
@@ -826,6 +760,7 @@ function App() {
               dispatch={clipDispatch}
             />
           }
+          exportPage={<ExportPanel project={project} exporter={exporter} dispatch={dispatch} />}
           dispatch={dispatch}
           onReset={resetSettings}
         />
@@ -857,7 +792,6 @@ function App() {
         onPickFiles={pickFiles}
         onClose={() => setPickerOpen(false)}
       />
-      <ExportDialog open={exportOpen} project={project} dispatch={dispatch} onClose={() => setExportOpen(false)} />
       <DropOverlay drop={drop} onDismiss={() => setDrop(null)} />
     </div>
   );
