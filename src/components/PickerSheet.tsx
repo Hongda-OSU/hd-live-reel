@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState, type ReactNode } from "react";
 import * as stylex from "@stylexjs/stylex";
 import { aiSelect, type AiReason, type AiVerdict, type ClipsProgress, type MediaItem } from "../api";
 import { normalizingLabel } from "../project";
@@ -509,6 +509,20 @@ export function PickerSheet({
     });
   }
 
+  // ⌘A ticks everything shown, or unticks it when it all is, as in
+  // Photos; the outline's circles do the same with the pointer.
+  const onSelectAll = useEffectEvent((event: KeyboardEvent) => {
+    if (!event.metaKey || event.key.toLowerCase() !== "a" || busy) return;
+    if (event.target instanceof HTMLElement && event.target.closest("input, textarea")) return;
+    event.preventDefault();
+    toggleGroup(shownIds);
+  });
+  useEffect(() => {
+    if (!open) return;
+    window.addEventListener("keydown", onSelectAll);
+    return () => window.removeEventListener("keydown", onSelectAll);
+  }, [open]);
+
   /** Ticks all of `ids`, or unticks them when they all are. */
   function toggleGroup(ids: string[]) {
     setChosen((current) => {
@@ -692,14 +706,6 @@ export function PickerSheet({
               )}
               {shownDay && (
                 <span {...stylex.props(styles.paneTitle)}>{shownScene ? shownScene.label : shownDay.label}</span>
-              )}
-              {shownIds.length > 0 && (
-                <>
-                  <span {...stylex.props(ui.spacer)} />
-                  <Button variant="ghost" onClick={() => toggleGroup(shownIds)} disabled={busy}>
-                    {checkState(shownIds, chosen) === "all" ? "取消全选" : "全选"}
-                  </Button>
-                </>
               )}
             </div>
             <div ref={scroller} {...stylex.props(styles.scroll)}>
