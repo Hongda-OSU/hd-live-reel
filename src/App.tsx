@@ -182,6 +182,19 @@ const styles = stylex.create({
   withSidebar: {
     gridTemplateColumns: `${layout.sidebarWidth} 1fr ${layout.inspectorWidth}`,
   },
+  withRail: {
+    gridTemplateColumns: `${layout.railWidth} 1fr ${layout.inspectorWidth}`,
+  },
+  // The hidden grid leaves a strip with the button that brings it back.
+  rail: {
+    ...frosted,
+    display: "flex",
+    justifyContent: "center",
+    paddingTop: "8px",
+    borderRightWidth: 1,
+    borderRightStyle: "solid",
+    borderRightColor: colors.border,
+  },
   sidebar: {
     ...frosted,
     overflowY: "auto",
@@ -193,11 +206,11 @@ const styles = stylex.create({
   sidebarToggle: {
     display: "grid",
     placeItems: "center",
-    width: 28,
-    height: 24,
+    width: 22,
+    height: 20,
     padding: 0,
     borderWidth: 0,
-    borderRadius: 6,
+    borderRadius: 5,
     backgroundColor: {
       default: "transparent",
       ":hover": colors.hover,
@@ -681,6 +694,7 @@ function App() {
   // Gone if the clip was removed while open.
   const trimClip = trimming ? project.clips.find((c) => c.id === trimming) : undefined;
   const showSidebar = sidebarOpen && project.clips.length > 0;
+  const showRail = !sidebarOpen && project.clips.length > 0;
   /** Picking a clip in the grid or on the timeline is asking to edit it. */
   const pickClip = (id: string) => {
     selectClip(id);
@@ -689,22 +703,7 @@ function App() {
   return (
     <div {...stylex.props(styles.app)}>
       <header data-tauri-drag-region {...stylex.props(styles.toolbar)}>
-        <div data-tauri-drag-region {...stylex.props(styles.toolbarLeft)}>
-          {/* Only while the grid is hidden; its own heading hides it. */}
-          {!showSidebar && project.clips.length > 0 && (
-            <button
-              aria-label="显示片段栏"
-              title="显示片段栏 ⌃⌘S"
-              onClick={toggleSidebar}
-              {...stylex.props(styles.sidebarToggle)}
-            >
-              <Icon>
-                <rect x="1.5" y="2.5" width="13" height="11" rx="2" strokeWidth="1.4" />
-                <path d="M6 2.5v11" strokeWidth="1.4" />
-              </Icon>
-            </button>
-          )}
-        </div>
+        <div data-tauri-drag-region {...stylex.props(styles.toolbarLeft)}></div>
         <div data-tauri-drag-region {...stylex.props(styles.toolbarCenter)}>
           <input
             value={project.name}
@@ -746,6 +745,7 @@ function App() {
           styles.body,
           project.clips.length > 0 && styles.withTimeline,
           showSidebar && styles.withSidebar,
+          showRail && styles.withRail,
         )}
       >
         {showSidebar && (
@@ -758,6 +758,20 @@ function App() {
               onMove={(from, to) => dispatch({ type: "moveClip", from, to })}
               onHide={toggleSidebar}
             />
+          </aside>
+        )}
+        {showRail && (
+          <aside {...stylex.props(styles.rail)}>
+            <button
+              aria-label="显示片段栏"
+              title="显示片段栏 ⌃⌘S"
+              onClick={toggleSidebar}
+              {...stylex.props(styles.sidebarToggle)}
+            >
+              <Icon>
+                <path d="M6 4l4 4-4 4" />
+              </Icon>
+            </button>
           </aside>
         )}
         {trimClip ? (
