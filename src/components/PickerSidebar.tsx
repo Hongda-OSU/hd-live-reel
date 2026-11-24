@@ -1,6 +1,7 @@
 import * as stylex from "@stylexjs/stylex";
 import type { MediaItem } from "../api";
 import { colors } from "../tokens.stylex";
+import { CheckCircle, checkState } from "../ui";
 
 const styles = stylex.create({
   list: {
@@ -120,42 +121,10 @@ const styles = stylex.create({
     fontSize: 11,
     fontVariantNumeric: "tabular-nums",
   },
-  check: {
-    display: "grid",
-    placeItems: "center",
-    width: 14,
-    height: 14,
-    boxSizing: "border-box",
-    borderWidth: 1.5,
-    borderStyle: "solid",
-    borderColor: colors.muted,
-    borderRadius: "50%",
-  },
-  // Some of the group is ticked: a dash.
-  checkSome: {
-    borderColor: colors.accent,
-    "::after": {
-      content: '""',
-      width: 6,
-      height: 1.5,
-      backgroundColor: colors.accent,
-    },
-  },
-  checkAll: {
-    borderColor: colors.accent,
-    backgroundColor: colors.accent,
-    "::after": {
-      content: '""',
-      width: 6,
-      height: 3,
-      borderTopWidth: "0",
-      borderRightWidth: "0",
-      borderBottomWidth: "1.5px",
-      borderLeftWidth: "1.5px",
-      borderStyle: "solid",
-      borderColor: "#fff",
-      transform: "translateY(-1px) rotate(-45deg)",
-    },
+  // "4 / 72": how many of the group are ticked, before its size.
+  picked: {
+    color: colors.accent,
+    fontWeight: 600,
   },
 });
 
@@ -178,22 +147,6 @@ export interface DayNode {
 export interface Focus {
   day: string;
   scene: string | null;
-}
-
-export type CheckState = "none" | "some" | "all";
-
-/** How many of `ids` are ticked, as a check mark. */
-export function checkState(ids: string[], chosen: Set<string>): CheckState {
-  const ticked = ids.filter((id) => chosen.has(id)).length;
-  if (ticked === 0) return "none";
-  return ticked === ids.length ? "all" : "some";
-}
-
-/** An empty circle, a dash or a tick, for a group of photos. */
-export function GroupCheck({ state }: { state: CheckState }) {
-  return (
-    <span {...stylex.props(styles.check, state === "all" ? styles.checkAll : state === "some" && styles.checkSome)} />
-  );
 }
 
 interface Props {
@@ -288,6 +241,7 @@ function Row({
   onToggle: (ids: string[]) => void;
 }) {
   const state = checkState(ids, chosen);
+  const picked = ids.filter((id) => chosen.has(id)).length;
   return (
     <div {...stylex.props(styles.row, on && styles.rowOn, scene && styles.sceneRow)}>
       {disclosure ? (
@@ -310,13 +264,16 @@ function Row({
         onClick={() => onToggle(ids)}
         {...stylex.props(styles.checkButton)}
       >
-        <GroupCheck state={state} />
+        <CheckCircle state={state} />
       </button>
       <button onClick={onFocus} aria-current={on || undefined} {...stylex.props(styles.label)}>
         <span {...stylex.props(styles.name, scene ? [styles.sceneName, on && styles.sceneNameOn] : styles.dayName)}>
           {label}
         </span>
-        <span {...stylex.props(styles.count)}>{count}</span>
+        <span {...stylex.props(styles.count)}>
+          {picked > 0 && <span {...stylex.props(styles.picked)}>{picked} / </span>}
+          {count}
+        </span>
       </button>
     </div>
   );

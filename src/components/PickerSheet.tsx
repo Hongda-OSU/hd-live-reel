@@ -6,9 +6,9 @@ import { groupDays, sceneLabel } from "../scenes";
 import { colors, layout, shadows } from "../tokens.stylex";
 import { useDragSelect } from "../hooks/useDragSelect";
 import type { Library } from "../hooks/useLibrary";
-import { Button, Icon, Seg, ui, withStyle } from "../ui";
+import { Button, CheckCircle, checkState, Icon, Seg, ui, withStyle } from "../ui";
 import { AiPanel, TARGET } from "./AiPanel";
-import { checkState, GroupCheck, PickerSidebar, type DayNode, type Focus, type SceneNode } from "./PickerSidebar";
+import { PickerSidebar, type DayNode, type Focus, type SceneNode } from "./PickerSidebar";
 
 type Filter = "all" | "live" | "video";
 
@@ -157,12 +157,6 @@ const styles = stylex.create({
   paneTitle: {
     fontSize: 15,
     fontWeight: 600,
-  },
-  paneCount: {
-    marginLeft: "auto",
-    color: colors.muted,
-    fontSize: 12,
-    fontVariantNumeric: "tabular-nums",
   },
   scroll: {
     overflowY: "auto",
@@ -336,8 +330,13 @@ const styles = stylex.create({
     borderTopColor: colors.border,
   },
   summary: {
-    flex: "1",
     color: colors.muted,
+  },
+  picked: {
+    fontVariantNumeric: "tabular-nums",
+  },
+  clear: {
+    color: colors.accent,
   },
 });
 
@@ -374,6 +373,17 @@ const monthFormat = new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "
 const monthLabel = (iso?: string | null) => (iso ? monthFormat.format(new Date(iso)) : "日期未知");
 
 const usable = (item: MediaItem) => item.kind !== "photo";
+
+/** Rough length of `items` in the reel, as AI selection counts it
+ * (`LIVE_PHOTO_SECONDS` and `VIDEO_SECONDS` in src-tauri/src/select.rs). */
+const estimate = (items: MediaItem[]) => items.reduce((sum, item) => sum + (item.kind === "video" ? 5 : 2), 0);
+
+/** "26 秒" or "3 分 20 秒". */
+function formatSeconds(seconds: number): string {
+  if (seconds < 60) return `${seconds} 秒`;
+  const rest = seconds % 60;
+  return rest ? `${Math.floor(seconds / 60)} 分 ${rest} 秒` : `${Math.floor(seconds / 60)} 分`;
+}
 
 const selectable = (items: MediaItem[]) => items.filter(usable).map((item) => item.id);
 
@@ -579,6 +589,11 @@ export function PickerSheet({
   }
 
   const busy = adding !== null || ai.busy;
+  /** Errors and progress take the selection summary's place. */
+  const status =
+    error ??
+    ai.error ??
+    (ai.busy ? "AI 正在挑选…（第一次要先从 iPhone 读取缩略图）" : busy ? progressLabel(adding) : null);
   const count = library.state === "ready" ? library.items.length : null;
 
   return (
@@ -680,9 +695,7 @@ export function PickerSheet({
               )}
               {shownIds.length > 0 && (
                 <>
-                  <span {...stylex.props(styles.paneCount)}>
-                    已选 {shownIds.filter((id) => chosen.has(id)).length} / {shownIds.length}
-                  </span>
+                  <span {...stylex.props(ui.spacer)} />
                   <Button variant="ghost" onClick={() => toggleGroup(shownIds)} disabled={busy}>
                     {checkState(shownIds, chosen) === "all" ? "取消全选" : "全选"}
                   </Button>
@@ -761,22 +774,21 @@ export function PickerSheet({
           </div>
         </div>
         <footer {...stylex.props(styles.footer)}>
-          <span {...stylex.props(styles.summary)}>
-            {error ??
-              ai.error ??
-              (ai.busy
-                ? "AI 正在挑选…（第一次要先从 iPhone 读取缩略图）"
-                : busy
-                  ? progressLabel(adding)
-                  : chosen.size
-                    ? `已选 ${chosen.size} 项`
-                    : "点击或拖动勾选照片，再用「AI 选片…」挑出精选")}
-          </span>
-          {chosen.size > 0 && (
-            <Button variant="ghost" onClick={() => setChosen(new Set())} disabled={busy}>
-              全部取消选择
-            </Button>
+          {status ? (
+            <span {...stylex.props(styles.summary)}>{status}</span>
+          ) : chosen.size ? (
+            <>
+              <span {...stylex.props(styles.picked)}>
+                已选 {chosen.size} 项 · 约 {formatSeconds(estimate(items.filter((i) => chosen.has(i.id))))}
+              </span>
+              <Button variant="ghost" onClick={() => setChosen(new Set())}>
+                <span {...stylex.props(styles.clear)}>清除</span>
+              </Button>
+            </>
+          ) : (
+            <span {...stylex.props(styles.summary)}>点击或拖动勾选照片，再用「AI 选片…」挑出精选</span>
           )}
+          <span {...stylex.props(ui.spacer)} />
           <Button onClick={onClose} disabled={busy}>
             取消
           </Button>
@@ -815,7 +827,7 @@ function SceneSection({
             onClick={() => onToggle(ids)}
             {...stylex.props(styles.groupTitle, styles.sceneTitle, state === "all" && styles.groupTitleOn)}
           >
-            <GroupCheck state={state} />
+            <CheckCircle state={state} />
             {scene.label} · {scene.items.length} 张
           </button>
         </div>
