@@ -247,42 +247,20 @@ fn args(composition: &Composition, quality: Quality, out: &Path) -> Vec<String> 
     for clip in &composition.clips {
         args.extend(["-i".into(), clip.path.to_string_lossy().into_owned()]);
     }
-    if let Some(title) = &composition.title {
-        // Loop the still for exactly `show_for` so a fade has frames to work on.
-        args.extend([
-            "-loop".into(),
-            "1".into(),
-            "-framerate".into(),
-            FPS.to_string(),
-            "-t".into(),
-            title.show_for.to_string(),
-            "-i".into(),
-            title.image.to_string_lossy().into_owned(),
-        ]);
-    }
-    for (caption, (_, end)) in composition.shown_captions() {
-        args.extend([
-            "-loop".into(),
-            "1".into(),
-            "-framerate".into(),
-            FPS.to_string(),
-            "-t".into(),
-            format!("{end:.3}"),
-            "-i".into(),
-            caption.image.to_string_lossy().into_owned(),
-        ]);
-    }
-    if let Some(mark) = &composition.watermark {
-        args.extend([
-            "-loop".into(),
-            "1".into(),
-            "-framerate".into(),
-            FPS.to_string(),
-            "-t".into(),
-            format!("{:.3}", composition.length()),
-            "-i".into(),
-            mark.image.to_string_lossy().into_owned(),
-        ]);
+    // The PNGs are read once; `hold` repeats them in the graph.
+    let stills = composition
+        .title
+        .iter()
+        .map(|title| &title.image)
+        .chain(
+            composition
+                .shown_captions()
+                .into_iter()
+                .map(|(caption, _)| &caption.image),
+        )
+        .chain(composition.watermark.iter().map(|mark| &mark.image));
+    for image in stills {
+        args.extend(["-i".into(), image.to_string_lossy().into_owned()]);
     }
     if let Some(music) = &composition.music {
         args.extend([
@@ -338,9 +316,10 @@ fn filter_graph(composition: &Composition, quality: Quality) -> String {
     let half_frame = 0.5 / FPS as f64;
     for (k, (_, (start, end))) in captions.iter().enumerate() {
         graph.push_str(&format!(
-            "[{}:v]format=rgba{shrink}[c{k}];\
+            "[{}:v]format=rgba{shrink},{}[c{k}];\
              [{video}][c{k}]overlay=0:0:enable='gte(t,{:.4})*lt(t,{:.4})'[cv{k}];",
             first_caption + k,
+            hold(*end),
             start - half_frame,
             end - half_frame,
         ));
@@ -357,8 +336,9 @@ fn filter_graph(composition: &Composition, quality: Quality) -> String {
             String::new()
         };
         graph.push_str(&format!(
-            "[{n}:v]format=rgba{shrink}{fade}[title];\
-             [{video}][title]overlay=0:0:eof_action=pass[titled];"
+            "[{n}:v]format=rgba{shrink},{}{fade}[title];\
+             [{video}][title]overlay=0:0:eof_action=pass[titled];",
+            hold(title.show_for)
         ));
         video = "titled".into();
     }
@@ -367,9 +347,10 @@ fn filter_graph(composition: &Composition, quality: Quality) -> String {
     let watermark = first_caption + captions.len();
     if let Some(mark) = &composition.watermark {
         graph.push_str(&format!(
-            "[{watermark}:v]format=rgba{shrink},colorchannelmixer=aa={:.3}[mark];\
+            "[{watermark}:v]format=rgba{shrink},colorchannelmixer=aa={:.3},{}[mark];\
              [{video}][mark]overlay=0:0[marked];",
-            mark.opacity
+            mark.opacity,
+            hold(composition.length())
         ));
         video = "marked".into();
     }
@@ -502,6 +483,17 @@ fn crop_filter(width: u32, height: u32, offset: f64) -> String {
     }
 }
 
+/// Repeats a still for `seconds` at the video's frame rate. Looping the
+/// PNG input instead (`-loop 1 -t`) decodes the file again for every
+/// frame, which took a third of a preview.
+fn hold(seconds: f64) -> String {
+    let frames = (seconds * FPS as f64 - 1e-6).ceil().max(1.0) as u64;
+    format!(
+        "loop=loop={}:size=1:start=0,settb=1/{FPS},setpts=N",
+        frames - 1
+    )
+}
+
 fn snap(seconds: f64) -> f64 {
     (seconds * FPS as f64).round() / FPS as f64
 }
@@ -597,7 +589,7 @@ mod tests {
         assert!(
             filter_graph(&composition(Some(title(0.0))), Quality::Export).ends_with(
                 "concat=n=2:v=1:a=1[joined][a0];\
-             [2:v]format=rgba[title];[joined][title]overlay=0:0:eof_action=pass[titled];\
+             [2:v]format=rgba,loop=loop=29:size=1:start=0,settb=1/30,setpts=N[title];[joined][title]overlay=0:0:eof_action=pass[titled];\
              [titled]null[v];[a0]alimiter=limit=0.89[a]"
             )
         );
@@ -606,17 +598,15 @@ mod tests {
             Quality::Export,
             "out.mp4".as_ref(),
         );
+        // Read once; the graph repeats it.
         let title_input = args.iter().position(|a| a == "title.png").unwrap();
-        assert_eq!(
-            args[title_input - 7..title_input],
-            ["-loop", "1", "-framerate", "30", "-t", "1", "-i"]
-        );
+        assert_eq!(args[title_input - 2..title_input], ["b.mov", "-i"]);
     }
 
     #[test]
     fn fades_title_alpha_when_asked() {
         let graph = filter_graph(&composition(Some(title(0.3))), Quality::Export);
-        assert!(graph.contains("[2:v]format=rgba,fade=t=out:st=0.7:d=0.3:alpha=1[title]"));
+        assert!(graph.contains("[2:v]format=rgba,loop=loop=29:size=1:start=0,settb=1/30,setpts=N,fade=t=out:st=0.7:d=0.3:alpha=1[title]"));
     }
 
     fn caption(clip: usize, show_for: Option<f64>) -> Caption {
@@ -635,7 +625,7 @@ mod tests {
         // Clip 1 runs from 2 s to 4 s; half a frame early on both ends.
         assert!(
             graph.contains(
-                "[2:v]format=rgba[c0];\
+                "[2:v]format=rgba,loop=loop=119:size=1:start=0,settb=1/30,setpts=N[c0];\
                  [joined][c0]overlay=0:0:enable='gte(t,1.9833)*lt(t,3.9833)'[cv0];\
                  [cv0]null[v];"
             ),
@@ -643,10 +633,8 @@ mod tests {
         );
         let args = args(&with, Quality::Export, Path::new("out.mp4"));
         let input = args.iter().position(|a| a == "caption.png").unwrap();
-        assert_eq!(
-            args[input - 7..input],
-            ["-loop", "1", "-framerate", "30", "-t", "4.000", "-i"]
-        );
+        assert_eq!(args[input - 1], "-i");
+        assert!(!args.contains(&"-loop".to_string()));
     }
 
     #[test]
@@ -680,11 +668,11 @@ mod tests {
         let graph = filter_graph(&with, Quality::Preview);
         // Inputs: two clips, the title (2), the caption (3), the music (4).
         assert!(
-            graph.contains("[3:v]format=rgba,scale=540:960[c0];[joined][c0]overlay"),
+            graph.contains("[3:v]format=rgba,scale=540:960,loop=loop=119:size=1:start=0,settb=1/30,setpts=N[c0];[joined][c0]overlay"),
             "{graph}"
         );
         assert!(
-            graph.contains("[2:v]format=rgba,scale=540:960[title];[cv0][title]overlay"),
+            graph.contains("[2:v]format=rgba,scale=540:960,loop=loop=29:size=1:start=0,settb=1/30,setpts=N[title];[cv0][title]overlay"),
             "{graph}"
         );
         assert!(graph.contains("[4:a]volume"), "{graph}");
@@ -704,7 +692,7 @@ mod tests {
         // watermark (4), the music (5).
         assert!(
             graph.contains(
-                "[4:v]format=rgba,scale=540:960,colorchannelmixer=aa=0.700[mark];\
+                "[4:v]format=rgba,scale=540:960,colorchannelmixer=aa=0.700,loop=loop=119:size=1:start=0,settb=1/30,setpts=N[mark];\
                  [titled][mark]overlay=0:0[marked];[marked]null[v];"
             ),
             "{graph}"
@@ -712,10 +700,8 @@ mod tests {
         assert!(graph.contains("[5:a]volume"), "{graph}");
         let args = args(&with, Quality::Export, Path::new("out.mp4"));
         let input = args.iter().position(|a| a == "mark.png").unwrap();
-        assert_eq!(
-            args[input - 7..input],
-            ["-loop", "1", "-framerate", "30", "-t", "4.000", "-i"]
-        );
+        assert_eq!(args[input - 1], "-i");
+        assert!(!args.contains(&"-loop".to_string()));
     }
 
     #[test]
@@ -771,7 +757,7 @@ mod tests {
             fit(0, 540, 960)
                 + &fit(1, 540, 960)
                 + "[s0v][0:a][s1v][1:a]concat=n=2:v=1:a=1[joined][a0];\
-                   [2:v]format=rgba,scale=540:960[title];\
+                   [2:v]format=rgba,scale=540:960,loop=loop=29:size=1:start=0,settb=1/30,setpts=N[title];\
                    [joined][title]overlay=0:0:eof_action=pass[titled];\
                    [titled]null[v];[a0]alimiter=limit=0.89[a]"
         );
@@ -784,7 +770,7 @@ mod tests {
         graded.grade.saturation = 0.5;
         let eq = "eq=brightness=0.000:contrast=1.000:saturation=0.500";
         assert!(filter_graph(&graded, Quality::Export).contains(&format!(
-            "[joined]{eq}[graded];[2:v]format=rgba[title];[graded][title]overlay"
+            "[joined]{eq}[graded];[2:v]format=rgba,loop=loop=29:size=1:start=0,settb=1/30,setpts=N[title];[graded][title]overlay"
         )));
         assert!(filter_graph(&graded, Quality::Preview).contains(&format!("[joined]{eq}[graded];")));
     }
