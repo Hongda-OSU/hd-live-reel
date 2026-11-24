@@ -96,7 +96,7 @@ const styles = stylex.create({
   draggingPicture: {
     boxShadow: shadows.lifted,
   },
-  // Number top left, marks bottom right, on the picture as in Keynote.
+  // Marks bottom right, only when there is something to notice.
   tag: {
     position: "absolute",
     display: "flex",
@@ -111,14 +111,26 @@ const styles = stylex.create({
     lineHeight: "15px",
     fontVariantNumeric: "tabular-nums",
   },
-  number: {
-    top: 4,
-    left: 4,
-    justifyContent: "center",
-    fontWeight: 700,
+  // A faint shade across the top keeps the number legible on bright sky
+  // without a badge's edge.
+  shade: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 26,
+    borderTopLeftRadius: 5,
+    borderTopRightRadius: 5,
+    backgroundImage: "linear-gradient(rgba(0, 0, 0, 0.5), transparent)",
   },
-  numberOn: {
-    backgroundColor: colors.accent,
+  number: {
+    position: "absolute",
+    top: 4,
+    left: 6,
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: 600,
+    fontVariantNumeric: "tabular-nums",
   },
   marks: {
     right: 4,
@@ -240,7 +252,8 @@ function Card({
         )}
       >
         {lost && <WarningIcon size={14} />}
-        <span {...stylex.props(styles.tag, styles.number, selected && styles.numberOn)}>{index + 1}</span>
+        <span {...stylex.props(styles.shade)} />
+        <span {...stylex.props(styles.number)}>{index + 1}</span>
         {/* Length shows on the timeline; here only what is worth noticing. */}
         {(hasCaption(clip) || clip.muted || clip.kind === "video" || lost) && (
           <span {...stylex.props(styles.tag, styles.marks)}>
