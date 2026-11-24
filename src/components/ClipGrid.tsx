@@ -255,16 +255,11 @@ function Card({
         <span {...stylex.props(styles.shade)} />
         <span {...stylex.props(styles.number)}>{index + 1}</span>
         {/* Length shows on the timeline; here only what is worth noticing. */}
-        {(hasCaption(clip) || clip.muted || clip.kind === "video" || lost) && (
+        {(hasCaption(clip) || clip.kind === "video" || lost) && (
           <span {...stylex.props(styles.tag, styles.marks)}>
             {hasCaption(clip) && (
               <svg viewBox="0 0 16 16" aria-label="有文字" {...stylex.props(styles.icon)}>
                 <path d="M2.5 3.5h11v7h-6l-3 2.5v-2.5h-2z" />
-              </svg>
-            )}
-            {clip.muted && (
-              <svg viewBox="0 0 16 16" aria-label="已静音" {...stylex.props(styles.icon)}>
-                <path d="M2.5 6h2.5l3-2.5v9L5 10H2.5zM11 6l3 4M14 6l-3 4" />
               </svg>
             )}
             {clip.kind === "video" && (

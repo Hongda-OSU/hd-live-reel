@@ -57,7 +57,6 @@ export interface Clip {
   duration: number;
   trimStart: number;
   trimEnd: number;
-  muted: boolean;
   cropOffset: number;
   aiScore?: number | null;
   aiReason?: string | null;

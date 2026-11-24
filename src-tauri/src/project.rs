@@ -81,8 +81,6 @@ pub struct Clip {
     pub duration: f64,
     pub trim_start: f64,
     pub trim_end: f64,
-    #[serde(default)]
-    pub muted: bool,
     /// 0..1 along the axis that overflows the frame; 0.5 is centred.
     #[serde(default = "centre")]
     pub crop_offset: f64,
@@ -569,7 +567,6 @@ mod tests {
           "duration": 1.97,
           "trimStart": 0,
           "trimEnd": 1.97,
-          "muted": false,
           "cropOffset": 0.5
         }
       ],
@@ -603,7 +600,6 @@ mod tests {
             duration: 2.0,
             trim_start,
             trim_end,
-            muted: false,
             crop_offset,
             ai_score: None,
             ai_reason: None,
@@ -707,7 +703,13 @@ mod tests {
                        "duration": 3, "trimStart": 0, "trimEnd": 3}"#;
         let clip: Clip = serde_json::from_str(json).unwrap();
         assert_eq!(clip.crop_offset, 0.5);
-        assert!(!clip.muted);
+    }
+
+    #[test]
+    fn clips_from_before_mute_was_removed_still_load() {
+        let json = r#"{"id": "c1", "source": "file", "kind": "video", "videoPath": "/v.mov",
+                       "duration": 3, "trimStart": 0, "trimEnd": 3, "muted": true}"#;
+        assert!(serde_json::from_str::<Clip>(json).is_ok());
     }
 
     #[test]
@@ -858,7 +860,6 @@ mod tests {
             duration: 2.0,
             trim_start: 0.0,
             trim_end: 2.0,
-            muted: false,
             crop_offset: 0.5,
             ai_score: None,
             ai_reason: None,

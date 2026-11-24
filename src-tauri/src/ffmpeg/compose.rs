@@ -117,7 +117,6 @@ pub struct Segment {
     pub duration: f64,
     /// Start and end, in seconds into the clip; `None` keeps all of it.
     pub trim: Option<(f64, f64)>,
-    pub muted: bool,
     /// 0..1 along the axis that overflows when cropping; 0.5 is centred.
     pub crop_offset: f64,
 }
@@ -129,7 +128,6 @@ impl Segment {
             path,
             duration,
             trim: None,
-            muted: false,
             crop_offset: 0.5,
         }
     }
@@ -411,7 +409,7 @@ fn join_with_crossfades(
 
 /// Adds the chains for input `i` to `graph` and returns the labels to
 /// join: the picture is trimmed and fitted to `width`×`height`; the sound
-/// is trimmed and muted, or used as it is when neither applies.
+/// is trimmed, or used as it is when the clip is whole.
 fn segment_filters(
     i: usize,
     segment: &Segment,
@@ -452,22 +450,15 @@ fn segment_filters(
     }
     let video = format!("s{i}v");
 
-    if trim.is_none() && !segment.muted {
+    let Some((start, end)) = trim else {
         return (video, format!("{i}:a"));
-    }
-    let mut audio_chain = Vec::new();
-    if let Some((start, end)) = trim {
-        // Trimming cuts off the click-guard fades normalize added; redo them.
-        audio_chain.push(format!(
-            "atrim=start={start}:end={end},asetpts=PTS-STARTPTS,\
-             afade=t=in:d={EDGE_FADE},afade=t=out:st={:.4}:d={EDGE_FADE}",
-            end - start - EDGE_FADE
-        ));
-    }
-    if segment.muted {
-        audio_chain.push("volume=0".into());
-    }
-    graph.push_str(&format!("[{i}:a]{}[s{i}a];", audio_chain.join(",")));
+    };
+    // Trimming cuts off the click-guard fades normalize added; redo them.
+    graph.push_str(&format!(
+        "[{i}:a]atrim=start={start}:end={end},asetpts=PTS-STARTPTS,\
+         afade=t=in:d={EDGE_FADE},afade=t=out:st={:.4}:d={EDGE_FADE}[s{i}a];",
+        end - start - EDGE_FADE
+    ));
     (video, format!("s{i}a"))
 }
 
@@ -705,7 +696,7 @@ mod tests {
     }
 
     #[test]
-    fn trims_and_mutes_only_the_segments_that_ask() {
+    fn trims_only_the_segments_that_ask() {
         let composition = Composition {
             watermark: None,
             captions: Vec::new(),
@@ -719,17 +710,9 @@ mod tests {
                     path: "a.mov".into(),
                     duration: 2.0,
                     trim: Some((0.51, 1.5)),
-                    muted: false,
                     crop_offset: 0.5,
                 },
                 Segment::whole("b.mov".into(), 2.0),
-                Segment {
-                    path: "c.mov".into(),
-                    duration: 2.0,
-                    trim: None,
-                    muted: true,
-                    crop_offset: 0.5,
-                },
             ],
             title: None,
         };
@@ -742,9 +725,7 @@ mod tests {
              afade=t=in:d=0.03,afade=t=out:st=0.9700:d=0.03[s0a];"
                 .to_string()
                 + &fit(1, 1080, 1920)
-                + &fit(2, 1080, 1920)
-                + "[2:a]volume=0[s2a];\
-                   [s0v][s0a][s1v][1:a][s2v][s2a]concat=n=3:v=1:a=1[joined][a0];\
+                + "[s0v][s0a][s1v][1:a]concat=n=2:v=1:a=1[joined][a0];\
                    [joined]null[v];[a0]alimiter=limit=0.89[a]"
         );
     }
@@ -959,7 +940,7 @@ mod tests {
     }
 
     #[test]
-    fn trims_and_mutes_generated_clips() {
+    fn trims_generated_clips() {
         let dir = std::env::temp_dir().join(format!("hd-live-reel-trim-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let mut clips = Vec::new();
@@ -1003,16 +984,9 @@ mod tests {
                     path: clips[0].clone(),
                     duration: 2.0,
                     trim: Some((0.5, 1.5)),
-                    muted: false,
                     crop_offset: 0.5,
                 },
-                Segment {
-                    path: clips[1].clone(),
-                    duration: 2.0,
-                    trim: None,
-                    muted: true,
-                    crop_offset: 0.5,
-                },
+                Segment::whole(clips[1].clone(), 2.0),
             ],
             title: None,
         };
@@ -1023,9 +997,9 @@ mod tests {
         std::fs::remove_dir_all(&dir).unwrap();
 
         assert!((info.duration - 3.0).abs() < 0.05, "{}", info.duration);
+        // The trimmed clip keeps its sound, and the whole one follows it.
         assert!(first.is_some_and(|lufs| lufs > -40.0), "{first:?}");
-        // ebur128 reports silence as its gating floor, -70 LUFS.
-        assert!(second.is_none_or(|lufs| lufs <= -70.0), "muted: {second:?}");
+        assert!(second.is_some_and(|lufs| lufs > -40.0), "{second:?}");
     }
 
     #[test]

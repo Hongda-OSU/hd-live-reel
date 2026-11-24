@@ -13,7 +13,7 @@ import {
   type Action,
 } from "../project";
 import { colors } from "../tokens.stylex";
-import { Button, Group, Seg, Switch, ui, withStyle } from "../ui";
+import { Button, Group, Seg, ui, withStyle } from "../ui";
 import { WarningIcon } from "./WarningIcon";
 
 const styles = stylex.create({
@@ -47,15 +47,6 @@ const styles = stylex.create({
   meta: {
     color: colors.muted,
     fontSize: 11,
-  },
-  row: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: 8,
-  },
-  dimmed: {
-    color: colors.muted,
   },
   stack: {
     display: "grid",
@@ -105,16 +96,13 @@ interface Props {
   /** Its place in the list, from 0. */
   index: number;
   thumb?: string;
-  /** True when the music replaces every clip's own sound, so muting a
-   * clip would change nothing. */
-  noOriginalSound: boolean;
   /** Opens the large trim view for the clip. */
   onTrim: () => void;
   dispatch: (action: Action) => void;
 }
 
-/** The inspector's 这一段 page: trim, text and sound of the selected clip. */
-export function ClipPanel({ clip, index, thumb, noOriginalSound, onTrim, dispatch }: Props) {
+/** The inspector's 这一段 page: trim and text of the selected clip. */
+export function ClipPanel({ clip, index, thumb, onTrim, dispatch }: Props) {
   if (!clip) return <p {...stylex.props(styles.empty)}>在下面的时间线上选一段来编辑</p>;
   const thumbImage = thumb ? { backgroundImage: `url("${thumb}")` } : undefined;
   const missing = isMissing(clip);
@@ -169,20 +157,6 @@ export function ClipPanel({ clip, index, thumb, noOriginalSound, onTrim, dispatc
             <div {...stylex.props(styles.stack)}>
               <CaptionFields clip={clip} dispatch={dispatch} />
             </div>
-          </Group>
-          <Group title="声音">
-            <div {...stylex.props(styles.row)}>
-              <span {...stylex.props(noOriginalSound && styles.dimmed)}>静音这一段</span>
-              <Switch
-                on={clip.muted}
-                label="静音这一段"
-                disabled={noOriginalSound}
-                onToggle={() => dispatch({ type: "updateClip", id: clip.id, patch: { muted: !clip.muted } })}
-              />
-            </div>
-            {noOriginalSound && (
-              <p {...stylex.props(ui.note)}>配乐模式下没有原声；切回「原声」或「配乐 + 原声」后生效。</p>
-            )}
           </Group>
           {remove}
         </>

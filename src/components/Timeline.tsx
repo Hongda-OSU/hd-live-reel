@@ -595,7 +595,7 @@ function ClipBlock({
   const { clip, width } = block;
   const { attributes, listeners, setNodeRef, isDragging } = useSortable({ id: clip.id });
   const lost = isMissing(clip);
-  const badges = width >= 30 && !lost && (clip.muted || clip.kind === "video");
+  const badges = width >= 30 && !lost && clip.kind === "video";
   const picture: CSSProperties | undefined = thumb && !lost ? { backgroundImage: `url("${thumb}")` } : undefined;
   return (
     <div
@@ -612,13 +612,6 @@ function ClipBlock({
         {lost && <WarningIcon size={12} />}
         {badges && (
           <span {...stylex.props(styles.badges)}>
-            {clip.muted && (
-              <span aria-label="已静音" {...stylex.props(styles.badge)}>
-                <svg viewBox="0 0 16 16" {...stylex.props(styles.badgeIcon)}>
-                  <path d="M2.5 6h2.5l3-2.5v9L5 10H2.5zM11 6l3 4M14 6l-3 4" />
-                </svg>
-              </span>
-            )}
             {clip.kind === "video" && (
               <span aria-label="视频" {...stylex.props(styles.badge)}>
                 <svg viewBox="0 0 16 16" {...stylex.props(styles.badgeIcon)}>

@@ -30,7 +30,6 @@ pub fn composition(project: &Project) -> Result<Composition, String> {
                 path,
                 duration: clip.duration,
                 trim: (!whole).then_some((clip.trim_start, clip.trim_end)),
-                muted: clip.muted,
                 crop_offset: clip.crop_offset,
             })
         })
@@ -282,7 +281,7 @@ mod tests {
     use super::*;
     use crate::project::{Clip, ClipKind, Source};
 
-    fn clip(trim: (f64, f64), muted: bool) -> Clip {
+    fn clip(trim: (f64, f64)) -> Clip {
         Clip {
             id: "c".into(),
             source: Source::Iphone,
@@ -295,7 +294,6 @@ mod tests {
             duration: 2.0,
             trim_start: trim.0,
             trim_end: trim.1,
-            muted,
             crop_offset: 0.5,
             ai_score: None,
             ai_reason: None,
@@ -306,20 +304,19 @@ mod tests {
     #[test]
     fn whole_clips_are_not_trimmed() {
         let project = Project {
-            clips: vec![clip((0.0, 2.0), false), clip((0.3, 1.5), true)],
+            clips: vec![clip((0.0, 2.0)), clip((0.3, 1.5))],
             ..Default::default()
         };
         let composition = composition(&project).unwrap();
         assert_eq!(composition.clips[0].trim, None);
         assert_eq!(composition.clips[1].trim, Some((0.3, 1.5)));
-        assert!(composition.clips[1].muted);
         assert_eq!(composition.title, None);
     }
 
     #[test]
     fn title_needs_text_and_an_image() {
         let mut project = Project {
-            clips: vec![clip((0.0, 2.0), false)],
+            clips: vec![clip((0.0, 2.0))],
             ..Default::default()
         };
         project.title.text_image = Some("/c/t.png".into());
@@ -335,7 +332,7 @@ mod tests {
     #[test]
     fn watermark_needs_text_and_an_image() {
         let mut project = Project {
-            clips: vec![clip((0.0, 2.0), false)],
+            clips: vec![clip((0.0, 2.0))],
             ..Default::default()
         };
         project.watermark.image = Some("/t/mark.png".into());
@@ -370,7 +367,7 @@ mod tests {
                 ..Default::default()
             })
         };
-        let mut clips = vec![clip((0.0, 2.0), false); 4];
+        let mut clips = vec![clip((0.0, 2.0)); 4];
         clips[1].caption = caption("Day 2", Some("/t/day2.png"));
         clips[2].caption = caption("  ", Some("/t/blank.png"));
         clips[3].caption = caption("Lake", None);
@@ -391,7 +388,7 @@ mod tests {
     #[test]
     fn filter_becomes_the_grade() {
         let mut project = Project {
-            clips: vec![clip((0.0, 2.0), false)],
+            clips: vec![clip((0.0, 2.0))],
             ..Default::default()
         };
         assert_eq!(composition(&project).unwrap().grade, Grade::default());
@@ -406,7 +403,7 @@ mod tests {
     #[test]
     fn music_needs_a_mode_and_a_track() {
         let mut project = Project {
-            clips: vec![clip((0.0, 2.0), false), clip((0.5, 1.5), false)],
+            clips: vec![clip((0.0, 2.0)), clip((0.5, 1.5))],
             ..Default::default()
         };
         project.audio.mode = AudioMode::Music;
@@ -429,7 +426,7 @@ mod tests {
     #[test]
     fn fade_transition_cross_dissolves_the_joins() {
         let mut project = Project {
-            clips: vec![clip((0.0, 2.0), false), clip((0.0, 2.0), false)],
+            clips: vec![clip((0.0, 2.0)), clip((0.0, 2.0))],
             ..Default::default()
         };
         project.transition.duration = 0.3;
@@ -444,7 +441,7 @@ mod tests {
     #[test]
     fn empty_or_unprepared_projects_are_refused() {
         assert!(composition(&Project::default()).is_err());
-        let mut unprepared = clip((0.0, 2.0), false);
+        let mut unprepared = clip((0.0, 2.0));
         unprepared.normalized_path = None;
         let project = Project {
             clips: vec![unprepared],
@@ -507,7 +504,7 @@ mod tests {
             .unwrap();
         let norm = dir.join("norm.mov");
         ffmpeg::normalize(&src, &norm).unwrap();
-        let mut clip = clip((0.0, 2.0), false);
+        let mut clip = clip((0.0, 2.0));
         clip.normalized_path = Some(norm);
         Project {
             clips: vec![clip],

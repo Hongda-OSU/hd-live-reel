@@ -758,7 +758,6 @@ function App() {
                 clip={project.clips[selectedIndex] ?? null}
                 index={selectedIndex}
                 thumb={selectedClip?.assetId ? thumbs[selectedClip.assetId] : undefined}
-                noOriginalSound={project.audio.mode === "music" && !!project.audio.musicPath}
                 onTrim={() => {
                   setCrop(null);
                   setTrimming(selectedId);

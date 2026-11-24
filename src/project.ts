@@ -38,8 +38,8 @@ export function reducer(project: Project | null, action: Action): Project | null
         if (i === -1) return clip;
         const [found] = fresh.splice(i, 1);
         const trimEnd = Math.min(clip.trimEnd, found.duration);
-        const { id, muted, cropOffset, caption } = clip;
-        return { ...found, id, muted, cropOffset, caption, trimStart: Math.min(clip.trimStart, trimEnd), trimEnd };
+        const { id, cropOffset, caption } = clip;
+        return { ...found, id, cropOffset, caption, trimStart: Math.min(clip.trimStart, trimEnd), trimEnd };
       });
       return { ...project, clips: [...clips, ...fresh] };
     }
@@ -244,7 +244,6 @@ export function renderKey(project: Project): string {
       c.normalizedPath,
       c.trimStart,
       c.trimEnd,
-      c.muted,
       c.cropOffset,
       hasCaption(c) ? [c.caption!.image, c.caption!.showFor] : null,
     ]),
