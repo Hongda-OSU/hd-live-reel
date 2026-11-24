@@ -95,9 +95,6 @@ const styles = stylex.create({
     color: colors.accent,
     fontWeight: 600,
   },
-  lead: {
-    marginBottom: 10,
-  },
 });
 
 /** One page of settings at a time, so none needs much scrolling: the
@@ -260,7 +257,6 @@ export function Inspector({
           </Group>
           {/* Captions are drawn in this look too, a size smaller. */}
           <Group title="文字样式">
-            <p {...stylex.props(ui.note, styles.lead)}>片头和每段字幕都用这套，字幕小一号。</p>
             <Field label="字体">
               <Select label="字体" options={FONTS} value={title.font} onChange={(font) => set({ font })} />
             </Field>
