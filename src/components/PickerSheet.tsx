@@ -2,12 +2,13 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import * as stylex from "@stylexjs/stylex";
 import { aiSelect, type AiReason, type AiVerdict, type ClipsProgress, type MediaItem } from "../api";
 import { normalizingLabel } from "../project";
-import { groupDays, sceneLabel, type Day } from "../scenes";
+import { groupDays, sceneLabel } from "../scenes";
 import { colors, layout, shadows } from "../tokens.stylex";
 import { useDragSelect } from "../hooks/useDragSelect";
 import type { Library } from "../hooks/useLibrary";
 import { Button, Icon, Seg, ui, withStyle } from "../ui";
 import { AiPanel, TARGET } from "./AiPanel";
+import { checkState, GroupCheck, PickerSidebar, type DayNode, type Focus, type SceneNode } from "./PickerSidebar";
 
 type Filter = "all" | "live" | "video";
 
@@ -118,22 +119,72 @@ const styles = stylex.create({
     color: colors.accent,
     fontWeight: 600,
   },
+  // The outline on the left, the chosen day or scene on the right.
+  body: {
+    display: "grid",
+    gridTemplateColumns: "220px minmax(0, 1fr)",
+    minHeight: 0,
+  },
+  pane: {
+    display: "grid",
+    gridTemplateRows: "auto 1fr",
+    minHeight: 0,
+  },
+  paneHead: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    minHeight: 44,
+    paddingBlock: "8px",
+    paddingInline: "20px",
+    borderBottomWidth: 1,
+    borderBottomStyle: "solid",
+    borderBottomColor: colors.border,
+  },
+  crumb: {
+    color: colors.muted,
+    fontSize: 12,
+  },
+  crumbArrow: {
+    width: 10,
+    height: 10,
+    fill: "none",
+    stroke: colors.muted,
+    strokeWidth: 1.5,
+    strokeLinecap: "round",
+    strokeLinejoin: "round",
+  },
+  paneTitle: {
+    fontSize: 15,
+    fontWeight: 600,
+  },
+  paneCount: {
+    marginLeft: "auto",
+    color: colors.muted,
+    fontSize: 12,
+    fontVariantNumeric: "tabular-nums",
+  },
   scroll: {
     overflowY: "auto",
     paddingBlock: "14px",
     paddingInline: "20px",
   },
+  sceneRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 8,
+  },
   notice: {
     color: colors.muted,
   },
-  // Day and scene titles double as buttons that tick all their photos.
+  // Scene titles double as buttons that tick all their photos.
   groupTitle: {
     display: "inline-flex",
     alignItems: "center",
     gap: 6,
-    marginTop: "4px",
+    marginBlock: "0",
     marginRight: "0",
-    marginBottom: "8px",
     marginLeft: "-6px",
     paddingBlock: "2px",
     paddingInline: "6px",
@@ -152,47 +203,11 @@ const styles = stylex.create({
     },
   },
   sceneTitle: {
+    fontSize: 11,
     fontWeight: 500,
   },
   groupTitleOn: {
     color: colors.accent,
-  },
-  groupCheck: {
-    display: "grid",
-    placeItems: "center",
-    width: 14,
-    height: 14,
-    boxSizing: "border-box",
-    borderWidth: 1.5,
-    borderStyle: "solid",
-    borderColor: colors.muted,
-    borderRadius: "50%",
-  },
-  // Some of the group is ticked: a dash.
-  groupCheckSome: {
-    borderColor: colors.accent,
-    "::after": {
-      content: '""',
-      width: 6,
-      height: 1.5,
-      backgroundColor: colors.accent,
-    },
-  },
-  groupCheckAll: {
-    borderColor: colors.accent,
-    backgroundColor: colors.accent,
-    "::after": {
-      content: '""',
-      width: 6,
-      height: 3,
-      borderTopWidth: "0",
-      borderRightWidth: "0",
-      borderBottomWidth: "1.5px",
-      borderLeftWidth: "1.5px",
-      borderStyle: "solid",
-      borderColor: "#fff",
-      transform: "translateY(-1px) rotate(-45deg)",
-    },
   },
   grid: {
     display: "grid",
@@ -354,7 +369,13 @@ function dayLabel(iso?: string | null): string {
   return dayFormat.format(date);
 }
 
+const monthFormat = new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "long" });
+
+const monthLabel = (iso?: string | null) => (iso ? monthFormat.format(new Date(iso)) : "日期未知");
+
 const usable = (item: MediaItem) => item.kind !== "photo";
+
+const selectable = (items: MediaItem[]) => items.filter(usable).map((item) => item.id);
 
 /** AI's value (about -1 to 1, after penalties) as 0 to 100 points. */
 const points = (value: number) => Math.round(Math.min(1, Math.max(0, (value + 1) / 2)) * 100);
@@ -437,6 +458,47 @@ export function PickerSheet({
     (filter === "live" && item.kind === "livePhoto") ||
     (filter === "video" && item.kind === "video");
 
+  // The outline: what the filter lets through, empty days and scenes left
+  // out.
+  const tree: DayNode[] = useMemo(
+    () =>
+      days
+        .map((day) => ({
+          key: day.scenes[0].key,
+          label: day.label,
+          month: monthLabel(day.scenes[0].items[0].createdAt),
+          scenes: day.scenes
+            .map((scene) => ({ key: scene.key, label: sceneLabel(scene), items: scene.items.filter(visible) }))
+            .filter((scene) => scene.items.length > 0),
+        }))
+        .filter((day) => day.scenes.length > 0),
+    // `visible` only depends on `filter`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [days, filter],
+  );
+  const scroller = useRef<HTMLDivElement>(null);
+  const [focus, setFocus] = useState<Focus | null>(null);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  // The newest day until one is chosen, or when the chosen one is gone.
+  const shownDay = tree.find((day) => day.key === focus?.day) ?? tree[0] ?? null;
+  const shownScene = shownDay?.scenes.find((scene) => scene.key === focus?.scene) ?? null;
+  const shownScenes: SceneNode[] = shownScene ? [shownScene] : (shownDay?.scenes ?? []);
+  const shownIds = selectable(shownScenes.flatMap((scene) => scene.items));
+
+  function show(next: Focus) {
+    setFocus(next);
+    setExpanded((current) => new Set(current).add(next.day));
+    scroller.current?.scrollTo({ top: 0 });
+  }
+
+  function toggleExpanded(day: string) {
+    setExpanded((current) => {
+      const next = new Set(current);
+      if (!next.delete(day)) next.add(day);
+      return next;
+    });
+  }
+
   /** Ticks all of `ids`, or unticks them when they all are. */
   function toggleGroup(ids: string[]) {
     setChosen((current) => {
@@ -473,18 +535,7 @@ export function PickerSheet({
   }
 
   // Selectable tiles in the order shown, for drag and Shift-click ranges.
-  const order = useMemo(
-    () =>
-      days
-        .flatMap((day) => day.scenes)
-        .flatMap((scene) => scene.items)
-        .filter((item) => usable(item) && visible(item))
-        .map((item) => item.id),
-    // `visible` only depends on `filter`.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [days, filter],
-  );
-  const scroller = useRef<HTMLDivElement>(null);
+  const order = shownIds;
   const dragSelect = useDragSelect({ order, selected: chosen, onChange: setChosen, scroller });
 
   function toggle(id: string) {
@@ -603,72 +654,111 @@ export function PickerSheet({
             </span>
           </div>
         </header>
-        <div ref={scroller} {...stylex.props(styles.scroll)}>
-          {library.state === "error" && (
-            <div {...stylex.props(styles.notice)}>
-              <p>{library.message}</p>
-              <p {...stylex.props(ui.note)}>用数据线连接 iPhone 并解锁，然后点「未连接」旁边的刷新按钮。</p>
-              <p {...stylex.props(ui.note)}>文件已经在 Mac 上：点「从 Mac 选择…」，或直接把文件、文件夹拖进窗口。</p>
+        <div {...stylex.props(styles.body)}>
+          <PickerSidebar
+            days={tree}
+            focus={shownDay && { day: shownDay.key, scene: shownScene?.key ?? null }}
+            expanded={expanded}
+            chosen={chosen}
+            selectable={selectable}
+            onFocus={show}
+            onExpand={toggleExpanded}
+            onToggle={toggleGroup}
+          />
+          <div {...stylex.props(styles.pane)}>
+            <div {...stylex.props(styles.paneHead)}>
+              {shownDay && shownScene && (
+                <>
+                  <span {...stylex.props(styles.crumb)}>{shownDay.label}</span>
+                  <svg viewBox="0 0 10 10" aria-hidden {...stylex.props(styles.crumbArrow)}>
+                    <path d="M3.5 2 6.5 5 3.5 8" />
+                  </svg>
+                </>
+              )}
+              {shownDay && (
+                <span {...stylex.props(styles.paneTitle)}>{shownScene ? shownScene.label : shownDay.label}</span>
+              )}
+              {shownIds.length > 0 && (
+                <>
+                  <span {...stylex.props(styles.paneCount)}>
+                    已选 {shownIds.filter((id) => chosen.has(id)).length} / {shownIds.length}
+                  </span>
+                  <Button variant="ghost" onClick={() => toggleGroup(shownIds)} disabled={busy}>
+                    {checkState(shownIds, chosen) === "all" ? "取消全选" : "全选"}
+                  </Button>
+                </>
+              )}
             </div>
-          )}
-          {library.state === "loading" && <p {...stylex.props(styles.notice)}>正在读取 iPhone…</p>}
-          {days.map((day) => (
-            <DaySection
-              key={day.label}
-              day={day}
-              visible={visible}
-              chosen={chosen}
-              onToggle={toggleGroup}
-              renderTile={(item) => {
-                const on = chosen.has(item.id);
-                const thumb = thumbs[item.id];
-                const verdict = verdicts.get(item.id);
-                const [caption, why] = verdict ? explainReason(verdict.reason) : [null, null];
-                return (
-                  <button
-                    key={item.id}
-                    disabled={!usable(item) || busy}
-                    title={
-                      !usable(item)
-                        ? "静态照片没有动态画面"
-                        : added.has(item.id) && !verdict
-                          ? `${item.name}：已在工程里，再勾选会多加一段`
-                          : verdict
-                            ? `${item.name}：${why}（${points(verdict.value)} 分）`
-                            : item.name
-                    }
-                    data-select-id={usable(item) ? item.id : undefined}
-                    onPointerDown={(e) => !busy && dragSelect.onPointerDown(item.id, e)}
-                    // Pointer clicks are handled above; this is the keyboard.
-                    onClick={(e) => e.detail === 0 && toggle(item.id)}
-                    {...withStyle(
-                      stylex.props(
-                        styles.tile,
-                        on && styles.tileOn,
-                        added.has(item.id) && styles.tileAdded,
-                        !usable(item) && styles.tileStill,
-                      ),
-                      thumb ? { backgroundImage: `url("${thumb}")` } : undefined,
-                    )}
-                  >
-                    {item.kind !== "photo" && (
-                      <span {...stylex.props(styles.badge)}>
-                        {item.kind === "livePhoto" ? "LIVE" : "视频"}
-                        {added.has(item.id) && " · 已添加"}
-                      </span>
-                    )}
-                    {usable(item) && <span {...stylex.props(styles.check, on && styles.checkOn)} />}
-                    {verdict && (
-                      <span {...stylex.props(styles.caption, verdict.picked && styles.captionPicked)}>
-                        <span {...stylex.props(styles.reason)}>{verdict.picked ? `AI · ${caption}` : caption}</span>
-                        <span {...stylex.props(styles.points)}>{points(verdict.value)}</span>
-                      </span>
-                    )}
-                  </button>
-                );
-              }}
-            />
-          ))}
+            <div ref={scroller} {...stylex.props(styles.scroll)}>
+              {library.state === "error" && (
+                <div {...stylex.props(styles.notice)}>
+                  <p>{library.message}</p>
+                  <p {...stylex.props(ui.note)}>用数据线连接 iPhone 并解锁，然后点「未连接」旁边的刷新按钮。</p>
+                  <p {...stylex.props(ui.note)}>
+                    文件已经在 Mac 上：点「从 Mac 选择…」，或直接把文件、文件夹拖进窗口。
+                  </p>
+                </div>
+              )}
+              {library.state === "loading" && <p {...stylex.props(styles.notice)}>正在读取 iPhone…</p>}
+              {shownScenes.map((scene) => (
+                <SceneSection
+                  key={scene.key}
+                  scene={scene}
+                  titled={!shownScene && shownScenes.length > 1}
+                  chosen={chosen}
+                  onToggle={toggleGroup}
+                  renderTile={(item) => {
+                    const on = chosen.has(item.id);
+                    const thumb = thumbs[item.id];
+                    const verdict = verdicts.get(item.id);
+                    const [caption, why] = verdict ? explainReason(verdict.reason) : [null, null];
+                    return (
+                      <button
+                        key={item.id}
+                        disabled={!usable(item) || busy}
+                        title={
+                          !usable(item)
+                            ? "静态照片没有动态画面"
+                            : added.has(item.id) && !verdict
+                              ? `${item.name}：已在工程里，再勾选会多加一段`
+                              : verdict
+                                ? `${item.name}：${why}（${points(verdict.value)} 分）`
+                                : item.name
+                        }
+                        data-select-id={usable(item) ? item.id : undefined}
+                        onPointerDown={(e) => !busy && dragSelect.onPointerDown(item.id, e)}
+                        // Pointer clicks are handled above; this is the keyboard.
+                        onClick={(e) => e.detail === 0 && toggle(item.id)}
+                        {...withStyle(
+                          stylex.props(
+                            styles.tile,
+                            on && styles.tileOn,
+                            added.has(item.id) && styles.tileAdded,
+                            !usable(item) && styles.tileStill,
+                          ),
+                          thumb ? { backgroundImage: `url("${thumb}")` } : undefined,
+                        )}
+                      >
+                        {item.kind !== "photo" && (
+                          <span {...stylex.props(styles.badge)}>
+                            {item.kind === "livePhoto" ? "LIVE" : "视频"}
+                            {added.has(item.id) && " · 已添加"}
+                          </span>
+                        )}
+                        {usable(item) && <span {...stylex.props(styles.check, on && styles.checkOn)} />}
+                        {verdict && (
+                          <span {...stylex.props(styles.caption, verdict.picked && styles.captionPicked)}>
+                            <span {...stylex.props(styles.reason)}>{verdict.picked ? `AI · ${caption}` : caption}</span>
+                            <span {...stylex.props(styles.points)}>{points(verdict.value)}</span>
+                          </span>
+                        )}
+                      </button>
+                    );
+                  }}
+                />
+              ))}
+            </div>
+          </div>
         </div>
         <footer {...stylex.props(styles.footer)}>
           <span {...stylex.props(styles.summary)}>
@@ -699,74 +789,38 @@ export function PickerSheet({
   );
 }
 
-/** A day's title and its pictures, split under scene titles when the day
- * has more than one scene. Either title ticks all its photos shown. */
-function DaySection({
-  day,
-  visible,
+/** A scene's pictures, under its title when the whole day is shown. */
+function SceneSection({
+  scene,
+  titled,
   chosen,
   onToggle,
   renderTile,
 }: {
-  day: Day;
-  visible: (item: MediaItem) => boolean;
+  scene: SceneNode;
+  titled: boolean;
   chosen: Set<string>;
   onToggle: (ids: string[]) => void;
   renderTile: (item: MediaItem) => ReactNode;
 }) {
-  const scenes = day.scenes
-    .map((scene) => ({ scene, shown: scene.items.filter(visible) }))
-    .filter(({ shown }) => shown.length > 0);
-  if (scenes.length === 0) return null;
-  const split = day.scenes.length > 1;
+  const ids = selectable(scene.items);
+  const state = checkState(ids, chosen);
   return (
     <section>
-      <GroupTitle items={scenes.flatMap(({ shown }) => shown)} chosen={chosen} onToggle={onToggle}>
-        {day.label}
-      </GroupTitle>
-      {scenes.map(({ scene, shown }) => (
-        <div key={scene.key}>
-          {split && (
-            <div>
-              <GroupTitle items={shown} chosen={chosen} onToggle={onToggle} scene>
-                {sceneLabel(scene)} · {shown.length} 张
-              </GroupTitle>
-            </div>
-          )}
-          <div {...stylex.props(styles.grid)}>{shown.map(renderTile)}</div>
+      {titled && (
+        <div {...stylex.props(styles.sceneRow)}>
+          <button
+            disabled={ids.length === 0}
+            title={state === "all" ? "取消勾选这一段" : "勾选这一段的全部照片"}
+            onClick={() => onToggle(ids)}
+            {...stylex.props(styles.groupTitle, styles.sceneTitle, state === "all" && styles.groupTitleOn)}
+          >
+            <GroupCheck state={state} />
+            {scene.label} · {scene.items.length} 张
+          </button>
         </div>
-      ))}
+      )}
+      <div {...stylex.props(styles.grid)}>{scene.items.map(renderTile)}</div>
     </section>
-  );
-}
-
-/** A day or scene title with a check showing none, some or all of its
- * usable photos ticked; clicking it ticks or unticks them all. */
-function GroupTitle({
-  items,
-  chosen,
-  onToggle,
-  scene = false,
-  children,
-}: {
-  items: MediaItem[];
-  chosen: Set<string>;
-  onToggle: (ids: string[]) => void;
-  scene?: boolean;
-  children: ReactNode;
-}) {
-  const ids = items.filter(usable).map((item) => item.id);
-  const ticked = ids.filter((id) => chosen.has(id)).length;
-  const all = ids.length > 0 && ticked === ids.length;
-  return (
-    <button
-      disabled={ids.length === 0}
-      title={all ? "取消勾选这一段" : "勾选这一段的全部照片"}
-      onClick={() => onToggle(ids)}
-      {...stylex.props(styles.groupTitle, scene && styles.sceneTitle, all && styles.groupTitleOn)}
-    >
-      <span {...stylex.props(styles.groupCheck, all ? styles.groupCheckAll : ticked > 0 && styles.groupCheckSome)} />
-      {children}
-    </button>
   );
 }
