@@ -20,6 +20,9 @@ const styles = stylex.create({
     marginRight: "0",
     marginBottom: "10px",
     marginLeft: "0",
+  },
+  title: {
+    margin: 0,
     fontSize: 12,
     fontWeight: 600,
   },
@@ -38,25 +41,29 @@ const styles = stylex.create({
 });
 
 /** A section of a settings panel, titled unless it is alone on its page.
- * `dimmed` greys out the body but keeps the heading and badge readable. */
+ * `dimmed` greys out the body but keeps the heading and badge readable;
+ * `action`, such as a link button, sits at the heading's right. */
 export function Group({
   title,
   badge,
+  action,
   dimmed,
   children,
 }: {
   title?: string;
   badge?: string;
+  action?: ReactNode;
   dimmed?: boolean;
   children: ReactNode;
 }) {
   return (
     <div {...stylex.props(styles.group)}>
-      {(title || badge) && (
-        <h3 {...stylex.props(styles.heading)}>
-          {title}
+      {(title || badge || action) && (
+        <div {...stylex.props(styles.heading)}>
+          <h3 {...stylex.props(styles.title)}>{title}</h3>
           {badge && <span {...stylex.props(styles.badge)}>{badge}</span>}
-        </h3>
+          {action}
+        </div>
       )}
       <div {...stylex.props(dimmed && styles.dimmed)}>{children}</div>
     </div>

@@ -95,20 +95,6 @@ const styles = stylex.create({
     color: colors.accent,
     fontWeight: 600,
   },
-  // Resets every page, so it is on every page: at the bottom of the panel,
-  // staying in view when a long page scrolls.
-  reset: {
-    position: "sticky",
-    bottom: 0,
-    display: "flex",
-    justifyContent: "center",
-    marginTop: "auto",
-    paddingBlock: "10px",
-    borderTopWidth: 1,
-    borderTopStyle: "solid",
-    borderTopColor: colors.border,
-    backgroundColor: colors.window,
-  },
 });
 
 /** One page of settings at a time, so none needs much scrolling: the
@@ -414,9 +400,10 @@ export function Inspector({
       )}
       {page === "sound" && <SoundGroup audio={audio} dispatch={dispatch} />}
       {page === "export" && exportPage}
-      {/* Resets the project's settings, which the 这一段 page has none of. */}
+      {/* Resets the project's settings, which the 这一段 page has none of;
+        that page has its own footer. */}
       {page !== "clip" && (
-        <div {...stylex.props(styles.reset)}>
+        <div {...stylex.props(ui.panelFooter)}>
           <Button variant="ghost" onClick={onReset}>
             恢复默认设置
           </Button>

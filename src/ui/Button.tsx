@@ -45,6 +45,17 @@ const styles = stylex.create({
   danger: {
     color: colors.danger,
   },
+  // A text action in a heading or a line of text.
+  link: {
+    height: "auto",
+    paddingInline: 0,
+    color: {
+      default: colors.accent,
+      ":hover": colors.text,
+    },
+    fontSize: 12,
+    fontWeight: 400,
+  },
   disabled: {
     opacity: 0.45,
     cursor: "default",
@@ -52,7 +63,7 @@ const styles = stylex.create({
   },
 });
 
-type Variant = "default" | "primary" | "ghost" | "danger";
+type Variant = "default" | "primary" | "ghost" | "danger" | "link";
 
 export function Button({
   variant = "default",
@@ -68,8 +79,9 @@ export function Button({
         styles.base,
         variant === "default" && !disabled && styles.hoverable,
         variant === "primary" && styles.primary,
-        (variant === "ghost" || variant === "danger") && styles.ghost,
+        (variant === "ghost" || variant === "danger" || variant === "link") && styles.ghost,
         variant === "danger" && styles.danger,
+        variant === "link" && styles.link,
         disabled && styles.disabled,
       )}
     >

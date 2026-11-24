@@ -51,4 +51,18 @@ export const ui = stylex.create({
   spacer: {
     flex: "1",
   },
+  // The bottom bar of a settings panel laid out as a column: pushed to the
+  // bottom of short pages, staying in view while a long page scrolls.
+  panelFooter: {
+    position: "sticky",
+    bottom: 0,
+    display: "flex",
+    justifyContent: "center",
+    marginTop: "auto",
+    paddingBlock: "10px",
+    borderTopWidth: 1,
+    borderTopStyle: "solid",
+    borderTopColor: colors.border,
+    backgroundColor: colors.window,
+  },
 });
