@@ -773,6 +773,8 @@ function App() {
             playback={playback}
             ready={preview.url !== null && !trimClip}
             onAdd={() => setPickerOpen(true)}
+            onClear={() => void clearProject()}
+            canClear={!exporting}
             onSelect={pickClip}
             onMove={(from, to) => dispatch({ type: "moveClip", from, to })}
           />

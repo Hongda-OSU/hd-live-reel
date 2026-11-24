@@ -89,6 +89,11 @@ const styles = stylex.create({
   spacer: {
     flex: "1",
   },
+  // Adding and clearing the clips sit together, closer than the rest.
+  actions: {
+    display: "flex",
+    gap: 6,
+  },
   hint: {
     color: colors.muted,
     fontSize: 11,
@@ -338,11 +343,27 @@ interface Props {
   onMove: (from: number, to: number) => void;
   /** Opens the picker; what it adds goes on the end. */
   onAdd: () => void;
+  /** Asks, then empties the project. */
+  onClear: () => void;
+  /** False while exporting, when the clips must stay. */
+  canClear: boolean;
 }
 
 /** The clips in play order, each as wide as its time: picks, reorders and
  * plays the reel. */
-export function Timeline({ clips, spans, selectedId, thumbs, playback, ready, onSelect, onMove, onAdd }: Props) {
+export function Timeline({
+  clips,
+  spans,
+  selectedId,
+  thumbs,
+  playback,
+  ready,
+  onSelect,
+  onMove,
+  onAdd,
+  onClear,
+  canClear,
+}: Props) {
   const scroller = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
   const [zoom, setZoom] = useState(0);
@@ -450,12 +471,20 @@ export function Timeline({ clips, spans, selectedId, thumbs, playback, ready, on
           低清预览
         </span>
         <span {...stylex.props(styles.spacer)} />
-        <Button onClick={onAdd}>
-          <Icon>
-            <path d="M8 3v10M3 8h10" />
-          </Icon>
-          添加照片
-        </Button>
+        <span {...stylex.props(styles.actions)}>
+          <Button onClick={onAdd}>
+            <Icon>
+              <path d="M8 3v10M3 8h10" />
+            </Icon>
+            添加照片
+          </Button>
+          <Button disabled={!canClear} title="清空工程 ⇧⌘⌫" onClick={onClear}>
+            <Icon>
+              <path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.5h5.8l.6-8.5" />
+            </Icon>
+            清空
+          </Button>
+        </span>
         <span {...stylex.props(styles.hint)}>{clips.length} 段 · 拖动或 ⌥← ⌥→ 换位置</span>
         <label {...stylex.props(styles.zoom)}>
           <svg viewBox="0 0 16 16" aria-hidden {...stylex.props(styles.badgeIcon)}>
