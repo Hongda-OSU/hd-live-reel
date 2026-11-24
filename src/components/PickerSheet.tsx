@@ -9,6 +9,7 @@ import type { Library } from "../hooks/useLibrary";
 import { Button, CheckCircle, checkState, Icon, Seg, ui, withStyle } from "../ui";
 import { AiPanel, TARGET } from "./AiPanel";
 import { PickerSidebar, type DayNode, type Focus, type SceneNode } from "./PickerSidebar";
+import { PickerStatus, problemStatus } from "./PickerStatus";
 
 type Filter = "all" | "live" | "video";
 
@@ -168,9 +169,6 @@ const styles = stylex.create({
     alignItems: "center",
     gap: 8,
     marginBottom: 8,
-  },
-  notice: {
-    color: colors.muted,
   },
   // Scene titles double as buttons that tick all their photos.
   groupTitle: {
@@ -348,7 +346,8 @@ interface Props {
   added: Set<string>;
   adding: ClipsProgress | "starting" | null;
   error: string | null;
-  onRefresh: () => void;
+  /** Rereads the phone; `quiet` keeps what is shown until it answers. */
+  onRefresh: (quiet?: boolean) => void;
   onLoadThumbs: (ids: string[]) => void;
   onAdd: (ids: string[]) => void;
   /** Opens a file dialog to add from the Mac instead. */
@@ -373,6 +372,9 @@ const monthFormat = new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "
 const monthLabel = (iso?: string | null) => (iso ? monthFormat.format(new Date(iso)) : "日期未知");
 
 const usable = (item: MediaItem) => item.kind !== "photo";
+
+/** Pause between automatic rereads of a phone that could not be read. */
+const RETRY_MS = 3000;
 
 /** Rough length of `items` in the reel, as AI selection counts it
  * (`LIVE_PHOTO_SECONDS` and `VIDEO_SECONDS` in src-tauri/src/select.rs). */
@@ -603,6 +605,14 @@ export function PickerSheet({
   }
 
   const busy = adding !== null || ai.busy;
+
+  // While the phone can't be read, try again every few seconds, quietly, so
+  // the photos appear on their own once it is unlocked or plugged in.
+  useEffect(() => {
+    if (!open || library.state !== "error") return;
+    const timer = setTimeout(() => onRefresh(true), RETRY_MS);
+    return () => clearTimeout(timer);
+  }, [open, library, onRefresh]);
   /** Errors and progress take the selection summary's place. */
   const status =
     error ??
@@ -625,8 +635,8 @@ export function PickerSheet({
             <span {...stylex.props(styles.device)}>
               <span {...stylex.props(styles.dot, library.state !== "ready" && styles.dotOff)} />
               {library.state === "ready" && `已连接 · ${count?.toLocaleString()} 项`}
-              {library.state === "loading" && "正在读取…"}
-              {library.state === "error" && "未连接"}
+              {(library.state === "loading" || library.state === "idle") && "正在读取…"}
+              {library.state === "error" && problemStatus(library.message)}
               <Button
                 variant="ghost"
                 onClick={refresh}
@@ -659,7 +669,7 @@ export function PickerSheet({
             </Button>
             {/* The panel hangs from its button. */}
             <span {...stylex.props(styles.aiAnchor)}>
-              <Button variant="ghost" onClick={() => setAiOpen((o) => !o)} disabled={busy}>
+              <Button variant="ghost" onClick={() => setAiOpen((o) => !o)} disabled={busy || library.state !== "ready"}>
                 <span {...stylex.props(styles.aiLabel)}>
                   <Icon>
                     <path d="M6.5 1.8 7.6 5.4l3.6 1.1-3.6 1.1-1.1 3.6-1.1-3.6-3.6-1.1 3.6-1.1zM12.3 9.8l.5 1.6 1.6.5-1.6.5-.5 1.6-.5-1.6-1.6-.5 1.6-.5z" />
@@ -683,106 +693,102 @@ export function PickerSheet({
             </span>
           </div>
         </header>
-        <div {...stylex.props(styles.body)}>
-          <PickerSidebar
-            days={tree}
-            focus={shownDay && { day: shownDay.key, scene: shownScene?.key ?? null }}
-            expanded={expanded}
-            chosen={chosen}
-            selectable={selectable}
-            onFocus={show}
-            onExpand={toggleExpanded}
-            onToggle={toggleGroup}
-          />
-          <div {...stylex.props(styles.pane)}>
-            <div {...stylex.props(styles.paneHead)}>
-              {shownDay && shownScene && (
-                <>
-                  <span {...stylex.props(styles.crumb)}>{shownDay.label}</span>
-                  <svg viewBox="0 0 10 10" aria-hidden {...stylex.props(styles.crumbArrow)}>
-                    <path d="M3.5 2 6.5 5 3.5 8" />
-                  </svg>
-                </>
-              )}
-              {shownDay && (
-                <span {...stylex.props(styles.paneTitle)}>{shownScene ? shownScene.label : shownDay.label}</span>
-              )}
-            </div>
-            <div ref={scroller} {...stylex.props(styles.scroll)}>
-              {library.state === "error" && (
-                <div {...stylex.props(styles.notice)}>
-                  <p>{library.message}</p>
-                  <p {...stylex.props(ui.note)}>用数据线连接 iPhone 并解锁，然后点「未连接」旁边的刷新按钮。</p>
-                  <p {...stylex.props(ui.note)}>
-                    文件已经在 Mac 上：点「从 Mac 选择…」，或直接把文件、文件夹拖进窗口。
-                  </p>
-                </div>
-              )}
-              {library.state === "loading" && <p {...stylex.props(styles.notice)}>正在读取 iPhone…</p>}
-              {shownScenes.map((scene) => (
-                <SceneSection
-                  key={scene.key}
-                  scene={scene}
-                  titled={!shownScene && shownScenes.length > 1}
-                  chosen={chosen}
-                  onToggle={toggleGroup}
-                  renderTile={(item) => {
-                    const on = chosen.has(item.id);
-                    const thumb = thumbs[item.id];
-                    const verdict = verdicts.get(item.id);
-                    const [caption, why] = verdict ? explainReason(verdict.reason) : [null, null];
-                    return (
-                      <button
-                        key={item.id}
-                        disabled={!usable(item) || busy}
-                        title={
-                          !usable(item)
-                            ? "静态照片没有动态画面"
-                            : added.has(item.id) && !verdict
-                              ? `${item.name}：已在工程里，再勾选会多加一段`
-                              : verdict
-                                ? `${item.name}：${why}（${points(verdict.value)} 分）`
-                                : item.name
-                        }
-                        data-select-id={usable(item) ? item.id : undefined}
-                        onPointerDown={(e) => !busy && dragSelect.onPointerDown(item.id, e)}
-                        // Pointer clicks are handled above; this is the keyboard.
-                        onClick={(e) => e.detail === 0 && toggle(item.id)}
-                        {...withStyle(
-                          stylex.props(
-                            styles.tile,
-                            on && styles.tileOn,
-                            added.has(item.id) && styles.tileAdded,
-                            !usable(item) && styles.tileStill,
-                          ),
-                          thumb ? { backgroundImage: `url("${thumb}")` } : undefined,
-                        )}
-                      >
-                        {item.kind !== "photo" && (
-                          <span {...stylex.props(styles.badge)}>
-                            {item.kind === "livePhoto" ? "LIVE" : "视频"}
-                            {added.has(item.id) && " · 已添加"}
-                          </span>
-                        )}
-                        {usable(item) && <span {...stylex.props(styles.check, on && styles.checkOn)} />}
-                        {verdict && (
-                          <span {...stylex.props(styles.caption, verdict.picked && styles.captionPicked)}>
-                            <span {...stylex.props(styles.reason)}>{verdict.picked ? `AI · ${caption}` : caption}</span>
-                            <span {...stylex.props(styles.points)}>{points(verdict.value)}</span>
-                          </span>
-                        )}
-                      </button>
-                    );
-                  }}
-                />
-              ))}
+        {library.state !== "ready" ? (
+          <PickerStatus error={library.state === "error" ? library.message : null} />
+        ) : (
+          <div {...stylex.props(styles.body)}>
+            <PickerSidebar
+              days={tree}
+              focus={shownDay && { day: shownDay.key, scene: shownScene?.key ?? null }}
+              expanded={expanded}
+              chosen={chosen}
+              selectable={selectable}
+              onFocus={show}
+              onExpand={toggleExpanded}
+              onToggle={toggleGroup}
+            />
+            <div {...stylex.props(styles.pane)}>
+              <div {...stylex.props(styles.paneHead)}>
+                {shownDay && shownScene && (
+                  <>
+                    <span {...stylex.props(styles.crumb)}>{shownDay.label}</span>
+                    <svg viewBox="0 0 10 10" aria-hidden {...stylex.props(styles.crumbArrow)}>
+                      <path d="M3.5 2 6.5 5 3.5 8" />
+                    </svg>
+                  </>
+                )}
+                {shownDay && (
+                  <span {...stylex.props(styles.paneTitle)}>{shownScene ? shownScene.label : shownDay.label}</span>
+                )}
+              </div>
+              <div ref={scroller} {...stylex.props(styles.scroll)}>
+                {shownScenes.map((scene) => (
+                  <SceneSection
+                    key={scene.key}
+                    scene={scene}
+                    titled={!shownScene && shownScenes.length > 1}
+                    chosen={chosen}
+                    onToggle={toggleGroup}
+                    renderTile={(item) => {
+                      const on = chosen.has(item.id);
+                      const thumb = thumbs[item.id];
+                      const verdict = verdicts.get(item.id);
+                      const [caption, why] = verdict ? explainReason(verdict.reason) : [null, null];
+                      return (
+                        <button
+                          key={item.id}
+                          disabled={!usable(item) || busy}
+                          title={
+                            !usable(item)
+                              ? "静态照片没有动态画面"
+                              : added.has(item.id) && !verdict
+                                ? `${item.name}：已在工程里，再勾选会多加一段`
+                                : verdict
+                                  ? `${item.name}：${why}（${points(verdict.value)} 分）`
+                                  : item.name
+                          }
+                          data-select-id={usable(item) ? item.id : undefined}
+                          onPointerDown={(e) => !busy && dragSelect.onPointerDown(item.id, e)}
+                          // Pointer clicks are handled above; this is the keyboard.
+                          onClick={(e) => e.detail === 0 && toggle(item.id)}
+                          {...withStyle(
+                            stylex.props(
+                              styles.tile,
+                              on && styles.tileOn,
+                              added.has(item.id) && styles.tileAdded,
+                              !usable(item) && styles.tileStill,
+                            ),
+                            thumb ? { backgroundImage: `url("${thumb}")` } : undefined,
+                          )}
+                        >
+                          {item.kind !== "photo" && (
+                            <span {...stylex.props(styles.badge)}>
+                              {item.kind === "livePhoto" ? "LIVE" : "视频"}
+                              {added.has(item.id) && " · 已添加"}
+                            </span>
+                          )}
+                          {usable(item) && <span {...stylex.props(styles.check, on && styles.checkOn)} />}
+                          {verdict && (
+                            <span {...stylex.props(styles.caption, verdict.picked && styles.captionPicked)}>
+                              <span {...stylex.props(styles.reason)}>
+                                {verdict.picked ? `AI · ${caption}` : caption}
+                              </span>
+                              <span {...stylex.props(styles.points)}>{points(verdict.value)}</span>
+                            </span>
+                          )}
+                        </button>
+                      );
+                    }}
+                  />
+                ))}
+              </div>
             </div>
           </div>
-        </div>
+        )}
         <footer {...stylex.props(styles.footer)}>
           {status ? (
             <span {...stylex.props(styles.summary)}>{status}</span>
-          ) : chosen.size ? (
+          ) : library.state !== "ready" ? null : chosen.size ? (
             <>
               <span {...stylex.props(styles.picked)}>
                 已选 {chosen.size} 项 · 约 {formatSeconds(estimate(items.filter((i) => chosen.has(i.id))))}
@@ -798,9 +804,11 @@ export function PickerSheet({
           <Button onClick={onClose} disabled={busy}>
             取消
           </Button>
-          <Button variant="primary" onClick={add} disabled={busy || chosen.size === 0}>
-            {busy ? "添加中…" : chosen.size ? `添加 ${chosen.size} 项` : "添加"}
-          </Button>
+          {library.state === "ready" && (
+            <Button variant="primary" onClick={add} disabled={busy || chosen.size === 0}>
+              {busy ? "添加中…" : chosen.size ? `添加 ${chosen.size} 项` : "添加"}
+            </Button>
+          )}
         </footer>
       </div>
     </>

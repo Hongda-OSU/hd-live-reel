@@ -15,8 +15,10 @@ export function useLibrary() {
   const [thumbs, setThumbs] = useState<Record<string, string>>({});
   const requested = useRef(new Set<string>());
 
-  const refresh = useCallback(async () => {
-    setLibrary({ state: "loading" });
+  /** Rereads the phone. A `quiet` reread, such as an automatic retry,
+   * leaves the current state up until the answer arrives. */
+  const refresh = useCallback(async (quiet = false) => {
+    if (!quiet) setLibrary({ state: "loading" });
     try {
       setLibrary({ state: "ready", items: await listIphoneMedia() });
     } catch (e) {
