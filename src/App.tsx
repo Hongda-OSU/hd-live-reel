@@ -411,8 +411,9 @@ function App() {
   latest.current = project;
   const latestCrop = useRef(crop);
   latestCrop.current = crop;
-  /** Clip to show once the preview in the works arrives. */
-  const seekAfterRender = useRef<string | null>(null);
+  /** Clip to show once the preview in the works arrives; `peek` when it
+   * was edited, so play still starts from the top. */
+  const seekAfterRender = useRef<{ id: string; peek: boolean } | null>(null);
   /** `renderKey` of the preview on screen. */
   const shownKey = useRef<string | null>(null);
   const renderSeq = useRef(0);
@@ -434,11 +435,12 @@ function App() {
           shownKey.current = renderKey(rendered);
           const applied = latestCrop.current;
           if (applied?.phase === "rendering") setCrop(null);
-          // Show the clip that was just cropped or trimmed, not the start.
-          const clipId = applied?.phase === "rendering" ? applied.clipId : seekAfterRender.current;
+          // Show the clip that was just cropped, trimmed or picked, not the
+          // start.
+          const target = applied?.phase === "rendering" ? { id: applied.clipId, peek: true } : seekAfterRender.current;
           seekAfterRender.current = null;
-          if (clipId && rendered.clips.some((c) => c.id === clipId)) {
-            setSeekTo({ time: clipStart(rendered, clipId), nonce: Date.now(), peek: true });
+          if (target && rendered.clips.some((c) => c.id === target.id)) {
+            setSeekTo({ time: clipStart(rendered, target.id), nonce: Date.now(), peek: target.peek });
           }
         }
       } catch (e) {
@@ -552,7 +554,7 @@ function App() {
   /** Edits in the clip panel, such as a caption, show on that clip once
    * the preview has them, not back at the start. */
   function clipDispatch(action: Action) {
-    if (action.type === "updateClip") seekAfterRender.current = action.id;
+    if (action.type === "updateClip") seekAfterRender.current = { id: action.id, peek: true };
     dispatch(action);
   }
 
@@ -561,7 +563,11 @@ function App() {
     setSelectedId(id);
     setTrimming((open) => open && id);
     const shown = playable(project);
-    if (shown.clips.some((c) => c.id === id)) setSeekTo({ time: clipStart(shown, id), nonce: Date.now() });
+    if (!shown.clips.some((c) => c.id === id)) return;
+    // A preview still being made, or one in the old order, would show
+    // the wrong picture: jump once the new one arrives.
+    if (shownKey.current === renderKey(shown)) setSeekTo({ time: clipStart(shown, id), nonce: Date.now() });
+    else seekAfterRender.current = { id, peek: false };
   }
 
   // ---------- crop ----------
@@ -610,7 +616,7 @@ function App() {
     const shown = playable(project);
     if (shownKey.current === renderKey(shown)) {
       setSeekTo({ time: clipStart(shown, id), nonce: Date.now(), peek: true });
-    } else seekAfterRender.current = id;
+    } else seekAfterRender.current = { id, peek: true };
   }
 
   const playback = usePlayback(seekTo);
