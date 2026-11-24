@@ -48,6 +48,7 @@ import {
 import { renderCaptionPng, renderTitlePng, renderWatermarkPng } from "./title";
 import { colors, layout } from "./tokens.stylex";
 import { Button, Icon } from "./ui";
+import { useAppMenu } from "./hooks/useAppMenu";
 import { useLibrary } from "./hooks/useLibrary";
 
 const frosted = {
@@ -172,33 +173,13 @@ const styles = stylex.create({
   sidebar: {
     ...frosted,
     overflowY: "auto",
-    paddingBlock: "12px",
+    // The clip table's header sits just under the toolbar.
+    paddingTop: "6px",
+    paddingBottom: "12px",
     paddingInline: "10px",
     borderRightWidth: 1,
     borderRightStyle: "solid",
     borderRightColor: colors.border,
-  },
-  sectionTitle: {
-    display: "flex",
-    justifyContent: "space-between",
-    paddingTop: "4px",
-    paddingRight: "8px",
-    paddingBottom: "8px",
-    paddingLeft: "8px",
-    fontSize: 11,
-    fontWeight: 600,
-    color: colors.muted,
-  },
-  clear: {
-    padding: 0,
-    borderWidth: 0,
-    backgroundColor: "transparent",
-    color: {
-      default: colors.muted,
-      ":hover": colors.danger,
-    },
-    fontSize: 11,
-    cursor: "pointer",
   },
 });
 
@@ -585,6 +566,15 @@ function App() {
     } else seekAfterRender.current = id;
   }
 
+  // The menu bar works over dialogs, so it waits for them to close.
+  const idle = project !== null && !pickerOpen && !exportOpen;
+  const hasClips = (project?.clips.length ?? 0) > 0;
+  useAppMenu({ add: idle, export: idle && hasClips, clear: idle && hasClips }, (command) => {
+    if (command === "add") setPickerOpen(true);
+    else if (command === "export") setExportOpen(true);
+    else void clearProject();
+  });
+
   if (loadError) return <p {...stylex.props(styles.fatal)}>无法打开工程：{loadError}</p>;
   if (!project) return null;
 
@@ -645,14 +635,6 @@ function App() {
 
       <main {...stylex.props(styles.body)}>
         <aside {...stylex.props(styles.sidebar)}>
-          <div {...stylex.props(styles.sectionTitle)}>
-            <span>片段 {project.clips.length || ""}</span>
-            {project.clips.length > 0 && (
-              <button onClick={clearProject} {...stylex.props(styles.clear)}>
-                清空
-              </button>
-            )}
-          </div>
           <ClipList
             clips={project.clips}
             selectedId={selectedId}
