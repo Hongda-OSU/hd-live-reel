@@ -37,9 +37,11 @@ final class CameraSession: NSObject, ICCameraDeviceDelegate {
                     progress = self.catalogProgress
                     lastProgress = Date()
                 }
-                return self.ready || self.openError != nil
+                return self.catalogComplete || self.openError != nil
                     || Date().timeIntervalSince(lastProgress) > Self.stallTimeout
             }
+            // Stuck before ready is an error; stuck after it, short of 100%,
+            // means what arrived is all the phone will send.
             if !ready && openError == nil && Date() < deadline {
                 throw HelperError(
                     "iPhone stopped sending its photo list; unlock it or plug it in again, then try again")
@@ -65,6 +67,13 @@ final class CameraSession: NSObject, ICCameraDeviceDelegate {
     /// How long the catalog may go without progress before the phone counts
     /// as stuck.
     private static let stallTimeout: TimeInterval = 15
+
+    /// "Ready" can come long before the catalog does: with Apple's group
+    /// enumeration the phone reports ready at 0%, a few dozen files in,
+    /// and reading then lists only the newest. Wait for 100%.
+    private var catalogComplete: Bool {
+        ready && camera.contentCatalogPercentCompleted >= 100
+    }
 
     /// Changes whenever the device sends more of its catalog.
     private var catalogProgress: [Int] {
