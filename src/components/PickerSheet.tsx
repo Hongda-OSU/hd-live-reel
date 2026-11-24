@@ -131,22 +131,21 @@ const styles = stylex.create({
     gridTemplateRows: "auto 1fr",
     minHeight: 0,
   },
+  // A heading over the grid rather than a bar: no rule, so the one line
+  // of text doesn't read as an empty toolbar.
   paneHead: {
     display: "flex",
-    alignItems: "center",
+    alignItems: "baseline",
     gap: 8,
-    minHeight: 44,
-    paddingBlock: "8px",
+    paddingTop: "16px",
     paddingInline: "20px",
-    borderBottomWidth: 1,
-    borderBottomStyle: "solid",
-    borderBottomColor: colors.border,
   },
   crumb: {
     color: colors.muted,
     fontSize: 12,
   },
   crumbArrow: {
+    alignSelf: "center",
     width: 10,
     height: 10,
     fill: "none",
@@ -156,8 +155,13 @@ const styles = stylex.create({
     strokeLinejoin: "round",
   },
   paneTitle: {
-    fontSize: 15,
-    fontWeight: 600,
+    fontSize: 19,
+    fontWeight: 700,
+  },
+  paneCount: {
+    color: colors.muted,
+    fontSize: 12,
+    fontVariantNumeric: "tabular-nums",
   },
   scroll: {
     overflowY: "auto",
@@ -168,7 +172,7 @@ const styles = stylex.create({
     display: "flex",
     alignItems: "center",
     gap: 8,
-    marginBottom: 8,
+    marginBottom: 12,
   },
   // Scene titles double as buttons that tick all their photos.
   groupTitle: {
@@ -718,7 +722,13 @@ export function PickerSheet({
                   </>
                 )}
                 {shownDay && (
-                  <span {...stylex.props(styles.paneTitle)}>{shownScene ? shownScene.label : shownDay.label}</span>
+                  <>
+                    <span {...stylex.props(styles.paneTitle)}>{shownScene ? shownScene.label : shownDay.label}</span>
+                    <span {...stylex.props(styles.paneCount)}>
+                      {shownScenes.reduce((sum, scene) => sum + scene.items.length, 0)} 张
+                      {shownScenes.length > 1 && ` · ${shownScenes.length} 个时段`}
+                    </span>
+                  </>
                 )}
               </div>
               <div ref={scroller} {...stylex.props(styles.scroll)}>
