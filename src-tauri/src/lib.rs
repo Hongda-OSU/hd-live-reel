@@ -12,7 +12,8 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, State, WindowEvent};
+use tauri_plugin_window_state::{AppHandleExt, StateFlags};
 
 /// File of the project the window is editing.
 struct CurrentProject(Mutex<Option<PathBuf>>);
@@ -23,6 +24,12 @@ struct PreviewCounter(AtomicU64);
 
 /// Set by `cancel_export` to stop the export in progress.
 struct ExportCancel(Arc<AtomicBool>);
+
+/// Counts window moves and resizes, so only the last of a burst saves.
+static WINDOW_CHANGES: AtomicU64 = AtomicU64::new(0);
+
+/// Quiet time after moving or resizing the window before it is saved.
+const WINDOW_SAVE_DELAY: Duration = Duration::from_millis(500);
 
 /// Least time between `export-progress` events.
 const PROGRESS_INTERVAL: Duration = Duration::from_millis(100);
@@ -288,6 +295,22 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        // Reopens the window where it was last closed, on the same screen.
+        .plugin(tauri_plugin_window_state::Builder::default().build())
+        // The plugin saves only as the app exits, and quitting did not get
+        // there; saving once a move or resize settles does not depend on it.
+        .on_window_event(|window, event| {
+            if matches!(event, WindowEvent::Moved(_) | WindowEvent::Resized(_)) {
+                let change = WINDOW_CHANGES.fetch_add(1, Ordering::Relaxed) + 1;
+                let app = window.app_handle().clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(WINDOW_SAVE_DELAY);
+                    if WINDOW_CHANGES.load(Ordering::Relaxed) == change {
+                        let _ = app.save_window_state(StateFlags::all());
+                    }
+                });
+            }
+        })
         .manage(CurrentProject(Mutex::new(None)))
         .manage(PreviewCounter(AtomicU64::new(0)))
         .manage(ExportCancel(Arc::new(AtomicBool::new(false))))
