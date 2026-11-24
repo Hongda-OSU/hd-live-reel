@@ -2,16 +2,16 @@ import { useEffect, useRef, useState, type CSSProperties, type PointerEvent } fr
 import * as stylex from "@stylexjs/stylex";
 import { getVersion } from "@tauri-apps/api/app";
 import { colors, shadows } from "../tokens.stylex";
-import { Button, Icon, withStyle } from "../ui";
+import { Button, withStyle } from "../ui";
 import type { Output } from "../api";
-import { formatTime, FRAME } from "../project";
+import type { Playback } from "../hooks/usePlayback";
+import { FRAME } from "../project";
 import { CropLayer, fillFactor } from "./CropLayer";
 import { WarningIcon } from "./WarningIcon";
 
 const styles = stylex.create({
   area: {
     display: "grid",
-    gridTemplateRows: "1fr auto",
     minHeight: 0,
     minWidth: 0,
     paddingTop: "18px",
@@ -179,108 +179,6 @@ const styles = stylex.create({
     borderRadius: 8,
     backgroundColor: "rgba(160, 20, 20, 0.85)",
   },
-  transport: {
-    display: "grid",
-    gridTemplateColumns: "auto 1fr auto",
-    gap: 16,
-    alignItems: "center",
-    justifySelf: "center",
-    width: "100%",
-    maxWidth: 760,
-    paddingTop: 16,
-  },
-  play: {
-    display: "grid",
-    placeItems: "center",
-    width: 30,
-    height: 30,
-    borderWidth: 1,
-    borderStyle: "solid",
-    borderColor: colors.border,
-    borderRadius: "50%",
-    backgroundColor: colors.surface,
-    cursor: {
-      default: "pointer",
-      ":disabled": "default",
-    },
-    opacity: {
-      default: 1,
-      ":disabled": 0.45,
-    },
-  },
-  // The clips as a filmstrip, each as wide as its share of the reel, like
-  // the timeline in Photos' video editor.
-  strip: {
-    position: "relative",
-    display: "flex",
-    gap: 2,
-    height: 40,
-    borderRadius: 7,
-    overflow: "hidden",
-    backgroundColor: colors.surface2,
-  },
-  tile: {
-    flexBasis: 0,
-    minWidth: 0,
-    backgroundColor: colors.surface2,
-    backgroundPosition: "center",
-    backgroundSize: "cover",
-  },
-  // The part not yet played is darkened.
-  unplayed: {
-    position: "absolute",
-    top: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: "rgba(0, 0, 0, 0.35)",
-    pointerEvents: "none",
-  },
-  playhead: {
-    position: "absolute",
-    top: 0,
-    bottom: 0,
-    width: 2,
-    marginLeft: -1,
-    borderRadius: 1,
-    backgroundColor: "#fff",
-    boxShadow: "0 0 0 0.5px rgba(0, 0, 0, 0.35), 0 1px 3px rgba(0, 0, 0, 0.4)",
-    pointerEvents: "none",
-  },
-  // An invisible range input over the strip does the seeking, so mouse
-  // and keyboard work as on any slider. A thumb as thin as the playhead
-  // keeps clicks landing where they point.
-  seek: {
-    position: "absolute",
-    inset: 0,
-    width: "100%",
-    height: "100%",
-    margin: 0,
-    opacity: 0,
-    appearance: "none",
-    cursor: {
-      default: "pointer",
-      ":disabled": "default",
-    },
-    "::-webkit-slider-thumb": {
-      appearance: "none",
-      width: 2,
-      height: 40,
-    },
-  },
-  readout: {
-    display: "grid",
-    justifyItems: "end",
-    gap: 2,
-  },
-  time: {
-    color: colors.muted,
-    fontSize: 12,
-    fontVariantNumeric: "tabular-nums",
-  },
-  quality: {
-    color: colors.muted,
-    fontSize: 11,
-  },
 });
 
 export interface MissingView {
@@ -297,13 +195,8 @@ interface Props {
   /** False when clips are fitted whole (black bars, blur), so there is
    * nothing to drag. */
   croppable: boolean;
-  /** Clip lengths in order, for the widths in the filmstrip. */
-  lengths: number[];
-  /** Each clip's thumbnail, in the same order, if loaded. */
-  thumbs: (string | undefined)[];
-  /** Seconds to jump to; changes when a clip is picked in the list. A
-   * `peek` only shows an edit there: playing then starts from the top. */
-  seekTo: { time: number; nonce: number; peek?: boolean } | null;
+  /** Play state; the timeline holds the controls. */
+  playback: Playback;
   busy: boolean;
   error: string | null;
   empty: boolean;
@@ -344,24 +237,12 @@ const STEPS = [
   "点右上角「导出」，直接发微信",
 ];
 
-/** Play or pause; play starts from the top while parked on an edit. */
-function toggle(video: HTMLVideoElement | null, rewind: { current: boolean }) {
-  if (!video) return;
-  if (!video.paused) return video.pause();
-  if (rewind.current) video.currentTime = 0;
-  rewind.current = false;
-  video.play();
-}
-
 export function Stage(props: Props) {
-  const { src, aspect, croppable, lengths, thumbs, seekTo, busy, error, empty, crop, skipped, missing } = props;
+  const { src, aspect, croppable, playback, busy, error, empty, crop, skipped, missing } = props;
+  const { video, playing } = playback;
   const [frameWidth, frameHeight] = FRAME[aspect];
   const frameAspect = frameWidth / frameHeight;
-  const video = useRef<HTMLVideoElement>(null);
   const frame = useRef<HTMLDivElement>(null);
-  const [time, setTime] = useState(0);
-  const [duration, setDuration] = useState(0);
-  const [playing, setPlaying] = useState(false);
   const [version, setVersion] = useState<string | null>(null);
   useEffect(() => {
     getVersion().then(setVersion, () => {});
@@ -372,11 +253,6 @@ export function Stage(props: Props) {
   const overflow = stillSize && fillFactor(stillSize.width, stillSize.height, frameAspect);
   const nothingToCrop = overflow !== null && overflow.x < 1 + CROP_SLACK && overflow.y < 1 + CROP_SLACK;
   const press = useRef<{ x: number; y: number; dragging: boolean } | null>(null);
-
-  /** Set while parked on an edit; cleared by any seek of the viewer's own. */
-  const rewind = useRef(false);
-
-  const togglePlay = () => toggle(video.current, rewind);
 
   function onPointerDown(e: PointerEvent<HTMLDivElement>) {
     if (!src || e.button !== 0 || crop?.applying) return;
@@ -392,7 +268,6 @@ export function Stage(props: Props) {
     if (!p.dragging) {
       if (!croppable || Math.hypot(dx, dy) < DRAG_THRESHOLD) return;
       p.dragging = true;
-      rewind.current = false;
       video.current?.pause();
       props.onCropStart(video.current?.currentTime ?? 0);
       return;
@@ -409,30 +284,8 @@ export function Stage(props: Props) {
     press.current = null;
     if (!p) return;
     if (p.dragging) props.onCropEnd();
-    else togglePlay();
+    else playback.toggle();
   }
-
-  useEffect(() => {
-    if (!seekTo) return;
-    rewind.current = !!seekTo.peek;
-    if (video.current) video.current.currentTime = seekTo.time;
-  }, [seekTo]);
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const typing = ["INPUT", "TEXTAREA"].includes((document.activeElement as HTMLElement)?.tagName);
-      if (e.code === "Space" && !typing && video.current) {
-        e.preventDefault();
-        toggle(video.current, rewind);
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
-
-  const total = lengths.reduce((a, b) => a + b, 0);
-  // Where each clip ends, as a share of the whole; the last end is the edge.
-  const played = src && duration ? Math.min(1, time / duration) : 0;
 
   return (
     <section {...stylex.props(styles.area)}>
@@ -457,24 +310,7 @@ export function Stage(props: Props) {
           )}
         >
           {src && (
-            <video
-              ref={video}
-              key={src}
-              src={src}
-              playsInline
-              onLoadedMetadata={(e) => {
-                // A new preview waits, paused at the start (or where a seek
-                // made while it loaded put it). The replaced <video> fired
-                // no pause event, so reset the button here.
-                setDuration(e.currentTarget.duration);
-                setTime(e.currentTarget.currentTime);
-                setPlaying(false);
-              }}
-              onTimeUpdate={(e) => setTime(e.currentTarget.currentTime)}
-              onPlay={() => setPlaying(true)}
-              onPause={() => setPlaying(false)}
-              {...stylex.props(styles.video)}
-            />
+            <video ref={video} key={src} src={src} playsInline {...playback.events} {...stylex.props(styles.video)} />
           )}
           {empty && (
             <div {...stylex.props(styles.empty)}>
@@ -532,62 +368,6 @@ export function Stage(props: Props) {
               </div>
             </div>
           )}
-        </div>
-      </div>
-      <div {...stylex.props(styles.transport)}>
-        <button
-          aria-label={playing ? "暂停" : "播放"}
-          disabled={!src}
-          onClick={togglePlay}
-          {...stylex.props(styles.play)}
-        >
-          <Icon>
-            {playing ? (
-              <path d="M5 3.5v9M11 3.5v9" strokeWidth="2.2" />
-            ) : (
-              <path d="M5 3.5v9l7-4.5z" fill="currentColor" stroke="none" />
-            )}
-          </Icon>
-        </button>
-        <div {...stylex.props(styles.strip)}>
-          {lengths.map((length, i) => (
-            <span
-              key={i}
-              {...withStyle(stylex.props(styles.tile), {
-                flexGrow: length,
-                backgroundImage: thumbs[i] ? `url("${thumbs[i]}")` : undefined,
-              })}
-            />
-          ))}
-          {src && (
-            <>
-              <span {...withStyle(stylex.props(styles.unplayed), { left: `${played * 100}%` })} />
-              <span {...withStyle(stylex.props(styles.playhead), { left: `${played * 100}%` })} />
-            </>
-          )}
-          <input
-            type="range"
-            aria-label="播放位置"
-            min={0}
-            max={(src && duration) || 1}
-            step={0.01}
-            value={src ? time : 0}
-            disabled={!src}
-            onChange={(e) => {
-              rewind.current = false;
-              if (video.current) video.current.currentTime = Number(e.target.value);
-            }}
-            {...stylex.props(styles.seek)}
-          />
-        </div>
-        <div {...stylex.props(styles.readout)}>
-          {/* Without a preview, the last one's time and length are stale. */}
-          <span {...stylex.props(styles.time)}>
-            {src ? `${formatTime(time)} / ${formatTime(duration || total)}` : `${formatTime(0)} / ${formatTime(total)}`}
-          </span>
-          <span title="导出为 1080p 高清" {...stylex.props(styles.quality)}>
-            低清预览
-          </span>
         </div>
       </div>
     </section>

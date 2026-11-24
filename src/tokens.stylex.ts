@@ -22,8 +22,6 @@ export const colors = stylex.defineVars({
   success: "#30d158",
   trimHandle: "#ffd60a",
   hover: "rgba(127, 127, 127, 0.1)",
-  /** Every other row of a table, as in Finder's list view. */
-  stripe: { default: "rgba(0, 0, 0, 0.03)", [DARK]: "rgba(255, 255, 255, 0.03)" },
   scrim: "rgba(0, 0, 0, 0.18)",
 });
 
@@ -42,6 +40,8 @@ export const shadows = stylex.defineVars({
 /** Fixed column widths shared by the toolbar and the body grid. */
 export const layout = stylex.defineVars({
   toolbarHeight: "52px",
+  /** The clip grid, and the toolbar part above it. */
   sidebarWidth: "232px",
   inspectorWidth: "272px",
+  timelineHeight: "152px",
 });

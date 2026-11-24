@@ -115,7 +115,7 @@ interface Props {
 
 /** The inspector's 片段 page: trim, text and sound of the selected clip. */
 export function ClipPanel({ clip, index, thumb, noOriginalSound, onTrim, dispatch }: Props) {
-  if (!clip) return <p {...stylex.props(styles.empty)}>在左边选一段来编辑</p>;
+  if (!clip) return <p {...stylex.props(styles.empty)}>在下面的时间线上选一段来编辑</p>;
   const thumbImage = thumb ? { backgroundImage: `url("${thumb}")` } : undefined;
   const missing = isMissing(clip);
   const remove = (

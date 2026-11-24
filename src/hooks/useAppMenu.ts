@@ -1,18 +1,28 @@
 import { useEffect, useEffectEvent, useState } from "react";
 import { Menu, MenuItem, PredefinedMenuItem, Submenu } from "@tauri-apps/api/menu";
 
-export type MenuCommand = "add" | "export" | "clear";
+export type MenuCommand = "add" | "export" | "clear" | "first" | "last" | "sidebar";
 
 const COMMANDS: [MenuCommand, string, string][] = [
   ["add", "添加照片…", "CmdOrCtrl+O"],
   ["export", "导出…", "CmdOrCtrl+E"],
   ["clear", "清空工程…", "CmdOrCtrl+Shift+Backspace"],
+  // No shortcut: ⌥← and ⌥→ already move a clip, and a menu shortcut
+  // would also fire while typing a caption.
+  ["first", "移到最前", ""],
+  ["last", "移到最后", ""],
+  ["sidebar", "隐藏片段栏", "Ctrl+CmdOrCtrl+S"],
 ];
 
-/** Puts up the menu bar, in Chinese like the rest of the app; its 文件
- * menu runs `onCommand`. `enabled` greys out commands that can't run now,
+/** Puts up the menu bar, in Chinese like the rest of the app; its 文件,
+ * 显示 and 片段 menus run `onCommand`. `enabled` greys out commands that can't run now,
  * since the menu bar stays usable while a dialog covers the window. */
-export function useAppMenu(enabled: Record<MenuCommand, boolean>, onCommand: (command: MenuCommand) => void) {
+export function useAppMenu(
+  enabled: Record<MenuCommand, boolean>,
+  /** Names the 显示 menu's item for what it will do. */
+  sidebarOpen: boolean,
+  onCommand: (command: MenuCommand) => void,
+) {
   const run = useEffectEvent(onCommand);
   const [items, setItems] = useState<Map<MenuCommand, MenuItem> | null>(null);
 
@@ -20,7 +30,16 @@ export function useAppMenu(enabled: Record<MenuCommand, boolean>, onCommand: (co
     void (async () => {
       const commands = new Map<MenuCommand, MenuItem>();
       for (const [id, text, accelerator] of COMMANDS) {
-        commands.set(id, await MenuItem.new({ id, text, accelerator, enabled: false, action: () => run(id) }));
+        commands.set(
+          id,
+          await MenuItem.new({
+            id,
+            text,
+            accelerator: accelerator || undefined,
+            enabled: false,
+            action: () => run(id),
+          }),
+        );
       }
       const separator = () => PredefinedMenuItem.new({ item: "Separator" });
       const window = await Submenu.new({
@@ -74,6 +93,11 @@ export function useAppMenu(enabled: Record<MenuCommand, boolean>, onCommand: (co
               await PredefinedMenuItem.new({ item: "SelectAll", text: "全选" }),
             ],
           }),
+          await Submenu.new({ text: "显示", items: [commands.get("sidebar")!] }),
+          await Submenu.new({
+            text: "片段",
+            items: [commands.get("first")!, commands.get("last")!],
+          }),
           window,
         ],
       });
@@ -83,11 +107,14 @@ export function useAppMenu(enabled: Record<MenuCommand, boolean>, onCommand: (co
     })();
   }, []);
 
-  const { add, export: exporting, clear } = enabled;
+  const { add, export: exporting, clear, first, last, sidebar } = enabled;
   useEffect(() => {
     if (!items) return;
-    void items.get("add")!.setEnabled(add);
-    void items.get("export")!.setEnabled(exporting);
-    void items.get("clear")!.setEnabled(clear);
-  }, [items, add, exporting, clear]);
+    const now: Record<MenuCommand, boolean> = { add, export: exporting, clear, first, last, sidebar };
+    for (const [id, item] of items) void item.setEnabled(now[id]);
+  }, [items, add, exporting, clear, first, last, sidebar]);
+
+  useEffect(() => {
+    void items?.get("sidebar")!.setText(sidebarOpen ? "隐藏片段栏" : "显示片段栏");
+  }, [items, sidebarOpen]);
 }

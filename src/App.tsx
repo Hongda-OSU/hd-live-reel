@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useEffectEvent, useMemo, useReducer, useRef, useState } from "react";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { ask, open } from "@tauri-apps/plugin-dialog";
 import * as stylex from "@stylexjs/stylex";
@@ -17,13 +17,14 @@ import {
   type ClipsProgress,
   type Project,
 } from "./api";
-import { ClipList } from "./components/ClipList";
 import { DropOverlay, type Drop } from "./components/DropOverlay";
 import { ExportDialog } from "./components/ExportDialog";
+import { ClipGrid } from "./components/ClipGrid";
 import { ClipPanel } from "./components/ClipPanel";
 import { Inspector, type InspectorPage } from "./components/Inspector";
 import { PickerSheet } from "./components/PickerSheet";
 import { Stage, type CropView } from "./components/Stage";
+import { Timeline } from "./components/Timeline";
 import { TrimEditor } from "./components/TrimEditor";
 import {
   captionImageKey,
@@ -50,6 +51,7 @@ import { colors, layout } from "./tokens.stylex";
 import { Button, Icon } from "./ui";
 import { useAppMenu } from "./hooks/useAppMenu";
 import { useLibrary } from "./hooks/useLibrary";
+import { usePlayback, type SeekTo } from "./hooks/usePlayback";
 
 const frosted = {
   backgroundColor: colors.sidebar,
@@ -80,6 +82,8 @@ const styles = stylex.create({
     borderBottomColor: colors.border,
   },
   toolbarLeft: {
+    display: "flex",
+    alignItems: "center",
     paddingLeft: 84,
   },
   toolbarCenter: {
@@ -165,21 +169,52 @@ const styles = stylex.create({
     fontSize: 11,
     color: colors.muted,
   },
+  // The preview and settings on top, the timeline across the bottom.
   body: {
     display: "grid",
-    gridTemplateColumns: `${layout.sidebarWidth} 1fr ${layout.inspectorWidth}`,
+    gridTemplateColumns: `1fr ${layout.inspectorWidth}`,
+    gridTemplateRows: "minmax(0, 1fr)",
     minHeight: 0,
+  },
+  withTimeline: {
+    gridTemplateRows: `minmax(0, 1fr) ${layout.timelineHeight}`,
+  },
+  withSidebar: {
+    gridTemplateColumns: `${layout.sidebarWidth} 1fr ${layout.inspectorWidth}`,
   },
   sidebar: {
     ...frosted,
     overflowY: "auto",
-    // The clip table's header sits just under the toolbar.
-    paddingTop: "6px",
-    paddingBottom: "12px",
     paddingInline: "10px",
     borderRightWidth: 1,
     borderRightStyle: "solid",
     borderRightColor: colors.border,
+  },
+  sidebarToggle: {
+    display: "grid",
+    placeItems: "center",
+    width: 28,
+    height: 24,
+    marginRight: 4,
+    padding: 0,
+    borderWidth: 0,
+    borderRadius: 6,
+    backgroundColor: {
+      default: "transparent",
+      ":hover": colors.hover,
+    },
+    color: colors.muted,
+    cursor: {
+      default: "pointer",
+      ":disabled": "default",
+    },
+    opacity: {
+      default: 1,
+      ":disabled": 0.45,
+    },
+  },
+  sidebarToggleOn: {
+    color: colors.text,
   },
 });
 
@@ -199,6 +234,17 @@ interface Crop extends Omit<CropView, "applying"> {
   /** "rendering" once the new crop is in the project; the overlay stays
    * until the preview that includes it arrives. */
   phase: "drag" | "rendering";
+}
+
+const SIDEBAR_KEY = "sidebarOpen";
+
+/** Whether the clip grid was left open; open the first time. */
+function readSidebarOpen(): boolean {
+  try {
+    return localStorage.getItem(SIDEBAR_KEY) !== "false";
+  } catch {
+    return true;
+  }
 }
 
 /** Keys for the caption PNGs a loaded project already has. */
@@ -221,11 +267,12 @@ function App() {
   const [addError, setAddError] = useState<string | null>(null);
   const [drop, setDrop] = useState<Drop | null>(null);
   const [preview, setPreview] = useState<Preview>({ url: null, busy: false, error: null });
-  const [seekTo, setSeekTo] = useState<{ time: number; nonce: number; peek?: boolean } | null>(null);
+  const [seekTo, setSeekTo] = useState<SeekTo | null>(null);
   const [crop, setCrop] = useState<Crop | null>(null);
   /** Clip open in the large trim view, which takes the preview's place. */
   const [trimming, setTrimming] = useState<string | null>(null);
   const [inspectorPage, setInspectorPage] = useState<InspectorPage>("title");
+  const [sidebarOpen, setSidebarOpen] = useState(() => readSidebarOpen());
   const { library, thumbs, refresh, loadThumbs } = useLibrary();
 
   // ---------- load + autosave ----------
@@ -404,7 +451,7 @@ function App() {
     return () => clearTimeout(timer);
   }, [key, titleReady, captionsReady, watermarkReady]);
 
-  // ---------- thumbnails for the clip list ----------
+  // ---------- thumbnails for the timeline ----------
   // Joined into one string so the effect runs only when the set changes;
   // asset ids ("<folder>/<name>") never contain "|".
   const clipAssetKey = project?.clips.map((c) => c.assetId ?? "").join("|") ?? "";
@@ -566,30 +613,101 @@ function App() {
     } else seekAfterRender.current = id;
   }
 
+  const playback = usePlayback(seekTo);
+
+  function toggleSidebar() {
+    setSidebarOpen((open) => {
+      try {
+        localStorage.setItem(SIDEBAR_KEY, String(!open));
+      } catch {
+        // Not remembered, which is fine.
+      }
+      return !open;
+    });
+  }
+
+  /** Moves the selected clip to `to`, or one step by `by`. */
+  function moveSelected(place: { to: number } | { by: number }) {
+    if (!project) return;
+    const from = project.clips.findIndex((c) => c.id === selectedId);
+    if (from < 0) return;
+    const to = "to" in place ? place.to : from + place.by;
+    if (to < 0 || to >= project.clips.length || to === from) return;
+    dispatch({ type: "moveClip", from, to });
+  }
+
+  // ⌥← ⌥→ move the selected clip one place, except while typing, where
+  // they move the caret by a word.
+  const onMoveKey = useEffectEvent((e: KeyboardEvent) => {
+    if (!e.altKey || e.metaKey || e.ctrlKey || (e.key !== "ArrowLeft" && e.key !== "ArrowRight")) return;
+    if (e.target instanceof HTMLElement && e.target.closest("input, textarea")) return;
+    if (pickerOpen || exportOpen) return;
+    e.preventDefault();
+    moveSelected({ by: e.key === "ArrowLeft" ? -1 : 1 });
+  });
+  useEffect(() => {
+    window.addEventListener("keydown", onMoveKey);
+    return () => window.removeEventListener("keydown", onMoveKey);
+  }, []);
+
   // The menu bar works over dialogs, so it waits for them to close.
   const idle = project !== null && !pickerOpen && !exportOpen;
-  const hasClips = (project?.clips.length ?? 0) > 0;
-  useAppMenu({ add: idle, export: idle && hasClips, clear: idle && hasClips }, (command) => {
-    if (command === "add") setPickerOpen(true);
-    else if (command === "export") setExportOpen(true);
-    else void clearProject();
-  });
+  const clipCount = project?.clips.length ?? 0;
+  const canMove = idle && clipCount > 1 && project!.clips.some((c) => c.id === selectedId);
+  useAppMenu(
+    {
+      add: idle,
+      export: idle && clipCount > 0,
+      clear: idle && clipCount > 0,
+      first: canMove,
+      last: canMove,
+      sidebar: clipCount > 0,
+    },
+    sidebarOpen,
+    (command) => {
+      if (command === "sidebar") toggleSidebar();
+      else if (command === "add") setPickerOpen(true);
+      else if (command === "export") setExportOpen(true);
+      else if (command === "clear") void clearProject();
+      else moveSelected({ to: command === "first" ? 0 : clipCount - 1 });
+    },
+  );
 
   if (loadError) return <p {...stylex.props(styles.fatal)}>无法打开工程：{loadError}</p>;
   if (!project) return null;
 
   const total = totalLength(project);
   const shown = playable(project);
+  const spans = clipSpans(shown);
   const selectedIndex = project.clips.findIndex((c) => c.id === selectedId);
   const selectedClip = project.clips[selectedIndex];
   const selectedLost =
     selectedIndex >= 0 && isMissing(project.clips[selectedIndex]) ? project.clips[selectedIndex] : null;
   // Gone if the clip was removed while open.
   const trimClip = trimming ? project.clips.find((c) => c.id === trimming) : undefined;
+  const showSidebar = sidebarOpen && project.clips.length > 0;
+  /** Picking a clip in the grid or on the timeline is asking to edit it. */
+  const pickClip = (id: string) => {
+    selectClip(id);
+    setInspectorPage("clip");
+  };
   return (
     <div {...stylex.props(styles.app)}>
       <header data-tauri-drag-region {...stylex.props(styles.toolbar)}>
         <div data-tauri-drag-region {...stylex.props(styles.toolbarLeft)}>
+          <button
+            aria-label={sidebarOpen ? "隐藏片段栏" : "显示片段栏"}
+            aria-pressed={sidebarOpen}
+            title={sidebarOpen ? "隐藏片段栏 ⌃⌘S" : "显示片段栏 ⌃⌘S"}
+            disabled={project.clips.length === 0}
+            onClick={toggleSidebar}
+            {...stylex.props(styles.sidebarToggle, sidebarOpen && styles.sidebarToggleOn)}
+          >
+            <Icon>
+              <rect x="1.5" y="2.5" width="13" height="11" rx="2" strokeWidth="1.4" />
+              <path d="M6 2.5v11" strokeWidth="1.4" />
+            </Icon>
+          </button>
           <Button variant="ghost" onClick={() => setPickerOpen(true)}>
             <Icon>
               <path d="M8 3v10M3 8h10" />
@@ -633,20 +751,24 @@ function App() {
         </div>
       </header>
 
-      <main {...stylex.props(styles.body)}>
-        <aside {...stylex.props(styles.sidebar)}>
-          <ClipList
-            clips={project.clips}
-            selectedId={selectedId}
-            thumbs={thumbs}
-            // Picking a clip in the list is asking to edit it.
-            onSelect={(id) => {
-              selectClip(id);
-              setInspectorPage("clip");
-            }}
-            dispatch={clipDispatch}
-          />
-        </aside>
+      <main
+        {...stylex.props(
+          styles.body,
+          project.clips.length > 0 && styles.withTimeline,
+          showSidebar && styles.withSidebar,
+        )}
+      >
+        {showSidebar && (
+          <aside {...stylex.props(styles.sidebar)}>
+            <ClipGrid
+              clips={project.clips}
+              selectedId={selectedId}
+              thumbs={thumbs}
+              onSelect={pickClip}
+              onMove={(from, to) => dispatch({ type: "moveClip", from, to })}
+            />
+          </aside>
+        )}
         {trimClip ? (
           <TrimEditor key={trimClip.id} clip={trimClip} dispatch={dispatch} onDone={finishTrim} />
         ) : (
@@ -654,9 +776,7 @@ function App() {
             src={preview.url}
             aspect={project.output.aspect}
             croppable={project.output.fill === "crop"}
-            lengths={clipSpans(shown)}
-            thumbs={shown.clips.map((clip) => (clip.assetId ? thumbs[clip.assetId] : undefined))}
-            seekTo={seekTo}
+            playback={playback}
             busy={preview.busy}
             error={preview.error}
             empty={project.clips.length === 0}
@@ -703,6 +823,18 @@ function App() {
           dispatch={dispatch}
           onReset={resetSettings}
         />
+        {project.clips.length > 0 && (
+          <Timeline
+            clips={project.clips}
+            spans={Object.fromEntries(shown.clips.map((clip, i) => [clip.id, spans[i]]))}
+            selectedId={selectedId}
+            thumbs={thumbs}
+            playback={playback}
+            ready={preview.url !== null && !trimClip}
+            onSelect={pickClip}
+            onMove={(from, to) => dispatch({ type: "moveClip", from, to })}
+          />
+        )}
       </main>
 
       <PickerSheet
