@@ -14,18 +14,16 @@ Personal macOS desktop app that stitches iPhone Live Photos into one MP4 with or
 
 ## Commands
 
-| Purpose                                                               | Command                                                                      |
-| --------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| Install JS deps                                                       | `pnpm install`                                                               |
-| Fetch FFmpeg sidecar                                                  | `./scripts/fetch-ffmpeg.sh`                                                  |
-| Run the app                                                           | `pnpm tauri dev`                                                             |
-| Build the `.app`                                                      | `pnpm tauri build`                                                           |
-| All checks (types, ESLint, Prettier, rustfmt, clippy, swift-format)   | `pnpm check`                                                                 |
-| Format everything                                                     | `pnpm format`                                                                |
-| Rust tests                                                            | `cargo test --manifest-path src-tauri/Cargo.toml`                            |
-| Personal-media tests (`baseline`, `ai_select`; env vars in each file) | `cargo test --manifest-path src-tauri/Cargo.toml --test <name> -- --ignored` |
-| Build Swift helper into `binaries/`                                   | `pnpm helper` (also run by `tauri dev`/`build`)                              |
-| Run Swift helper                                                      | `./binaries/photos-helper-aarch64-apple-darwin list`                         |
+- Install JS deps: `pnpm install`
+- Fetch FFmpeg sidecar: `./scripts/fetch-ffmpeg.sh`
+- Run the app: `pnpm tauri dev`
+- Build the `.app`: `pnpm tauri build`
+- All checks (types, ESLint, Prettier, rustfmt, clippy, swift-format): `pnpm check`
+- Format everything: `pnpm format`
+- Rust tests: `cargo test --manifest-path src-tauri/Cargo.toml`
+- Personal-media tests (`baseline`, `ai_select`; env vars in each file): `cargo test --manifest-path src-tauri/Cargo.toml --test <name> -- --ignored`
+- Build Swift helper into `binaries/`: `pnpm helper` (also run by `tauri dev`/`build`)
+- Run Swift helper: `./binaries/photos-helper-aarch64-apple-darwin list`
 
 - `photos-helper` needs a USB-connected, unlocked iPhone for `list`, `download` and `thumbnails`.
 
