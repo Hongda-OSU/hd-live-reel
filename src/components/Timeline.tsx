@@ -48,7 +48,7 @@ const styles = stylex.create({
     display: "flex",
     alignItems: "center",
     gap: 12,
-    height: 40,
+    height: 36,
     paddingInline: "16px",
     borderBottomWidth: 1,
     borderBottomStyle: "solid",
@@ -119,9 +119,10 @@ const styles = stylex.create({
     position: "relative",
     height: "100%",
   },
+  // Slim, but kept: it is where the playhead is scrubbed.
   ruler: {
     position: "relative",
-    height: 20,
+    height: 14,
     cursor: "pointer",
   },
   tick: {
@@ -133,14 +134,14 @@ const styles = stylex.create({
     borderLeftColor: colors.border,
     paddingLeft: "4px",
     color: colors.muted,
-    fontSize: 10,
-    lineHeight: "14px",
+    fontSize: 9,
+    lineHeight: "12px",
     fontVariantNumeric: "tabular-nums",
     pointerEvents: "none",
   },
   clips: {
     display: "flex",
-    height: 60,
+    height: 42,
     paddingInline: `${PAD}px`,
   },
   // The whole block drags and takes keyboard focus for reordering.
@@ -209,34 +210,21 @@ const styles = stylex.create({
     strokeLinecap: "round",
     strokeLinejoin: "round",
   },
-  captions: {
-    display: "flex",
-    height: 22,
-    paddingTop: "4px",
-    paddingInline: `${PAD}px`,
-  },
-  captionSlot: {
-    flexShrink: 0,
-    minWidth: 0,
-    paddingInline: "1px",
-  },
+  // A clip with a caption gets a yellow line along its foot; the text
+  // itself is on the 这一段 page and in the block's tooltip.
   caption: {
-    display: "block",
-    overflow: "hidden",
-    height: 16,
-    paddingInline: "5px",
-    borderRadius: 3,
-    backgroundColor: "rgba(255, 214, 10, 0.2)",
-    color: { default: "#8a6d00", "@media (prefers-color-scheme: dark)": "#ffd60a" },
-    fontSize: 10,
-    lineHeight: "16px",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
+    position: "absolute",
+    left: 3,
+    right: 3,
+    bottom: 3,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: "#ffd60a",
   },
   playhead: {
     position: "absolute",
     top: 0,
-    bottom: 22,
+    bottom: 4,
     width: 2,
     marginLeft: -1,
     borderRadius: 1,
@@ -256,8 +244,8 @@ const styles = stylex.create({
   // Where a dragged clip will land.
   drop: {
     position: "absolute",
-    top: 20,
-    height: 60,
+    top: 14,
+    height: 42,
     width: 3,
     marginLeft: -1.5,
     borderRadius: 2,
@@ -265,8 +253,8 @@ const styles = stylex.create({
     pointerEvents: "none",
   },
   ghost: {
-    width: 44,
-    height: 58,
+    width: 32,
+    height: 42,
     borderRadius: 5,
     backgroundColor: colors.surface2,
     backgroundPosition: "center",
@@ -560,13 +548,6 @@ export function Timeline({
               )}
             </DragOverlay>
           </DndContext>
-          <div {...stylex.props(styles.captions)}>
-            {blocks.map((b) => (
-              <span key={b.clip.id} {...withStyle(stylex.props(styles.captionSlot), { width: b.width })}>
-                {hasCaption(b.clip) && <span {...stylex.props(styles.caption)}>{b.clip.caption!.text.trim()}</span>}
-              </span>
-            ))}
-          </div>
           {dropX !== null && <span {...withStyle(stylex.props(styles.drop), { left: dropX })} />}
           {ready && (
             <span {...withStyle(stylex.props(styles.playhead), { left: headX })}>
@@ -605,11 +586,18 @@ function ClipBlock({
       {...listeners}
       aria-roledescription="可拖动排序的片段"
       aria-pressed={selected}
-      title={lost ? `${clipLabel(clip)}（原件丢失）` : clipLabel(clip)}
+      title={
+        lost
+          ? `${clipLabel(clip)}（原件丢失）`
+          : hasCaption(clip)
+            ? `${clipLabel(clip)}：${clip.caption!.text.trim()}`
+            : clipLabel(clip)
+      }
       {...withStyle(stylex.props(styles.block, isDragging && styles.lifted), { width })}
     >
       <span {...withStyle(stylex.props(styles.picture, lost && styles.missing, selected && styles.selected), picture)}>
         {lost && <WarningIcon size={12} />}
+        {hasCaption(clip) && !lost && <span {...stylex.props(styles.caption)} />}
         {badges && (
           <span {...stylex.props(styles.badges)}>
             {clip.kind === "video" && (

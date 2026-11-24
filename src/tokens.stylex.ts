@@ -45,5 +45,5 @@ export const layout = stylex.defineVars({
   /** What is left of the grid when it is hidden. */
   railWidth: "36px",
   inspectorWidth: "272px",
-  timelineHeight: "152px",
+  timelineHeight: "98px",
 });
