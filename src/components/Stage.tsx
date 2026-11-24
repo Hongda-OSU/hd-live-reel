@@ -102,6 +102,9 @@ const styles = stylex.create({
     alignItems: "baseline",
     gap: 8,
   },
+  welcomeAdd: {
+    marginTop: 20,
+  },
   stepNumber: {
     display: "inline-grid",
     placeItems: "center",
@@ -197,6 +200,8 @@ interface Props {
   croppable: boolean;
   /** Play state; the timeline holds the controls. */
   playback: Playback;
+  /** Opens the picker, from the welcome page. */
+  onAdd: () => void;
   busy: boolean;
   error: string | null;
   empty: boolean;
@@ -231,11 +236,7 @@ const CROP_SLACK = 0.01;
 const clamp01 = (n: number) => Math.min(1, Math.max(0, n));
 
 /** The welcome page's walk-through. */
-const STEPS = [
-  "点左上角「添加照片」从 iPhone 选，或把文件拖进来",
-  "在右边加标题、配乐和滤镜",
-  "点右上角「导出」，直接发微信",
-];
+const STEPS = ["从 iPhone 选照片，或把文件拖进窗口", "在右边加标题、配乐和滤镜", "点右上角「导出」，直接发微信"];
 
 export function Stage(props: Props) {
   const { src, aspect, croppable, playback, busy, error, empty, crop, skipped, missing } = props;
@@ -324,6 +325,11 @@ export function Stage(props: Props) {
                   </li>
                 ))}
               </ol>
+              <span {...stylex.props(styles.welcomeAdd)}>
+                <Button variant="primary" onClick={props.onAdd}>
+                  添加照片…
+                </Button>
+              </span>
               {version && <span {...stylex.props(styles.version)}>版本 {version}</span>}
             </div>
           )}

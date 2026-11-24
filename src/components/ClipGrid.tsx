@@ -14,10 +14,15 @@ import * as stylex from "@stylexjs/stylex";
 import type { Clip } from "../api";
 import { clipLabel, hasCaption, isMissing } from "../project";
 import { colors, shadows } from "../tokens.stylex";
-import { withStyle } from "../ui";
+import { Icon, withStyle } from "../ui";
 import { WarningIcon } from "./WarningIcon";
 
 const styles = stylex.create({
+  head: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
   heading: {
     margin: 0,
     paddingTop: "10px",
@@ -27,6 +32,22 @@ const styles = stylex.create({
     color: colors.muted,
     fontSize: 11,
     fontWeight: 600,
+  },
+  hide: {
+    display: "grid",
+    placeItems: "center",
+    width: 22,
+    height: 20,
+    marginTop: -4,
+    padding: 0,
+    borderWidth: 0,
+    borderRadius: 5,
+    backgroundColor: {
+      default: "transparent",
+      ":hover": colors.hover,
+    },
+    color: colors.muted,
+    cursor: "pointer",
   },
   grid: {
     display: "grid",
@@ -122,11 +143,12 @@ interface Props {
   thumbs: Record<string, string>;
   onSelect: (id: string) => void;
   onMove: (from: number, to: number) => void;
+  onHide: () => void;
 }
 
 /** The clips as pictures, for finding one by eye; the timeline below shows
  * their timing. Cards drag to reorder, which suits long moves. */
-export function ClipGrid({ clips, selectedId, thumbs, onSelect, onMove }: Props) {
+export function ClipGrid({ clips, selectedId, thumbs, onSelect, onMove, onHide }: Props) {
   // A small move threshold keeps plain clicks as clicks.
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
@@ -144,7 +166,14 @@ export function ClipGrid({ clips, selectedId, thumbs, onSelect, onMove }: Props)
 
   return (
     <>
-      <h2 {...stylex.props(styles.heading)}>片段</h2>
+      <div {...stylex.props(styles.head)}>
+        <h2 {...stylex.props(styles.heading)}>片段</h2>
+        <button aria-label="隐藏片段栏" title="隐藏片段栏 ⌃⌘S" onClick={onHide} {...stylex.props(styles.hide)}>
+          <Icon>
+            <path d="M10 4 6 8l4 4" />
+          </Icon>
+        </button>
+      </div>
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
         <SortableContext items={clips.map((c) => c.id)} strategy={rectSortingStrategy}>
           <ul {...stylex.props(styles.grid)}>

@@ -17,7 +17,7 @@ import type { Clip } from "../api";
 import type { Playback } from "../hooks/usePlayback";
 import { clipLabel, formatTime, hasCaption, isMissing } from "../project";
 import { colors, shadows } from "../tokens.stylex";
-import { Icon, withStyle } from "../ui";
+import { Button, Icon, withStyle } from "../ui";
 import { WarningIcon } from "./WarningIcon";
 
 /** Space before the first clip and after the last, in px. */
@@ -336,11 +336,13 @@ interface Props {
   ready: boolean;
   onSelect: (id: string) => void;
   onMove: (from: number, to: number) => void;
+  /** Opens the picker; what it adds goes on the end. */
+  onAdd: () => void;
 }
 
 /** The clips in play order, each as wide as its time: picks, reorders and
  * plays the reel. */
-export function Timeline({ clips, spans, selectedId, thumbs, playback, ready, onSelect, onMove }: Props) {
+export function Timeline({ clips, spans, selectedId, thumbs, playback, ready, onSelect, onMove, onAdd }: Props) {
   const scroller = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
   const [zoom, setZoom] = useState(0);
@@ -448,6 +450,12 @@ export function Timeline({ clips, spans, selectedId, thumbs, playback, ready, on
           低清预览
         </span>
         <span {...stylex.props(styles.spacer)} />
+        <Button onClick={onAdd}>
+          <Icon>
+            <path d="M8 3v10M3 8h10" />
+          </Icon>
+          添加照片
+        </Button>
         <span {...stylex.props(styles.hint)}>{clips.length} 段 · 拖动或 ⌥← ⌥→ 换位置</span>
         <label {...stylex.props(styles.zoom)}>
           <svg viewBox="0 0 16 16" aria-hidden {...stylex.props(styles.badgeIcon)}>

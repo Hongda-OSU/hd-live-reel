@@ -48,7 +48,7 @@ import {
 } from "./project";
 import { renderCaptionPng, renderTitlePng, renderWatermarkPng } from "./title";
 import { colors, layout } from "./tokens.stylex";
-import { Button, Icon } from "./ui";
+import { Icon } from "./ui";
 import { useAppMenu } from "./hooks/useAppMenu";
 import { useLibrary } from "./hooks/useLibrary";
 import { usePlayback, type SeekTo } from "./hooks/usePlayback";
@@ -195,7 +195,6 @@ const styles = stylex.create({
     placeItems: "center",
     width: 28,
     height: 24,
-    marginRight: 4,
     padding: 0,
     borderWidth: 0,
     borderRadius: 6,
@@ -204,17 +203,7 @@ const styles = stylex.create({
       ":hover": colors.hover,
     },
     color: colors.muted,
-    cursor: {
-      default: "pointer",
-      ":disabled": "default",
-    },
-    opacity: {
-      default: 1,
-      ":disabled": 0.45,
-    },
-  },
-  sidebarToggleOn: {
-    color: colors.text,
+    cursor: "pointer",
   },
 });
 
@@ -701,25 +690,20 @@ function App() {
     <div {...stylex.props(styles.app)}>
       <header data-tauri-drag-region {...stylex.props(styles.toolbar)}>
         <div data-tauri-drag-region {...stylex.props(styles.toolbarLeft)}>
-          <button
-            aria-label={sidebarOpen ? "隐藏片段栏" : "显示片段栏"}
-            aria-pressed={sidebarOpen}
-            title={sidebarOpen ? "隐藏片段栏 ⌃⌘S" : "显示片段栏 ⌃⌘S"}
-            disabled={project.clips.length === 0}
-            onClick={toggleSidebar}
-            {...stylex.props(styles.sidebarToggle, sidebarOpen && styles.sidebarToggleOn)}
-          >
-            <Icon>
-              <rect x="1.5" y="2.5" width="13" height="11" rx="2" strokeWidth="1.4" />
-              <path d="M6 2.5v11" strokeWidth="1.4" />
-            </Icon>
-          </button>
-          <Button variant="ghost" onClick={() => setPickerOpen(true)}>
-            <Icon>
-              <path d="M8 3v10M3 8h10" />
-            </Icon>
-            添加照片
-          </Button>
+          {/* Only while the grid is hidden; its own heading hides it. */}
+          {!showSidebar && project.clips.length > 0 && (
+            <button
+              aria-label="显示片段栏"
+              title="显示片段栏 ⌃⌘S"
+              onClick={toggleSidebar}
+              {...stylex.props(styles.sidebarToggle)}
+            >
+              <Icon>
+                <rect x="1.5" y="2.5" width="13" height="11" rx="2" strokeWidth="1.4" />
+                <path d="M6 2.5v11" strokeWidth="1.4" />
+              </Icon>
+            </button>
+          )}
         </div>
         <div data-tauri-drag-region {...stylex.props(styles.toolbarCenter)}>
           <input
@@ -772,6 +756,7 @@ function App() {
               thumbs={thumbs}
               onSelect={pickClip}
               onMove={(from, to) => dispatch({ type: "moveClip", from, to })}
+              onHide={toggleSidebar}
             />
           </aside>
         )}
@@ -783,6 +768,7 @@ function App() {
             aspect={project.output.aspect}
             croppable={project.output.fill === "crop"}
             playback={playback}
+            onAdd={() => setPickerOpen(true)}
             busy={preview.busy}
             error={preview.error}
             empty={project.clips.length === 0}
@@ -837,6 +823,7 @@ function App() {
             thumbs={thumbs}
             playback={playback}
             ready={preview.url !== null && !trimClip}
+            onAdd={() => setPickerOpen(true)}
             onSelect={pickClip}
             onMove={(from, to) => dispatch({ type: "moveClip", from, to })}
           />
