@@ -13,7 +13,7 @@ import type {
 } from "../api";
 import type { Action } from "../project";
 import { colors } from "../tokens.stylex";
-import { Button, Field, Group, Select, Seg, Slider, Swatches, ui } from "../ui";
+import { Button, Field, Group, Icon, Select, Seg, Slider, Swatches, ui } from "../ui";
 import { FrameGroup } from "./FrameGroup";
 import { SoundGroup } from "./SoundGroup";
 import { WatermarkGroup } from "./WatermarkGroup";
@@ -53,17 +53,47 @@ const styles = stylex.create({
     borderLeftColor: colors.border,
     backgroundColor: colors.window,
   },
-  // The page switcher stays at the top while a long page scrolls.
+  // The page switcher stays at the top while a long page scrolls. Each
+  // page has an icon over its name, like Xcode's inspector, so the one
+  // open shows at a glance.
   tabs: {
     position: "sticky",
     top: 0,
     zIndex: 1,
-    paddingBlock: "10px",
-    paddingInline: "16px",
+    display: "flex",
+    justifyContent: "space-around",
+    paddingTop: "10px",
+    paddingBottom: "8px",
+    paddingInline: "8px",
     borderBottomWidth: 1,
     borderBottomStyle: "solid",
     borderBottomColor: colors.border,
     backgroundColor: colors.window,
+  },
+  tab: {
+    display: "grid",
+    justifyItems: "center",
+    gap: 3,
+    width: 46,
+    paddingTop: "5px",
+    paddingBottom: "4px",
+    borderWidth: 0,
+    borderRadius: 7,
+    backgroundColor: {
+      default: "transparent",
+      ":hover": colors.hover,
+    },
+    color: colors.muted,
+    fontSize: 10,
+    cursor: "pointer",
+  },
+  tabOn: {
+    backgroundColor: {
+      default: colors.accentSoft,
+      ":hover": colors.accentSoft,
+    },
+    color: colors.accent,
+    fontWeight: 600,
   },
   // Resets every page, so it is on every page: at the bottom of the panel,
   // staying in view when a long page scrolls.
@@ -85,6 +115,32 @@ const styles = stylex.create({
  * selected clip, the title, the picture (frame, filter, transition,
  * watermark), the sound, the export. */
 export type InspectorPage = "clip" | "title" | "picture" | "sound" | "export";
+
+const PAGES: [InspectorPage, string, ReactNode][] = [
+  [
+    "clip",
+    "片段",
+    <path
+      key="clip"
+      d="M3.5 3h9A1.5 1.5 0 0 1 14 4.5v7a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 11.5v-7A1.5 1.5 0 0 1 3.5 3zM5 3v10M11 3v10M2 6h3M2 10h3M11 6h3M11 10h3"
+    />,
+  ],
+  ["title", "标题", <path key="title" d="M3 3.5h10M8 3.5v9.5M6 13h4" />],
+  [
+    "picture",
+    "画面",
+    <path
+      key="picture"
+      d="M3.5 2.5h9A1.5 1.5 0 0 1 14 4v8a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 12V4a1.5 1.5 0 0 1 1.5-1.5zM2 11l3.5-3.5 3 3 2-2L14 12M10.5 4.4a1.1 1.1 0 1 1 0 2.2 1.1 1.1 0 0 1 0-2.2z"
+    />,
+  ],
+  [
+    "sound",
+    "声音",
+    <path key="sound" d="M2.5 6h2.5l3-2.5v9L5 10H2.5zM10.5 5.5a3.5 3.5 0 0 1 0 5M12.3 3.8a6 6 0 0 1 0 8.4" />,
+  ],
+  ["export", "导出", <path key="export" d="M8 10V2.5M5 5.5 8 2.5l3 3M3.5 8.5v4a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1v-4" />],
+];
 
 const NEUTRAL: Pick<Filter, "brightness" | "contrast" | "saturation"> = {
   brightness: 0,
@@ -139,18 +195,19 @@ export function Inspector({
 
   return (
     <aside {...stylex.props(styles.panel)}>
-      <div {...stylex.props(styles.tabs)}>
-        <Seg<InspectorPage>
-          options={[
-            ["clip", "片段"],
-            ["title", "标题"],
-            ["picture", "画面"],
-            ["sound", "声音"],
-            ["export", "导出"],
-          ]}
-          value={page}
-          onChange={onPage}
-        />
+      <div role="tablist" {...stylex.props(styles.tabs)}>
+        {PAGES.map(([id, label, path]) => (
+          <button
+            key={id}
+            role="tab"
+            aria-selected={id === page}
+            onClick={() => onPage(id)}
+            {...stylex.props(styles.tab, id === page && styles.tabOn)}
+          >
+            <Icon>{path}</Icon>
+            {label}
+          </button>
+        ))}
       </div>
       {page === "clip" && clip}
       {page === "title" && (
