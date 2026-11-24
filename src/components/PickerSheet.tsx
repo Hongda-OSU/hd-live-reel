@@ -104,6 +104,16 @@ const styles = stylex.create({
     alignItems: "center",
     gap: 8,
   },
+  // Rereading the phone is an action like the others, but a minor one.
+  refresh: {
+    display: "inline-flex",
+    color: colors.muted,
+  },
+  divider: {
+    width: 1,
+    height: 16,
+    backgroundColor: colors.border,
+  },
   // Narrower wraps "Live Photo": each option carries the button's own
   // padding, and the chosen one is bolder.
   filter: {
@@ -641,17 +651,6 @@ export function PickerSheet({
               {library.state === "ready" && `已连接 · ${count?.toLocaleString()} 项`}
               {(library.state === "loading" || library.state === "idle") && "正在读取…"}
               {library.state === "error" && problemStatus(library.message)}
-              <Button
-                variant="ghost"
-                onClick={refresh}
-                disabled={busy || library.state === "loading"}
-                aria-label="刷新"
-                title="刷新"
-              >
-                <Icon>
-                  <path d="M13.2 8a5.2 5.2 0 1 1-1.6-3.7M13.3 2.4v2.9h-2.9" />
-                </Icon>
-              </Button>
             </span>
           </div>
           <Seg<Filter>
@@ -665,6 +664,20 @@ export function PickerSheet({
             xstyle={styles.filter}
           />
           <div {...stylex.props(styles.actions)}>
+            <Button
+              variant="ghost"
+              onClick={refresh}
+              disabled={busy || library.state === "loading"}
+              aria-label="刷新"
+              title="重新读取 iPhone"
+            >
+              <span {...stylex.props(styles.refresh)}>
+                <Icon>
+                  <path d="M13.2 8a5.2 5.2 0 1 1-1.6-3.7M13.3 2.4v2.9h-2.9" />
+                </Icon>
+              </span>
+            </Button>
+            <span {...stylex.props(styles.divider)} />
             <Button variant="ghost" onClick={onPickFiles} disabled={busy}>
               <Icon>
                 <path d="M1.8 4.2A1.2 1.2 0 0 1 3 3h3.2l1.5 1.6H13a1.2 1.2 0 0 1 1.2 1.2v6.2a1.2 1.2 0 0 1-1.2 1.2H3a1.2 1.2 0 0 1-1.2-1.2z" />
