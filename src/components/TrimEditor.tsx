@@ -23,8 +23,33 @@ const styles = stylex.create({
   },
   header: {
     display: "flex",
-    alignItems: "baseline",
+    alignItems: "center",
     gap: 8,
+  },
+  // Edits apply as they are made, so leaving is going back, not confirming.
+  back: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 2,
+    height: 26,
+    paddingLeft: 4,
+    paddingRight: 8,
+    marginLeft: -4,
+    borderWidth: 0,
+    borderRadius: 6,
+    backgroundColor: {
+      default: colors.hover,
+      ":hover": colors.surface2,
+    },
+    color: colors.text,
+    fontSize: 13,
+    cursor: "pointer",
+  },
+  divider: {
+    width: 1,
+    height: 16,
+    marginInline: 4,
+    backgroundColor: colors.border,
   },
   heading: {
     margin: 0,
@@ -254,12 +279,15 @@ export function TrimEditor({ clip, dispatch, onDone }: Props) {
   return (
     <section {...stylex.props(styles.area)}>
       <div {...stylex.props(styles.header)}>
+        <button title="返回（esc）" onClick={onDone} {...stylex.props(styles.back)}>
+          <Icon>
+            <path d="M10 3.5 5.5 8l4.5 4.5" strokeWidth="1.8" />
+          </Icon>
+          这一段
+        </button>
+        <span {...stylex.props(styles.divider)} />
         <h2 {...stylex.props(styles.heading)}>精确剪辑 · {clipLabel(clip)}</h2>
         <span {...stylex.props(ui.note)}>拖动黄色把手，或停在某一帧后点「设为开头 / 结尾」</span>
-        <span {...stylex.props(ui.spacer)} />
-        <Button variant="primary" onClick={onDone}>
-          完成
-        </Button>
       </div>
 
       <div {...stylex.props(styles.wrap)}>
