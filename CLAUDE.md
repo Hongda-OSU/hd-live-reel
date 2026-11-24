@@ -49,6 +49,7 @@ Personal macOS desktop app that stitches iPhone Live Photos into one MP4 with or
 - Live Photo MOVs are ~2 s, 1920×1440, variable frame rate, mono and very quiet (−40 to −59 LUFS).
 - Live Photos are SDR (P3, 8-bit). Only regular iPhone videos are HDR (HLG) and need tone mapping.
 - iPhone imports arriving as JPG or thumbnails: see the phone settings in README Usage.
+- WebKit can stall seeks on a long-paused `<video>`; `usePlayback` reloads it when no frame draws within 0.7 s. Keep that fallback.
 - "Invalid hook call" after adding a JS dependency is a stale Vite cache: delete `node_modules/.vite`, restart `pnpm tauri dev`.
 - Dev and installed apps share one project; never run both.
 
