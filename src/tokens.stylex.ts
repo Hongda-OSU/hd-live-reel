@@ -22,6 +22,8 @@ export const colors = stylex.defineVars({
   success: "#30d158",
   trimHandle: "#ffd60a",
   hover: "rgba(127, 127, 127, 0.1)",
+  /** Every other row of a table, as in Finder's list view. */
+  stripe: { default: "rgba(0, 0, 0, 0.03)", [DARK]: "rgba(255, 255, 255, 0.03)" },
   scrim: "rgba(0, 0, 0, 0.18)",
 });
 

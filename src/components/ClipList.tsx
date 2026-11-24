@@ -21,87 +21,139 @@ import { colors, shadows } from "../tokens.stylex";
 import { withStyle } from "../ui";
 import { WarningIcon } from "./WarningIcon";
 
+/** Number, picture, what and when, length: shared by the header and rows. */
+const COLUMNS = "18px 22px minmax(0, 1fr) 30px";
+
 const styles = stylex.create({
-  list: {
+  // A table across the whole sidebar, past its padding, like Finder's
+  // list view.
+  table: {
+    marginInline: "-10px",
+  },
+  header: {
     display: "grid",
-    gap: 2,
+    gridTemplateColumns: COLUMNS,
+    gap: 8,
+    paddingBlock: "4px",
+    paddingInline: "14px",
+    borderBlockWidth: 1,
+    borderBlockStyle: "solid",
+    borderBlockColor: colors.border,
+    color: colors.muted,
+    fontSize: 10,
+    fontWeight: 600,
+  },
+  end: {
+    textAlign: "right",
+  },
+  list: {
     margin: 0,
     padding: 0,
     listStyle: "none",
   },
-  // The whole row drags (rows hold nothing else to press), and takes
-  // keyboard focus for reordering with the arrow keys.
+  // The whole row drags, and takes keyboard focus for reordering with the
+  // arrow keys.
   row: {
     display: "grid",
-    gridTemplateColumns: "16px 30px 1fr",
+    gridTemplateColumns: COLUMNS,
     gap: 8,
     alignItems: "center",
-    paddingBlock: "6px",
-    paddingInline: "8px",
-    borderRadius: 8,
+    height: 34,
+    paddingInline: "14px",
     backgroundColor: {
       default: "transparent",
+      ":nth-child(even)": colors.stripe,
       ":hover": colors.hover,
     },
     outline: {
       default: "none",
       ":focus-visible": `2px solid ${colors.accent}`,
     },
+    outlineOffset: -2,
     touchAction: "none",
   },
   selected: {
     backgroundColor: {
-      default: colors.accentSoft,
-      ":hover": colors.accentSoft,
+      default: colors.accent,
+      ":nth-child(even)": colors.accent,
+      ":hover": colors.accent,
     },
+    color: colors.onAccent,
   },
   dragging: {
     position: "relative",
     zIndex: 2,
-    backgroundColor: colors.surface,
+    backgroundColor: {
+      default: colors.surface,
+      ":nth-child(even)": colors.surface,
+    },
     boxShadow: shadows.lifted,
     cursor: "grabbing",
   },
-  // Only a hint now that the whole row drags.
-  grip: {
+  // Flush left, under the header's "#" and the table's edge.
+  number: {
     color: colors.muted,
-    cursor: "grab",
     fontSize: 11,
-    textAlign: "center",
+    fontVariantNumeric: "tabular-nums",
   },
   thumb: {
-    width: 30,
-    height: 40,
-    borderRadius: 4,
+    display: "grid",
+    placeItems: "center",
+    width: 22,
+    height: 29,
+    borderRadius: 3,
     backgroundColor: colors.surface2,
     backgroundPosition: "center",
     backgroundSize: "cover",
   },
-  thumbMissing: {
-    display: "grid",
-    placeItems: "center",
-  },
-  lost: {
-    color: colors.warning,
-  },
-  // Lets the caption excerpt shrink instead of widening the row.
-  info: {
+  what: {
+    display: "flex",
+    alignItems: "center",
+    gap: 6,
     minWidth: 0,
-  },
-  label: {
-    fontWeight: 500,
-  },
-  mutedLabel: {
-    color: colors.muted,
-  },
-  sub: {
     overflow: "hidden",
-    fontSize: 11,
-    color: colors.muted,
-    textOverflow: "ellipsis",
     whiteSpace: "nowrap",
   },
+  when: {
+    flexShrink: 0,
+    fontVariantNumeric: "tabular-nums",
+  },
+  caption: {
+    overflow: "hidden",
+    color: colors.muted,
+    textOverflow: "ellipsis",
+  },
+  lost: {
+    flexShrink: 0,
+    color: colors.warning,
+  },
+  icon: {
+    flexShrink: 0,
+    width: 11,
+    height: 11,
+    fill: "none",
+    stroke: colors.muted,
+    strokeWidth: 1.5,
+    strokeLinecap: "round",
+    strokeLinejoin: "round",
+  },
+  length: {
+    color: colors.muted,
+    fontSize: 12,
+    fontVariantNumeric: "tabular-nums",
+    textAlign: "right",
+  },
+  // Secondary text and icons on the blue of a selected row.
+  onAccent: {
+    color: "rgba(255, 255, 255, 0.8)",
+    stroke: "rgba(255, 255, 255, 0.8)",
+  },
 });
+
+const clock = new Intl.DateTimeFormat("zh-CN", { hour: "2-digit", minute: "2-digit", hour12: false });
+
+/** When the clip was taken, or its file name when that is unknown. */
+const when = (clip: Clip) => (clip.takenAt ? clock.format(new Date(clip.takenAt)) : clipLabel(clip));
 
 interface Props {
   clips: Clip[];
@@ -130,22 +182,30 @@ export function ClipList({ clips, selectedId, thumbs, onSelect, dispatch }: Prop
   // The stage says how to add clips; an empty list needs no words.
   if (clips.length === 0) return null;
   return (
-    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
-      <SortableContext items={clips.map((c) => c.id)} strategy={verticalListSortingStrategy}>
-        <ul {...stylex.props(styles.list)}>
-          {clips.map((clip, index) => (
-            <ClipRow
-              key={clip.id}
-              clip={clip}
-              index={index}
-              selected={clip.id === selectedId}
-              thumb={clip.assetId ? thumbs[clip.assetId] : undefined}
-              onSelect={() => onSelect(clip.id)}
-            />
-          ))}
-        </ul>
-      </SortableContext>
-    </DndContext>
+    <div {...stylex.props(styles.table)}>
+      <div aria-hidden {...stylex.props(styles.header)}>
+        <span>#</span>
+        <span />
+        <span>拍摄 · 文字</span>
+        <span {...stylex.props(styles.end)}>秒</span>
+      </div>
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+        <SortableContext items={clips.map((c) => c.id)} strategy={verticalListSortingStrategy}>
+          <ul {...stylex.props(styles.list)}>
+            {clips.map((clip, index) => (
+              <ClipRow
+                key={clip.id}
+                clip={clip}
+                index={index}
+                selected={clip.id === selectedId}
+                thumb={clip.assetId ? thumbs[clip.assetId] : undefined}
+                onSelect={() => onSelect(clip.id)}
+              />
+            ))}
+          </ul>
+        </SortableContext>
+      </DndContext>
+    </div>
   );
 }
 
@@ -159,8 +219,8 @@ interface RowProps {
 
 function ClipRow({ clip, index, selected, thumb, onSelect }: RowProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: clip.id });
-  const thumbImage = thumb ? { backgroundImage: `url("${thumb}")` } : undefined;
   const missing = isMissing(clip);
+  const on = selected && styles.onAccent;
 
   return (
     <li
@@ -169,37 +229,38 @@ function ClipRow({ clip, index, selected, thumb, onSelect }: RowProps) {
       {...attributes}
       {...listeners}
       aria-roledescription="可拖动排序的片段"
+      title={clipLabel(clip)}
       {...withStyle(stylex.props(styles.row, selected && styles.selected, isDragging && styles.dragging), {
         // Up and down only: the list is one column.
         transform: CSS.Transform.toString(transform && { ...transform, x: 0 }),
         transition,
       })}
     >
-      <span aria-hidden {...stylex.props(styles.grip)}>
-        ⋮⋮
-      </span>
+      <span {...stylex.props(styles.number, on)}>{index + 1}</span>
       {missing ? (
-        <span {...stylex.props(styles.thumb, styles.thumbMissing)}>
-          <WarningIcon size={16} />
+        <span {...stylex.props(styles.thumb)}>
+          <WarningIcon size={12} />
         </span>
       ) : (
-        <span {...withStyle(stylex.props(styles.thumb), thumbImage)} />
+        <span {...withStyle(stylex.props(styles.thumb), thumb ? { backgroundImage: `url("${thumb}")` } : undefined)} />
       )}
-      <span {...stylex.props(styles.info)}>
-        <div {...stylex.props(styles.label, clip.muted && styles.mutedLabel)}>
-          {index + 1}. {clipLabel(clip)}
-        </div>
-        <div {...stylex.props(styles.sub)}>
-          {clipLength(clip).toFixed(1)} 秒{clip.kind === "video" ? " · 视频" : ""}
-          {hasCaption(clip) && ` · ${clip.caption!.text.trim()}`}
-          {missing && (
-            <>
-              {" · "}
-              <span {...stylex.props(styles.lost)}>原件丢失</span>
-            </>
-          )}
-        </div>
+      <span {...stylex.props(styles.what)}>
+        <span {...stylex.props(styles.when)}>{when(clip)}</span>
+        {hasCaption(clip) && <span {...stylex.props(styles.caption, on)}>{clip.caption!.text.trim()}</span>}
+        {missing && <span {...stylex.props(styles.lost)}>原件丢失</span>}
+        {clip.muted && (
+          <svg viewBox="0 0 16 16" aria-label="已静音" {...stylex.props(styles.icon, on)}>
+            <path d="M2.5 6h2.5l3-2.5v9L5 10H2.5zM11 6l3 4M14 6l-3 4" />
+          </svg>
+        )}
+        {clip.kind === "video" && (
+          <svg viewBox="0 0 16 16" aria-label="视频" {...stylex.props(styles.icon, on)}>
+            <rect x="1.5" y="4" width="9" height="8" rx="1.5" />
+            <path d="M10.5 7l4-2v6l-4-2" />
+          </svg>
+        )}
       </span>
+      <span {...stylex.props(styles.length, on)}>{clipLength(clip).toFixed(1)}</span>
     </li>
   );
 }
