@@ -41,9 +41,11 @@ const styles = stylex.create({
       ":hover": colors.accentSoft,
     },
   },
-  // Lines scenes up under their day's label.
+  // Indents a scene so its circle starts where its day's label does
+  // (18 px chevron, 20 px check button, two 4 px gaps, less the 3 px
+  // between the button and its circle).
   sceneRow: {
-    paddingLeft: "20px",
+    paddingLeft: "43px",
   },
   disclosure: {
     display: "grid",
