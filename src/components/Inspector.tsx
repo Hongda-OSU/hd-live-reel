@@ -240,7 +240,7 @@ export function Inspector({
                 onChange={(lineGap) => set({ lineGap })}
               />
             </Field>
-            <Field label="显示时长">
+            <Field label="显示">
               <Slider
                 min={0.5}
                 max={3}
@@ -250,7 +250,7 @@ export function Inspector({
                 onChange={(showFor) => set({ showFor, fadeOut: Math.min(title.fadeOut, showFor) })}
               />
             </Field>
-            <Field label="消失方式">
+            <Field label="消失">
               <Seg
                 options={[
                   [0, "直接消失"],
@@ -296,7 +296,7 @@ export function Inspector({
                 customLabel="自定义颜色"
               />
             </Field>
-            <Field label="文字效果">
+            <Field label="效果">
               <Seg<TitleTextStyle>
                 options={[
                   ["outline", "描边"],

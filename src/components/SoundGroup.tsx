@@ -66,7 +66,7 @@ export function SoundGroup({ audio, dispatch }: Props) {
         />
       </Field>
       {withMusic && (
-        <Field label="配乐">
+        <Field label="配乐" stacked>
           <div {...stylex.props(ui.inline)}>
             <span title={track ?? undefined} {...stylex.props(styles.track, ui.spacer)}>
               {importing ? "正在导入…" : (track ?? "还没选音乐")}

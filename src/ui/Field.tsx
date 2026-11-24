@@ -14,9 +14,20 @@ const styles = stylex.create({
       ":last-child": 0,
     },
   },
+  // Label beside the control, like a Mac inspector, so a page of
+  // settings fits without scrolling.
+  row: {
+    gridTemplateColumns: "52px minmax(0, 1fr)",
+    alignItems: "center",
+    columnGap: 8,
+  },
   label: {
     fontSize: 11,
     color: colors.muted,
+  },
+  rowLabel: {
+    fontSize: 12,
+    whiteSpace: "nowrap",
   },
   heading: {
     display: "flex",
@@ -28,17 +39,22 @@ const styles = stylex.create({
 
 interface Props {
   label?: string;
-  /** Shown at the right of the label, e.g. a slider's current value. */
+  /** Shown at the right of the label, e.g. a slider's current value;
+   * puts the label over the control. */
   aside?: ReactNode;
+  /** The label over the control, for a long label or a wide control. */
+  stacked?: boolean;
   children: ReactNode;
 }
 
-/** A labelled form row. A div, not a label: a label wrapping buttons
- * would click the first one whenever its text is clicked. */
-export function Field({ label, aside, children }: Props) {
-  const title = label && <span {...stylex.props(styles.label)}>{label}</span>;
+/** A labelled form row: the label at the left, or over the control when
+ * `stacked` or given an `aside`. A div, not a label: a label wrapping
+ * buttons would click the first one whenever its text is clicked. */
+export function Field({ label, aside, stacked, children }: Props) {
+  const row = !!label && !aside && !stacked;
+  const title = label && <span {...stylex.props(styles.label, row && styles.rowLabel)}>{label}</span>;
   return (
-    <div {...stylex.props(styles.field)}>
+    <div {...stylex.props(styles.field, row && styles.row)}>
       {aside ? (
         <div {...stylex.props(styles.heading)}>
           {title}

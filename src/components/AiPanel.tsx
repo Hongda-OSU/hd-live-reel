@@ -106,7 +106,7 @@ export function AiPanel({ poolSize, again, target, people, busy, onTarget, onPeo
       <h3 {...stylex.props(styles.heading)}>AI 选片</h3>
       {/* One block, so the fields' own spacing applies evenly. */}
       <div>
-        <Field label="候选">
+        <Field label="候选" stacked>
           {poolSize ? (
             <p {...stylex.props(styles.pool)}>
               {again ? `重新从刚才的 ${poolSize} 张里挑` : `从已勾选的 ${poolSize} 张里挑`}
@@ -143,7 +143,7 @@ export function AiPanel({ poolSize, again, target, people, busy, onTarget, onPeo
             </div>
           </div>
         </Field>
-        <Field label="包含人像">
+        <Field label="包含人像" stacked>
           <div {...stylex.props(styles.row)}>
             <span {...stylex.props(ui.note)}>关闭时跳过自拍和人像，仍可手动勾选</span>
             <Switch on={people} label="包含人像" onToggle={() => onPeople(!people)} />

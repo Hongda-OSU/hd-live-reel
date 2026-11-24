@@ -31,7 +31,7 @@ export function FrameGroup({ output, dispatch }: Props) {
           onChange={(aspect) => set({ aspect })}
         />
       </Field>
-      <Field label="画面比例不同时">
+      <Field label="画面比例不同时" stacked>
         <Seg<Output["fill"]>
           options={[
             ["crop", "铺满裁切"],
