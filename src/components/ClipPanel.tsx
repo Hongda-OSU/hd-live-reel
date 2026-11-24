@@ -168,7 +168,7 @@ function takenLabel(takenAt?: string | null): string | null {
   return `${date.getMonth() + 1}月${date.getDate()}日 ${time}`;
 }
 
-/** The inspector's 这一段 page: trim and text of the selected clip,
+/** The inspector's 这一段 page: trim and caption of the selected clip,
  * with removing it in the panel's footer. */
 export function ClipPanel({ clip, index, thumb, onTrim, dispatch }: Props) {
   if (!clip) return <p {...stylex.props(styles.empty)}>在下面的时间线上选一段来编辑</p>;
@@ -215,7 +215,7 @@ export function ClipPanel({ clip, index, thumb, onTrim, dispatch }: Props) {
             </div>
             <p {...stylex.props(ui.note)}>裁切位置：在预览上拖动画面</p>
           </Group>
-          <Group title="文字">
+          <Group title="字幕">
             <CaptionFields clip={clip} dispatch={dispatch} />
           </Group>
         </>
@@ -295,7 +295,7 @@ function TrimBar({
 }
 
 /** Text over this clip; where it sits and how long it shows appear once
- * there is some. Drawn in the title's look, a size smaller. */
+ * there is some. Drawn in the 文字 page's look, a size smaller. */
 function CaptionFields({ clip, dispatch }: { clip: Clip; dispatch: (action: Action) => void }) {
   const caption = clip.caption ?? NEW_CAPTION;
   const set = (patch: Partial<Caption>) =>
@@ -306,7 +306,7 @@ function CaptionFields({ clip, dispatch }: { clip: Clip; dispatch: (action: Acti
         <input
           value={caption.text}
           placeholder="叠在这一段上，可不填"
-          aria-label="这一段的文字"
+          aria-label="这一段的字幕"
           onChange={(e) => set({ text: e.target.value })}
           {...stylex.props(ui.textInput)}
         />

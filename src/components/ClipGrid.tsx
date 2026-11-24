@@ -258,7 +258,7 @@ function Card({
         {(hasCaption(clip) || clip.kind === "video" || lost) && (
           <span {...stylex.props(styles.tag, styles.marks)}>
             {hasCaption(clip) && (
-              <svg viewBox="0 0 16 16" aria-label="有文字" {...stylex.props(styles.icon)}>
+              <svg viewBox="0 0 16 16" aria-label="有字幕" {...stylex.props(styles.icon)}>
                 <path d="M2.5 3.5h11v7h-6l-3 2.5v-2.5h-2z" />
               </svg>
             )}

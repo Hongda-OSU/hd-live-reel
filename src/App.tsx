@@ -500,7 +500,7 @@ function App() {
 
   async function resetSettings() {
     const confirmed = await ask(
-      "标题样式、声音、滤镜、转场和画幅会回到新工程的样子。标题文字、配乐文件和导出文件夹保留，片段不受影响。",
+      "文字样式、片头的位置和时长、声音、滤镜、转场和画幅会回到新工程的样子。片头文字、配乐文件和导出文件夹保留，片段和字幕不受影响。",
       { title: "恢复默认设置", kind: "warning", okLabel: "恢复", cancelLabel: "取消" },
     );
     if (!confirmed) return;

@@ -95,11 +95,15 @@ const styles = stylex.create({
     color: colors.accent,
     fontWeight: 600,
   },
+  lead: {
+    marginBottom: 10,
+  },
 });
 
 /** One page of settings at a time, so none needs much scrolling: the
- * selected clip, the title, the picture (frame, filter, transition,
- * watermark), the sound, the export. */
+ * selected clip, the text (the opening title and the look it shares with
+ * every caption), the picture (frame, filter, transition, watermark), the
+ * sound, the export. */
 export type InspectorPage = "clip" | "title" | "picture" | "sound" | "export";
 
 const PAGES: [InspectorPage, string, ReactNode][] = [
@@ -111,7 +115,7 @@ const PAGES: [InspectorPage, string, ReactNode][] = [
       d="M3.5 3h9A1.5 1.5 0 0 1 14 4.5v7a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 11.5v-7A1.5 1.5 0 0 1 3.5 3zM5 3v10M11 3v10M2 6h3M2 10h3M11 6h3M11 10h3"
     />,
   ],
-  ["title", "标题", <path key="title" d="M3 3.5h10M8 3.5v9.5M6 13h4" />],
+  ["title", "文字", <path key="title" d="M3 3.5h10M8 3.5v9.5M6 13h4" />],
   [
     "picture",
     "画面",
@@ -197,108 +201,114 @@ export function Inspector({
       </div>
       {page === "clip" && clip}
       {page === "title" && (
-        <Group>
-          <Field label="主标题">
-            <input
-              value={title.text}
-              aria-label="主标题"
-              onChange={(e) => set({ text: e.target.value })}
-              {...stylex.props(ui.textInput)}
-            />
-          </Field>
-          <Field label="副标题">
-            <input
-              value={title.subtitle}
-              aria-label="副标题"
-              onChange={(e) => set({ subtitle: e.target.value })}
-              {...stylex.props(ui.textInput)}
-            />
-          </Field>
-          <Field label="字体">
-            <Select label="字体" options={FONTS} value={title.font} onChange={(font) => set({ font })} />
-          </Field>
-          <Field label="粗细">
-            <Seg<TitleWeight>
-              options={[
-                ["light", "细"],
-                ["regular", "常规"],
-                ["bold", "粗"],
-              ]}
-              value={title.weight}
-              onChange={(weight) => set({ weight })}
-            />
-          </Field>
-          <Field label="字号">
-            <Slider
-              min={40}
-              max={140}
-              step={2}
-              value={title.fontSize}
-              shown={String(title.fontSize)}
-              onChange={(fontSize) => set({ fontSize })}
-            />
-          </Field>
-          <Field label="行距">
-            <Slider
-              min={0}
-              max={80}
-              step={2}
-              value={title.lineGap}
-              shown={String(title.lineGap)}
-              onChange={(lineGap) => set({ lineGap })}
-            />
-          </Field>
-          <Field label="颜色">
-            <Swatches
-              options={COLOURS}
-              value={title.color}
-              onChange={(color) => set({ color })}
-              customLabel="自定义颜色"
-            />
-          </Field>
-          <Field label="文字效果">
-            <Seg<TitleTextStyle>
-              options={[
-                ["outline", "描边"],
-                ["shadow", "阴影"],
-                ["none", "无"],
-              ]}
-              value={title.textStyle}
-              onChange={(textStyle) => set({ textStyle })}
-            />
-          </Field>
-          <Field label="位置">
-            <Seg<TitlePosition>
-              options={[
-                ["top", "上"],
-                ["center", "中"],
-                ["bottom", "下"],
-              ]}
-              value={title.position}
-              onChange={(position) => set({ position })}
-            />
-          </Field>
-          <Field label="显示时长">
-            <Slider
-              min={0.5}
-              max={3}
-              step={0.1}
-              value={title.showFor}
-              shown={`${title.showFor.toFixed(1)} 秒`}
-              onChange={(showFor) => set({ showFor, fadeOut: Math.min(title.fadeOut, showFor) })}
-            />
-          </Field>
-          <Field label="消失方式">
-            <Seg
-              options={[
-                [0, "直接消失"],
-                [FADE, "淡出"],
-              ]}
-              value={title.fadeOut > 0 ? FADE : 0}
-              onChange={(fadeOut) => set({ fadeOut: Math.min(fadeOut, title.showFor) })}
-            />
-          </Field>
-        </Group>
+        <>
+          <Group title="片头">
+            <Field label="主标题">
+              <input
+                value={title.text}
+                aria-label="主标题"
+                onChange={(e) => set({ text: e.target.value })}
+                {...stylex.props(ui.textInput)}
+              />
+            </Field>
+            <Field label="副标题">
+              <input
+                value={title.subtitle}
+                aria-label="副标题"
+                onChange={(e) => set({ subtitle: e.target.value })}
+                {...stylex.props(ui.textInput)}
+              />
+            </Field>
+            <Field label="位置">
+              <Seg<TitlePosition>
+                options={[
+                  ["top", "上"],
+                  ["center", "中"],
+                  ["bottom", "下"],
+                ]}
+                value={title.position}
+                onChange={(position) => set({ position })}
+              />
+            </Field>
+            <Field label="行距">
+              <Slider
+                min={0}
+                max={80}
+                step={2}
+                value={title.lineGap}
+                shown={String(title.lineGap)}
+                onChange={(lineGap) => set({ lineGap })}
+              />
+            </Field>
+            <Field label="显示时长">
+              <Slider
+                min={0.5}
+                max={3}
+                step={0.1}
+                value={title.showFor}
+                shown={`${title.showFor.toFixed(1)} 秒`}
+                onChange={(showFor) => set({ showFor, fadeOut: Math.min(title.fadeOut, showFor) })}
+              />
+            </Field>
+            <Field label="消失方式">
+              <Seg
+                options={[
+                  [0, "直接消失"],
+                  [FADE, "淡出"],
+                ]}
+                value={title.fadeOut > 0 ? FADE : 0}
+                onChange={(fadeOut) => set({ fadeOut: Math.min(fadeOut, title.showFor) })}
+              />
+            </Field>
+          </Group>
+          {/* Captions are drawn in this look too, a size smaller. */}
+          <Group title="文字样式">
+            <p {...stylex.props(ui.note, styles.lead)}>片头和每段字幕都用这套，字幕小一号。</p>
+            <Field label="字体">
+              <Select label="字体" options={FONTS} value={title.font} onChange={(font) => set({ font })} />
+            </Field>
+            <Field label="粗细">
+              <Seg<TitleWeight>
+                options={[
+                  ["light", "细"],
+                  ["regular", "常规"],
+                  ["bold", "粗"],
+                ]}
+                value={title.weight}
+                onChange={(weight) => set({ weight })}
+              />
+            </Field>
+            <Field label="字号">
+              <Slider
+                min={40}
+                max={140}
+                step={2}
+                value={title.fontSize}
+                shown={String(title.fontSize)}
+                onChange={(fontSize) => set({ fontSize })}
+              />
+            </Field>
+            <Field label="颜色">
+              <Swatches
+                options={COLOURS}
+                value={title.color}
+                onChange={(color) => set({ color })}
+                customLabel="自定义颜色"
+              />
+            </Field>
+            <Field label="文字效果">
+              <Seg<TitleTextStyle>
+                options={[
+                  ["outline", "描边"],
+                  ["shadow", "阴影"],
+                  ["none", "无"],
+                ]}
+                value={title.textStyle}
+                onChange={(textStyle) => set({ textStyle })}
+              />
+            </Field>
+          </Group>
+        </>
       )}
       {page === "picture" && (
         <>
