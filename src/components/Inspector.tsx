@@ -1,4 +1,4 @@
-import { useState } from "react";
+import type { ReactNode } from "react";
 import * as stylex from "@stylexjs/stylex";
 import type {
   Audio,
@@ -83,9 +83,9 @@ const styles = stylex.create({
 });
 
 /** One page of settings at a time, so none needs much scrolling: the
- * title, the picture (frame, filter, transition, watermark), the sound,
- * the export. */
-type Page = "title" | "picture" | "sound" | "export";
+ * selected clip, the title, the picture (frame, filter, transition,
+ * watermark), the sound, the export. */
+export type InspectorPage = "clip" | "title" | "picture" | "sound" | "export";
 
 const NEUTRAL: Pick<Filter, "brightness" | "contrast" | "saturation"> = {
   brightness: 0,
@@ -104,16 +104,32 @@ interface Props {
   transition: Transition;
   output: Output;
   watermark: Watermark;
+  /** The page shown; the app turns to 片段 when a clip is picked. */
+  page: InspectorPage;
+  onPage: (page: InspectorPage) => void;
+  /** The 片段 page, which edits the selected clip. */
+  clip: ReactNode;
   dispatch: (action: Action) => void;
   /** Asks, then puts every setting here back to a new project's. */
   onReset: () => void;
 }
 
-export function Inspector({ title, audio, filter, transition, output, watermark, dispatch, onReset }: Props) {
+export function Inspector({
+  title,
+  audio,
+  filter,
+  transition,
+  output,
+  watermark,
+  page,
+  onPage,
+  clip,
+  dispatch,
+  onReset,
+}: Props) {
   const set = (patch: Partial<Title>) => dispatch({ type: "updateTitle", patch });
   const setFilter = (patch: Partial<Filter>) => dispatch({ type: "updateFilter", patch });
   const setTransition = (patch: Partial<Transition>) => dispatch({ type: "updateTransition", patch });
-  const [page, setPage] = useState<Page>("title");
   const adjusted =
     filter.brightness !== NEUTRAL.brightness ||
     filter.contrast !== NEUTRAL.contrast ||
@@ -122,17 +138,19 @@ export function Inspector({ title, audio, filter, transition, output, watermark,
   return (
     <aside {...stylex.props(styles.panel)}>
       <div {...stylex.props(styles.tabs)}>
-        <Seg<Page>
+        <Seg<InspectorPage>
           options={[
+            ["clip", "片段"],
             ["title", "标题"],
             ["picture", "画面"],
             ["sound", "声音"],
             ["export", "导出"],
           ]}
           value={page}
-          onChange={setPage}
+          onChange={onPage}
         />
       </div>
+      {page === "clip" && clip}
       {page === "title" && (
         <Group>
           <Field label="主标题">
@@ -337,11 +355,14 @@ export function Inspector({ title, audio, filter, transition, output, watermark,
       )}
       {page === "sound" && <SoundGroup audio={audio} dispatch={dispatch} />}
       {page === "export" && <ExportGroup output={output} dispatch={dispatch} />}
-      <div {...stylex.props(styles.reset)}>
-        <Button variant="ghost" onClick={onReset}>
-          恢复默认设置
-        </Button>
-      </div>
+      {/* Resets the project's settings, which the 片段 page has none of. */}
+      {page !== "clip" && (
+        <div {...stylex.props(styles.reset)}>
+          <Button variant="ghost" onClick={onReset}>
+            恢复默认设置
+          </Button>
+        </div>
+      )}
     </aside>
   );
 }

@@ -20,7 +20,8 @@ import {
 import { ClipList } from "./components/ClipList";
 import { DropOverlay, type Drop } from "./components/DropOverlay";
 import { ExportDialog } from "./components/ExportDialog";
-import { Inspector } from "./components/Inspector";
+import { ClipPanel } from "./components/ClipPanel";
+import { Inspector, type InspectorPage } from "./components/Inspector";
 import { PickerSheet } from "./components/PickerSheet";
 import { Stage, type CropView } from "./components/Stage";
 import { TrimEditor } from "./components/TrimEditor";
@@ -243,6 +244,7 @@ function App() {
   const [crop, setCrop] = useState<Crop | null>(null);
   /** Clip open in the large trim view, which takes the preview's place. */
   const [trimming, setTrimming] = useState<string | null>(null);
+  const [inspectorPage, setInspectorPage] = useState<InspectorPage>("title");
   const { library, thumbs, refresh, loadThumbs } = useLibrary();
 
   // ---------- load + autosave ----------
@@ -589,6 +591,7 @@ function App() {
   const total = totalLength(project);
   const shown = playable(project);
   const selectedIndex = project.clips.findIndex((c) => c.id === selectedId);
+  const selectedClip = project.clips[selectedIndex];
   const selectedLost =
     selectedIndex >= 0 && isMissing(project.clips[selectedIndex]) ? project.clips[selectedIndex] : null;
   // Gone if the clip was removed while open.
@@ -654,11 +657,10 @@ function App() {
             clips={project.clips}
             selectedId={selectedId}
             thumbs={thumbs}
-            noOriginalSound={project.audio.mode === "music" && !!project.audio.musicPath}
-            onSelect={selectClip}
-            onTrim={(id) => {
-              setCrop(null);
-              setTrimming(id);
+            // Picking a clip in the list is asking to edit it.
+            onSelect={(id) => {
+              selectClip(id);
+              setInspectorPage("clip");
             }}
             dispatch={clipDispatch}
           />
@@ -701,6 +703,21 @@ function App() {
           transition={project.transition}
           output={project.output}
           watermark={project.watermark}
+          page={inspectorPage}
+          onPage={setInspectorPage}
+          clip={
+            <ClipPanel
+              clip={project.clips[selectedIndex] ?? null}
+              index={selectedIndex}
+              thumb={selectedClip?.assetId ? thumbs[selectedClip.assetId] : undefined}
+              noOriginalSound={project.audio.mode === "music" && !!project.audio.musicPath}
+              onTrim={() => {
+                setCrop(null);
+                setTrimming(selectedId);
+              }}
+              dispatch={clipDispatch}
+            />
+          }
           dispatch={dispatch}
           onReset={resetSettings}
         />
