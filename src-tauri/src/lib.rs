@@ -22,8 +22,19 @@ struct CurrentProject(Mutex<Option<PathBuf>>);
 /// never overwrites or deletes a newer one, and a new render stops the
 /// one before it, which only competed with it for the CPU.
 struct Previews {
+    /// When the app started, in ms: numbering restarts at every launch,
+    /// so this keeps names unique and later launches sorting later.
+    launch: u128,
     count: AtomicU64,
     running: Mutex<Arc<AtomicBool>>,
+}
+
+/// File name of preview `n` of the launch at `launch` ms. Names sort in
+/// the order they were made, across launches too, so deleting the ones
+/// that sort before a finished preview clears every older file,
+/// including those a previous run left behind.
+fn preview_name(launch: u128, n: u64) -> String {
+    format!("preview-{launch:015}-{n:06}.mp4")
 }
 
 /// Set by `cancel_export` to stop the export in progress.
@@ -242,7 +253,7 @@ async fn render_preview(
     let before = std::mem::replace(&mut *previews.running.lock().unwrap(), cancel.clone());
     before.store(true, Ordering::SeqCst);
     let dir = cache_dir(&app)?.join("previews");
-    let out = dir.join(format!("preview-{n:06}.mp4"));
+    let out = dir.join(preview_name(previews.launch, n));
     blocking(move || {
         render::preview(&project, &out, &cancel)?;
         // Drop older previews; newer ones may still be in flight.
@@ -321,6 +332,9 @@ pub fn run() {
         })
         .manage(CurrentProject(Mutex::new(None)))
         .manage(Previews {
+            launch: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |d| d.as_millis()),
             count: AtomicU64::new(0),
             running: Mutex::new(Arc::new(AtomicBool::new(false))),
         })
@@ -343,4 +357,22 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::preview_name;
+
+    #[test]
+    fn preview_names_sort_in_the_order_they_were_made() {
+        let names = [
+            "preview-000050.mp4".to_string(), // before launches were named
+            preview_name(1_795_000_000_000, 7),
+            preview_name(1_795_000_000_000, 12),
+            preview_name(1_795_000_900_000, 0),
+        ];
+        let mut sorted = names.clone();
+        sorted.sort();
+        assert_eq!(sorted, names);
+    }
 }
