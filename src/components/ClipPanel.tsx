@@ -113,7 +113,7 @@ interface Props {
   dispatch: (action: Action) => void;
 }
 
-/** The inspector's 片段 page: trim, text and sound of the selected clip. */
+/** The inspector's 这一段 page: trim, text and sound of the selected clip. */
 export function ClipPanel({ clip, index, thumb, noOriginalSound, onTrim, dispatch }: Props) {
   if (!clip) return <p {...stylex.props(styles.empty)}>在下面的时间线上选一段来编辑</p>;
   const thumbImage = thumb ? { backgroundImage: `url("${thumb}")` } : undefined;

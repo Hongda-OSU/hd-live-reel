@@ -119,7 +119,7 @@ export type InspectorPage = "clip" | "title" | "picture" | "sound" | "export";
 const PAGES: [InspectorPage, string, ReactNode][] = [
   [
     "clip",
-    "片段",
+    "这一段",
     <path
       key="clip"
       d="M3.5 3h9A1.5 1.5 0 0 1 14 4.5v7a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 11.5v-7A1.5 1.5 0 0 1 3.5 3zM5 3v10M11 3v10M2 6h3M2 10h3M11 6h3M11 10h3"
@@ -159,10 +159,10 @@ interface Props {
   transition: Transition;
   output: Output;
   watermark: Watermark;
-  /** The page shown; the app turns to 片段 when a clip is picked. */
+  /** The page shown; the app turns to 这一段 when a clip is picked. */
   page: InspectorPage;
   onPage: (page: InspectorPage) => void;
-  /** The 片段 page, which edits the selected clip. */
+  /** The 这一段 page, which edits the selected clip. */
   clip: ReactNode;
   /** The 导出 page, which names, places and makes the video. */
   exportPage: ReactNode;
@@ -414,7 +414,7 @@ export function Inspector({
       )}
       {page === "sound" && <SoundGroup audio={audio} dispatch={dispatch} />}
       {page === "export" && exportPage}
-      {/* Resets the project's settings, which the 片段 page has none of. */}
+      {/* Resets the project's settings, which the 这一段 page has none of. */}
       {page !== "clip" && (
         <div {...stylex.props(styles.reset)}>
           <Button variant="ghost" onClick={onReset}>
