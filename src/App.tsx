@@ -26,6 +26,7 @@ import { PickerSheet } from "./components/PickerSheet";
 import { Stage, type CropView } from "./components/Stage";
 import { Timeline } from "./components/Timeline";
 import { TrimEditor } from "./components/TrimEditor";
+import { Welcome } from "./components/Welcome";
 import {
   captionImageKey,
   clipSpans,
@@ -128,6 +129,10 @@ const styles = stylex.create({
   },
   withTimeline: {
     gridTemplateRows: `minmax(0, 1fr) ${layout.timelineHeight}`,
+  },
+  // An empty project is only the welcome page; settings come with clips.
+  welcome: {
+    gridTemplateColumns: "1fr",
   },
   withSidebar: {
     gridTemplateColumns: `${layout.sidebarWidth} 1fr ${layout.inspectorWidth}`,
@@ -677,7 +682,7 @@ function App() {
       <main
         {...stylex.props(
           styles.body,
-          project.clips.length > 0 && styles.withTimeline,
+          project.clips.length > 0 ? styles.withTimeline : styles.welcome,
           showSidebar && styles.withSidebar,
           showRail && styles.withRail,
         )}
@@ -708,7 +713,9 @@ function App() {
             </button>
           </aside>
         )}
-        {trimClip ? (
+        {project.clips.length === 0 ? (
+          <Welcome onAdd={() => setPickerOpen(true)} onPickFiles={() => void pickFiles()} />
+        ) : trimClip ? (
           <TrimEditor key={trimClip.id} clip={trimClip} dispatch={dispatch} onDone={finishTrim} />
         ) : (
           <Stage
@@ -716,11 +723,8 @@ function App() {
             aspect={project.output.aspect}
             croppable={project.output.fill === "crop"}
             playback={playback}
-            onAdd={() => setPickerOpen(true)}
-            onPickFiles={() => void pickFiles()}
             busy={preview.busy}
             error={preview.error}
-            empty={project.clips.length === 0}
             skipped={missingLabel(project.clips)}
             missing={
               selectedLost && {
@@ -739,32 +743,34 @@ function App() {
             onCropEnd={endCrop}
           />
         )}
-        <Inspector
-          title={project.title}
-          audio={project.audio}
-          filter={project.filter}
-          transition={project.transition}
-          output={project.output}
-          watermark={project.watermark}
-          page={inspectorPage}
-          onPage={setInspectorPage}
-          clip={
-            <ClipPanel
-              clip={project.clips[selectedIndex] ?? null}
-              index={selectedIndex}
-              thumb={selectedClip?.assetId ? thumbs[selectedClip.assetId] : undefined}
-              noOriginalSound={project.audio.mode === "music" && !!project.audio.musicPath}
-              onTrim={() => {
-                setCrop(null);
-                setTrimming(selectedId);
-              }}
-              dispatch={clipDispatch}
-            />
-          }
-          exportPage={<ExportPanel project={project} exporter={exporter} dispatch={dispatch} />}
-          dispatch={dispatch}
-          onReset={resetSettings}
-        />
+        {project.clips.length > 0 && (
+          <Inspector
+            title={project.title}
+            audio={project.audio}
+            filter={project.filter}
+            transition={project.transition}
+            output={project.output}
+            watermark={project.watermark}
+            page={inspectorPage}
+            onPage={setInspectorPage}
+            clip={
+              <ClipPanel
+                clip={project.clips[selectedIndex] ?? null}
+                index={selectedIndex}
+                thumb={selectedClip?.assetId ? thumbs[selectedClip.assetId] : undefined}
+                noOriginalSound={project.audio.mode === "music" && !!project.audio.musicPath}
+                onTrim={() => {
+                  setCrop(null);
+                  setTrimming(selectedId);
+                }}
+                dispatch={clipDispatch}
+              />
+            }
+            exportPage={<ExportPanel project={project} exporter={exporter} dispatch={dispatch} />}
+            dispatch={dispatch}
+            onReset={resetSettings}
+          />
+        )}
         {project.clips.length > 0 && (
           <Timeline
             clips={project.clips}

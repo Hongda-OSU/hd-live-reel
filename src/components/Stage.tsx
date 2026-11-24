@@ -1,8 +1,7 @@
-import { useEffect, useRef, useState, type CSSProperties, type PointerEvent } from "react";
+import { useRef, useState, type CSSProperties, type PointerEvent } from "react";
 import * as stylex from "@stylexjs/stylex";
-import { getVersion } from "@tauri-apps/api/app";
 import { colors, shadows } from "../tokens.stylex";
-import { Button, Icon, withStyle } from "../ui";
+import { Button, withStyle } from "../ui";
 import type { Output } from "../api";
 import type { Playback } from "../hooks/usePlayback";
 import { FRAME } from "../project";
@@ -56,76 +55,6 @@ const styles = stylex.create({
     display: "block",
     width: "100%",
     height: "100%",
-  },
-  // Nothing to play yet: no black video that looks like it failed to
-  // load, and no frame either, just the welcome text on the stage.
-  frameEmpty: {
-    backgroundColor: "transparent",
-    boxShadow: "none",
-  },
-  empty: {
-    position: "absolute",
-    inset: 0,
-    display: "grid",
-    placeContent: "center",
-    justifyItems: "center",
-    gap: 8,
-    padding: 24,
-    color: colors.muted,
-    textAlign: "center",
-  },
-  // A welcome page: the app's name, what it does, and its three steps.
-  // Only an empty project shows it.
-  emptyTitle: {
-    margin: 0,
-    color: colors.text,
-    fontSize: 22,
-    fontWeight: 700,
-    letterSpacing: "-0.01em",
-  },
-  emptyText: {
-    margin: 0,
-    fontSize: 12,
-  },
-  steps: {
-    display: "grid",
-    gap: 6,
-    marginTop: 24,
-    marginBottom: 0,
-    padding: 0,
-    fontSize: 12,
-    listStyle: "none",
-    textAlign: "left",
-  },
-  step: {
-    display: "flex",
-    alignItems: "baseline",
-    gap: 8,
-  },
-  // The two ways in, side by side; step 1 above names them only once.
-  welcomeAdd: {
-    display: "flex",
-    gap: 10,
-    marginTop: 20,
-  },
-  stepNumber: {
-    display: "inline-grid",
-    placeItems: "center",
-    flexShrink: 0,
-    width: 18,
-    height: 18,
-    borderRadius: "50%",
-    backgroundColor: colors.surface2,
-    color: colors.text,
-    fontSize: 10,
-    fontWeight: 600,
-  },
-  version: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 14,
-    fontSize: 10,
   },
   pill: {
     position: "absolute",
@@ -203,13 +132,8 @@ interface Props {
   croppable: boolean;
   /** Play state; the timeline holds the controls. */
   playback: Playback;
-  /** Opens the iPhone picker, from the welcome page. */
-  onAdd: () => void;
-  /** Opens the file dialog, from the welcome page. */
-  onPickFiles: () => void;
   busy: boolean;
   error: string | null;
-  empty: boolean;
   /** Which clips the preview leaves out because their originals are
    * lost, e.g. "第 3 段"; null when none are. */
   skipped: string | null;
@@ -240,23 +164,12 @@ const CROP_SLACK = 0.01;
 
 const clamp01 = (n: number) => Math.min(1, Math.max(0, n));
 
-/** The welcome page's walk-through. */
-const STEPS = [
-  "选照片（下面两种都行，也可以直接拖进窗口）",
-  "在右边加标题、配乐和滤镜",
-  "在右边「导出」页导出，直接发微信",
-];
-
 export function Stage(props: Props) {
-  const { src, aspect, croppable, playback, busy, error, empty, crop, skipped, missing } = props;
+  const { src, aspect, croppable, playback, busy, error, crop, skipped, missing } = props;
   const { video, playing } = playback;
   const [frameWidth, frameHeight] = FRAME[aspect];
   const frameAspect = frameWidth / frameHeight;
   const frame = useRef<HTMLDivElement>(null);
-  const [version, setVersion] = useState<string | null>(null);
-  useEffect(() => {
-    getVersion().then(setVersion, () => {});
-  }, []);
   const [hovered, setHovered] = useState(false);
   const [still, setStill] = useState<{ src: string; width: number; height: number } | null>(null);
   const stillSize = crop && still?.src === crop.frame ? still : null;
@@ -312,7 +225,6 @@ export function Stage(props: Props) {
             stylex.props(
               styles.frame,
               styles.shaped,
-              empty && styles.frameEmpty,
               src !== null && croppable && styles.grab,
               crop !== null && styles.cropping,
             ),
@@ -321,36 +233,6 @@ export function Stage(props: Props) {
         >
           {src && (
             <video ref={video} key={src} src={src} playsInline {...playback.events} {...stylex.props(styles.video)} />
-          )}
-          {empty && (
-            <div {...stylex.props(styles.empty)}>
-              <h3 {...stylex.props(styles.emptyTitle)}>HD Live Reel</h3>
-              <p {...stylex.props(styles.emptyText)}>把 Live Photo 拼成一段视频</p>
-              <ol {...stylex.props(styles.steps)}>
-                {STEPS.map((step, i) => (
-                  <li key={i} {...stylex.props(styles.step)}>
-                    <span {...stylex.props(styles.stepNumber)}>{i + 1}</span>
-                    {step}
-                  </li>
-                ))}
-              </ol>
-              <div {...stylex.props(styles.welcomeAdd)}>
-                <Button variant="primary" onClick={props.onAdd}>
-                  <Icon>
-                    <rect x="4.5" y="1.5" width="7" height="13" rx="1.6" />
-                    <path d="M7.2 12.4h1.6" />
-                  </Icon>
-                  从 iPhone 选择…
-                </Button>
-                <Button onClick={props.onPickFiles}>
-                  <Icon>
-                    <path d="M1.8 4.2A1.2 1.2 0 0 1 3 3h3.2l1.5 1.6H13a1.2 1.2 0 0 1 1.2 1.2v6.2a1.2 1.2 0 0 1-1.2 1.2H3a1.2 1.2 0 0 1-1.2-1.2z" />
-                  </Icon>
-                  从 Mac 选择…
-                </Button>
-              </div>
-              {version && <span {...stylex.props(styles.version)}>版本 {version}</span>}
-            </div>
           )}
           {crop?.frame && (
             <CropLayer
