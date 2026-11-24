@@ -302,7 +302,7 @@ function CaptionFields({ clip, dispatch }: { clip: Clip; dispatch: (action: Acti
     dispatch({ type: "updateClip", id: clip.id, patch: { caption: { ...caption, ...patch } } });
   return (
     <>
-      <Field label="内容">
+      <Field>
         <input
           value={caption.text}
           placeholder="叠在这一段上，可不填"
