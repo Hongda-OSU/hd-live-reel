@@ -5,11 +5,13 @@ import { colors } from "../tokens.stylex";
 import { Icon } from "../ui";
 
 const styles = stylex.create({
-  // Two halves across the whole window, like Xcode's welcome window:
-  // the ways in on the left, how it goes on the right.
+  // Two halves, like Xcode's welcome window: the ways in on the left,
+  // how it goes on the right. They stop growing, so a wide window adds
+  // margin rather than stretching the rows.
   page: {
     display: "grid",
-    gridTemplateColumns: "minmax(0, 1fr) 1px minmax(0, 1fr)",
+    gridTemplateColumns: "minmax(0, 470px) 1px minmax(0, 470px)",
+    justifyContent: "center",
     alignItems: "center",
     minHeight: 0,
     paddingLeft: "clamp(32px, 7vw, 96px)",
@@ -19,7 +21,7 @@ const styles = stylex.create({
   left: {
     display: "grid",
     gap: 6,
-    paddingRight: "clamp(24px, 5vw, 72px)",
+    paddingRight: "clamp(24px, 5vw, 64px)",
   },
   title: {
     margin: 0,
@@ -91,7 +93,7 @@ const styles = stylex.create({
     backgroundColor: colors.border,
   },
   right: {
-    paddingLeft: "clamp(24px, 5vw, 72px)",
+    paddingLeft: "clamp(24px, 5vw, 64px)",
   },
   heading: {
     margin: 0,
