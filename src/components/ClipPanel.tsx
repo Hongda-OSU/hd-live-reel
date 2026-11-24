@@ -152,7 +152,6 @@ const styles = stylex.create({
     gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
     gap: 8,
     marginTop: 10,
-    marginBottom: 12,
   },
   readout: {
     display: "grid",
@@ -258,7 +257,6 @@ export function ClipPanel({ clip, index, thumb, onTrim, onReplace, dispatch }: P
                 <span {...stylex.props(styles.readoutOf)}> / {clip.duration.toFixed(1)} 秒</span>
               </Readout>
             </div>
-            <p {...stylex.props(ui.note)}>裁切位置：在预览上拖动画面</p>
           </Group>
           <Group title="字幕">
             <CaptionFields clip={clip} dispatch={dispatch} />
