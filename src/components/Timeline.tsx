@@ -141,7 +141,7 @@ const styles = stylex.create({
   },
   clips: {
     display: "flex",
-    height: 42,
+    height: 58,
     paddingInline: `${PAD}px`,
   },
   // The whole block drags and takes keyboard focus for reordering.
@@ -245,7 +245,7 @@ const styles = stylex.create({
   drop: {
     position: "absolute",
     top: 14,
-    height: 42,
+    height: 58,
     width: 3,
     marginLeft: -1.5,
     borderRadius: 2,
@@ -253,8 +253,8 @@ const styles = stylex.create({
     pointerEvents: "none",
   },
   ghost: {
-    width: 32,
-    height: 42,
+    width: 44,
+    height: 58,
     borderRadius: 5,
     backgroundColor: colors.surface2,
     backgroundPosition: "center",

@@ -41,9 +41,9 @@ export const shadows = stylex.defineVars({
 export const layout = stylex.defineVars({
   toolbarHeight: "52px",
   /** The clip grid, and the toolbar part above it. */
-  sidebarWidth: "232px",
+  sidebarWidth: "207px",
   /** What is left of the grid when it is hidden. */
   railWidth: "36px",
   inspectorWidth: "272px",
-  timelineHeight: "98px",
+  timelineHeight: "114px",
 });
