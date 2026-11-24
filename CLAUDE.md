@@ -29,7 +29,7 @@ Personal macOS desktop app that stitches iPhone Live Photos into one MP4 with or
 
 ## Rules
 
-- Preview and export use the same FFmpeg filter graph built from `project.json`; only resolution and encoder speed differ. Never emulate filters in CSS/WebGL.
+- Preview and export use the same FFmpeg filter graph built from `project.json`; only resolution (the preview reads 720p copies of the intermediates) and encoder speed differ. Never emulate filters in CSS/WebGL.
 - Originals are read-only. Intermediates go in `~/Library/Caches/<App>/` (macOS may clear it; `load_project` rebuilds them); our only copies (iPhone downloads, music) in `~/Library/Application Support/<App>/`.
 - Normalize every clip on import to 30 fps, BT.709 SDR, stereo 48 kHz, keeping its shape; compose fits it to the output frame.
 - Lay out title, caption and watermark text in a frontend Canvas and overlay it as a transparent PNG. Do not use FFmpeg `drawtext`.

@@ -18,9 +18,13 @@ use tauri_plugin_window_state::{AppHandleExt, StateFlags};
 /// File of the project the window is editing.
 struct CurrentProject(Mutex<Option<PathBuf>>);
 
-/// Numbers preview files so a slow, stale render never overwrites or
-/// deletes a newer one.
-struct PreviewCounter(AtomicU64);
+/// The preview being rendered. Files are numbered so a stale render
+/// never overwrites or deletes a newer one, and a new render stops the
+/// one before it, which only competed with it for the CPU.
+struct Previews {
+    count: AtomicU64,
+    running: Mutex<Arc<AtomicBool>>,
+}
 
 /// Set by `cancel_export` to stop the export in progress.
 struct ExportCancel(Arc<AtomicBool>);
@@ -226,17 +230,21 @@ fn save_title_image(app: AppHandle, png: Vec<u8>) -> Result<PathBuf, String> {
 }
 
 /// Renders a low-res preview of `project` and returns the file to play.
+/// A newer call stops this one, which then fails with `render::CANCELLED`.
 #[tauri::command]
 async fn render_preview(
     app: AppHandle,
-    counter: State<'_, PreviewCounter>,
+    previews: State<'_, Previews>,
     project: project::Project,
 ) -> Result<PathBuf, String> {
-    let n = counter.0.fetch_add(1, Ordering::SeqCst);
+    let n = previews.count.fetch_add(1, Ordering::SeqCst);
+    let cancel = Arc::new(AtomicBool::new(false));
+    let before = std::mem::replace(&mut *previews.running.lock().unwrap(), cancel.clone());
+    before.store(true, Ordering::SeqCst);
     let dir = cache_dir(&app)?.join("previews");
     let out = dir.join(format!("preview-{n:06}.mp4"));
     blocking(move || {
-        render::render(&project, ffmpeg::Quality::Preview, &out)?;
+        render::preview(&project, &out, &cancel)?;
         // Drop older previews; newer ones may still be in flight.
         for entry in std::fs::read_dir(&dir)
             .map_err(|e| e.to_string())?
@@ -312,7 +320,10 @@ pub fn run() {
             }
         })
         .manage(CurrentProject(Mutex::new(None)))
-        .manage(PreviewCounter(AtomicU64::new(0)))
+        .manage(Previews {
+            count: AtomicU64::new(0),
+            running: Mutex::new(Arc::new(AtomicBool::new(false))),
+        })
         .manage(ExportCancel(Arc::new(AtomicBool::new(false))))
         .invoke_handler(tauri::generate_handler![
             load_project,

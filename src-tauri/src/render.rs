@@ -4,7 +4,7 @@
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 use crate::ffmpeg::{self, Composition, Fill, Grade, Look, Music, Quality, Segment, Shape, Title};
 use crate::project::{self as p, Audio, AudioMode, Filter, Preset, Project, TransitionKind};
@@ -129,15 +129,73 @@ fn grade(filter: &Filter) -> Grade {
     }
 }
 
-pub fn render(project: &Project, quality: Quality, out: &Path) -> Result<(), String> {
-    let composition = composition(project)?;
+/// Renders the low-res preview into `out` from small copies of the clips,
+/// stopping with `CANCELLED` once `cancel` is set.
+pub fn preview(project: &Project, out: &Path, cancel: &AtomicBool) -> Result<(), String> {
+    let mut composition = composition(project)?;
+    use_preview_copies(&mut composition.clips);
     if let Some(dir) = out.parent() {
         std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
     }
-    ffmpeg::compose(&composition, quality, out).map_err(|e| e.to_string())
+    ffmpeg::compose_with_progress(&composition, Quality::Preview, out, cancel, |_| {}).map_err(
+        |error| match error {
+            ffmpeg::Error::Cancelled => CANCELLED.into(),
+            error => error.to_string(),
+        },
+    )
 }
 
-/// The error a cancelled export returns, so callers can tell it apart
+/// Numbers the small copies being written.
+static COPIES_MADE: AtomicU64 = AtomicU64::new(0);
+
+/// How many small copies are made at once; each FFmpeg is multithreaded
+/// already.
+const COPIES_AT_ONCE: usize = 4;
+
+/// Points each segment at the small copy of its intermediate, making the
+/// ones that are missing or older than their intermediate. A clip whose
+/// copy can't be made keeps its full-size file, which only costs time.
+fn use_preview_copies(segments: &mut [Segment]) {
+    std::thread::scope(|scope| {
+        for batch in segments.chunks_mut(COPIES_AT_ONCE) {
+            let handles: Vec<_> = batch
+                .iter_mut()
+                .map(|segment| {
+                    scope.spawn(move || {
+                        if let Some(copy) = preview_copy(&segment.path) {
+                            segment.path = copy;
+                        }
+                    })
+                })
+                .collect();
+            for handle in handles {
+                let _ = handle.join();
+            }
+        }
+    });
+}
+
+/// `<intermediate>.preview.mov` beside the intermediate, made if needed.
+fn preview_copy(full: &Path) -> Option<PathBuf> {
+    let copy = full.with_extension("preview.mov");
+    let modified = |path: &Path| std::fs::metadata(path).and_then(|m| m.modified()).ok();
+    if modified(&copy).is_some_and(|made| Some(made) >= modified(full)) {
+        return Some(copy);
+    }
+    // Numbered, so two previews making the same copy at once never write
+    // into each other's file.
+    let n = COPIES_MADE.fetch_add(1, Ordering::Relaxed);
+    let partial = full.with_extension(format!("preview-{n}.partial.mov"));
+    let made = ffmpeg::preview_copy(full, &partial)
+        .ok()
+        .and_then(|()| std::fs::rename(&partial, &copy).ok());
+    if made.is_none() {
+        let _ = std::fs::remove_file(&partial);
+    }
+    made.map(|()| copy)
+}
+
+/// The error a cancelled export or preview returns, so callers can tell it apart
 /// from a failure.
 pub const CANCELLED: &str = "cancelled";
 

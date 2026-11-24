@@ -2,7 +2,7 @@
 //! title, captions over single clips and a corner watermark. Each clip is fitted to the output
 //! frame here (crop, black bars or a blurred backdrop), so the
 //! intermediates keep their own shape. Preview and export share this graph;
-//! the preview just works at half size.
+//! the preview just works at half size, from small copies of the clips.
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;

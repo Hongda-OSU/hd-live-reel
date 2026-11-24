@@ -226,6 +226,42 @@ pub fn still_frame(src: &Path, dst: &Path, at: f64, side: u32) -> Result<(), Err
     Ok(())
 }
 
+/// Short side of the preview's copies of the intermediates: enough to
+/// fill the half-size portrait frame (540×960) from a 3:4 photo without
+/// enlarging it.
+pub const PREVIEW_SIDE: u32 = 720;
+
+/// Writes a small copy of the intermediate `src` for the preview to read:
+/// the same frames and sound, at most `PREVIEW_SIDE` on its short side.
+/// Decoding the full-size intermediates was most of a preview's time.
+pub fn preview_copy(src: &Path, dst: &Path) -> Result<(), Error> {
+    let side = PREVIEW_SIDE;
+    Tool::Ffmpeg.run([
+        "-y".to_string(),
+        "-v".into(),
+        "error".into(),
+        "-i".into(),
+        src.to_string_lossy().into_owned(),
+        "-vf".into(),
+        // Intermediates are all BT.709; saying so keeps the tags even when
+        // the frames come in without them.
+        format!(
+            "scale='if(lte(iw,ih),min({side},iw),-2)':'if(lte(iw,ih),-2,min({side},ih))'\
+             :flags=bicubic,setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709"
+        ),
+        "-c:v".into(),
+        "libx264".into(),
+        "-preset".into(),
+        "veryfast".into(),
+        "-crf".into(),
+        "20".into(),
+        "-c:a".into(),
+        "copy".into(),
+        dst.to_string_lossy().into_owned(),
+    ])?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -361,6 +397,54 @@ mod tests {
             ] as [&std::ffi::OsStr; 7])
             .unwrap();
         String::from_utf8_lossy(&output.stdout).into_owned()
+    }
+
+    #[test]
+    fn preview_copy_shrinks_big_intermediates_only() {
+        let dir = std::env::temp_dir().join(format!("hd-live-reel-copy-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        // Shaped like an iPhone portrait intermediate.
+        let big = dir.join("big.mov");
+        Tool::Ffmpeg
+            .run([
+                "-y",
+                "-v",
+                "error",
+                "-f",
+                "lavfi",
+                "-i",
+                "testsrc2=size=1440x1920:rate=30:duration=1",
+                "-f",
+                "lavfi",
+                "-i",
+                "sine=duration=1",
+                "-c:v",
+                "libx264",
+                "-c:a",
+                "pcm_s16le",
+                big.to_str().unwrap(),
+            ])
+            .unwrap();
+        let small = generated_clip(&dir, true);
+        let (big_copy, small_copy) = (dir.join("big-copy.mov"), dir.join("small-copy.mov"));
+        preview_copy(&big, &big_copy).unwrap();
+        preview_copy(&small, &small_copy).unwrap();
+        let big_summary = stream_summary(&big_copy);
+        let small_summary = stream_summary(&small_copy);
+        let duration = probe(&big_copy).unwrap().duration;
+        std::fs::remove_dir_all(&dir).unwrap();
+
+        assert!(
+            big_summary.contains("width=720|height=960|color_primaries=bt709|avg_frame_rate=30/1"),
+            "{big_summary}"
+        );
+        assert!(big_summary.contains("codec_type=audio"), "{big_summary}");
+        assert!((duration - 1.0).abs() < 0.05, "{duration}");
+        // Never enlarged.
+        assert!(
+            small_summary.contains("width=640|height=480"),
+            "{small_summary}"
+        );
     }
 
     #[test]
