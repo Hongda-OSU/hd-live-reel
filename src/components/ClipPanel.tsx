@@ -1,5 +1,7 @@
-import { useRef, type CSSProperties, type ReactNode } from "react";
+import { useRef, type CSSProperties, type MouseEvent, type ReactNode } from "react";
 import * as stylex from "@stylexjs/stylex";
+import { LogicalPosition } from "@tauri-apps/api/dpi";
+import { Menu, MenuItem } from "@tauri-apps/api/menu";
 import type { Caption, Clip } from "../api";
 import {
   CAPTION_FIRST_SECONDS,
@@ -13,7 +15,7 @@ import {
   type Action,
 } from "../project";
 import { colors } from "../tokens.stylex";
-import { Button, Field, Group, Seg, ui, withStyle } from "../ui";
+import { Button, Field, Group, Icon, Seg, ui, withStyle } from "../ui";
 import { WarningIcon } from "./WarningIcon";
 
 const styles = stylex.create({
@@ -34,9 +36,30 @@ const styles = stylex.create({
     justifyContent: "space-between",
     gap: 8,
   },
+  title: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+  },
   name: {
     fontSize: 14,
     fontWeight: 600,
+  },
+  replace: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 4,
+    height: 24,
+    paddingInline: 8,
+    borderWidth: 0,
+    borderRadius: 6,
+    backgroundColor: {
+      default: colors.hover,
+      ":hover": colors.surface2,
+    },
+    color: colors.text,
+    fontSize: 12,
+    cursor: "pointer",
   },
   kind: {
     paddingBlock: "1px",
@@ -157,7 +180,21 @@ interface Props {
   thumb?: string;
   /** Opens the large trim view for the clip. */
   onTrim: () => void;
+  /** Swaps the clip for one picked from the phone or the Mac. */
+  onReplace: (from: "iphone" | "mac") => void;
   dispatch: (action: Action) => void;
+}
+
+/** Asks where the new picture comes from, in a menu under the button. */
+async function askReplace(event: MouseEvent<HTMLButtonElement>, onReplace: Props["onReplace"]) {
+  const box = event.currentTarget.getBoundingClientRect();
+  const menu = await Menu.new({
+    items: await Promise.all([
+      MenuItem.new({ text: "从 iPhone 选择…", action: () => onReplace("iphone") }),
+      MenuItem.new({ text: "从 Mac 选择…", action: () => onReplace("mac") }),
+    ]),
+  });
+  await menu.popup(new LogicalPosition(box.left, box.bottom + 4));
 }
 
 /** "11月22日 15:20" when the clip says when it was taken. */
@@ -170,7 +207,7 @@ function takenLabel(takenAt?: string | null): string | null {
 
 /** The inspector's 这一段 page: trim and caption of the selected clip,
  * with removing it in the panel's footer. */
-export function ClipPanel({ clip, index, thumb, onTrim, dispatch }: Props) {
+export function ClipPanel({ clip, index, thumb, onTrim, onReplace, dispatch }: Props) {
   if (!clip) return <p {...stylex.props(styles.empty)}>在下面的时间线上选一段来编辑</p>;
   const thumbImage = thumb ? { backgroundImage: `url("${thumb}")` } : undefined;
   const missing = isMissing(clip);
@@ -180,12 +217,20 @@ export function ClipPanel({ clip, index, thumb, onTrim, dispatch }: Props) {
     <>
       <div {...stylex.props(styles.head)}>
         <div {...stylex.props(styles.headRow)}>
-          <span {...stylex.props(styles.name)}>第 {index + 1} 段</span>
-          {missing ? (
-            <WarningIcon size={14} />
-          ) : (
-            <span {...stylex.props(styles.kind)}>{clip.kind === "video" ? "视频" : "Live Photo"}</span>
-          )}
+          <span {...stylex.props(styles.title)}>
+            <span {...stylex.props(styles.name)}>第 {index + 1} 段</span>
+            {missing ? (
+              <WarningIcon size={14} />
+            ) : (
+              <span {...stylex.props(styles.kind)}>{clip.kind === "video" ? "视频" : "Live Photo"}</span>
+            )}
+          </span>
+          <button onClick={(e) => void askReplace(e, onReplace)} {...stylex.props(styles.replace)}>
+            <Icon>
+              <path d="M3 6h9.5L10 3.5M13 10H3.5L6 12.5" />
+            </Icon>
+            替换…
+          </button>
         </div>
         <div {...stylex.props(styles.meta)}>{[clipLabel(clip), taken].filter(Boolean).join(" · ")}</div>
       </div>

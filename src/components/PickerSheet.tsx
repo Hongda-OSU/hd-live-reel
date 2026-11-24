@@ -119,6 +119,9 @@ const styles = stylex.create({
   filter: {
     width: 240,
   },
+  hidden: {
+    display: "none",
+  },
   aiAnchor: {
     position: "relative",
   },
@@ -367,6 +370,15 @@ interface Props {
   /** Opens a file dialog to add from the Mac instead. */
   onPickFiles: () => void;
   onClose: () => void;
+  /** The clip's number when picking one photo to put in its place. */
+  replacing?: number | null;
+}
+
+/** Keeps only the newest of `next`, for picking a single photo. */
+function newestOnly(current: Set<string>, next: Set<string>): Set<string> {
+  if (next.size <= 1) return next;
+  const fresh = [...next].filter((id) => !current.has(id));
+  return new Set((fresh.length ? fresh : [...next]).slice(-1));
 }
 
 const dayFormat = new Intl.DateTimeFormat("zh-CN", { month: "long", day: "numeric", weekday: "short" });
@@ -449,9 +461,21 @@ export function PickerSheet({
   onAdd,
   onPickFiles,
   onClose,
+  replacing = null,
 }: Props) {
   const [filter, setFilter] = useState<Filter>("live");
-  const [chosen, setChosen] = useState<Set<string>>(new Set());
+  const [chosen, setAllChosen] = useState<Set<string>>(new Set());
+  const single = replacing !== null;
+  // Every way of ticking (clicks, drags, the outline's circles) goes
+  // through here, so replacing keeps one photo whichever is used.
+  const setChosen = useCallback(
+    (update: Set<string> | ((current: Set<string>) => Set<string>)) =>
+      setAllChosen((current) => {
+        const next = typeof update === "function" ? update(current) : update;
+        return single ? newestOnly(current, next) : next;
+      }),
+    [single],
+  );
   const [target, setTarget] = useState(TARGET.initial);
   /** Off by default: reels are mostly the place, not the people. */
   const [people, setPeople] = useState(false);
@@ -528,7 +552,7 @@ export function PickerSheet({
   // ⌘A ticks everything shown, or unticks it when it all is, as in
   // Photos; the outline's circles do the same with the pointer.
   const onSelectAll = useEffectEvent((event: KeyboardEvent) => {
-    if (!event.metaKey || event.key.toLowerCase() !== "a" || busy) return;
+    if (!event.metaKey || event.key.toLowerCase() !== "a" || busy || single) return;
     if (event.target instanceof HTMLElement && event.target.closest("input, textarea")) return;
     event.preventDefault();
     toggleGroup(shownIds);
@@ -684,8 +708,9 @@ export function PickerSheet({
               </Icon>
               从 Mac 选择…
             </Button>
-            {/* The panel hangs from its button. */}
-            <span {...stylex.props(styles.aiAnchor)}>
+            {/* The panel hangs from its button. Replacing picks one photo,
+              so there is nothing for AI to choose among. */}
+            <span {...stylex.props(styles.aiAnchor, single && styles.hidden)}>
               <Button variant="ghost" onClick={() => setAiOpen((o) => !o)} disabled={busy || library.state !== "ready"}>
                 <span {...stylex.props(styles.aiLabel)}>
                   <Icon>
@@ -821,7 +846,9 @@ export function PickerSheet({
               </Button>
             </>
           ) : (
-            <span {...stylex.props(styles.summary)}>点击或拖动勾选照片，再用「AI 选片…」挑出精选</span>
+            <span {...stylex.props(styles.summary)}>
+              {single ? `选一张换掉第 ${replacing} 段` : "点击或拖动勾选照片，再用「AI 选片…」挑出精选"}
+            </span>
           )}
           <span {...stylex.props(ui.spacer)} />
           <Button onClick={onClose} disabled={busy}>
@@ -829,7 +856,15 @@ export function PickerSheet({
           </Button>
           {library.state === "ready" && (
             <Button variant="primary" onClick={add} disabled={busy || chosen.size === 0}>
-              {busy ? "添加中…" : chosen.size ? `添加 ${chosen.size} 项` : "添加"}
+              {single
+                ? busy
+                  ? "替换中…"
+                  : `替换第 ${replacing} 段`
+                : busy
+                  ? "添加中…"
+                  : chosen.size
+                    ? `添加 ${chosen.size} 项`
+                    : "添加"}
             </Button>
           )}
         </footer>

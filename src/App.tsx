@@ -14,6 +14,7 @@ import {
   saveProject,
   saveTitleImage,
   MEDIA_EXTENSIONS,
+  type Clip,
   type ClipsProgress,
   type Project,
 } from "./api";
@@ -219,6 +220,8 @@ function App() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  /** The clip being swapped for another photo, while picking it. */
+  const [replacing, setReplacing] = useState<string | null>(null);
   const [adding, setAdding] = useState<ClipsProgress | "starting" | null>(null);
   const [addError, setAddError] = useState<string | null>(null);
   const [drop, setDrop] = useState<Drop | null>(null);
@@ -463,12 +466,65 @@ function App() {
     }
   }, []);
 
-  async function pickFiles() {
+  /** Adds files from the Mac, or with `replace` puts the first in that
+   * clip's place. Several can still be picked, since a Live Photo is its
+   * picture and its video together. */
+  async function pickFiles(replace?: string | null) {
     const picked = await open({
       multiple: true,
       filters: [{ name: "视频和 Live Photo", extensions: MEDIA_EXTENSIONS }],
     });
-    if (picked?.length) void addFiles(picked);
+    if (!picked?.length) return;
+    if (replace) void replaceFromFiles(replace, picked);
+    else void addFiles(picked);
+  }
+
+  /** Swaps clip `id` for a photo from the phone, keeping its place. */
+  async function replaceFromPhone(id: string, ids: string[]) {
+    setAdding("starting");
+    setAddError(null);
+    const unlisten = await onClipsProgress(setAdding);
+    try {
+      const [clip] = await addIphoneClips(ids.slice(0, 1));
+      if (clip) replaceWith(id, clip);
+    } catch (e) {
+      setAddError(String(e));
+    } finally {
+      unlisten();
+      setAdding(null);
+    }
+  }
+
+  async function replaceFromFiles(id: string, paths: string[]) {
+    setDrop({ step: "adding", progress: null });
+    const unlisten = await onClipsProgress((progress) => setDrop({ step: "adding", progress }));
+    try {
+      const { clips, skippedStills } = await addFileClips(paths);
+      if (clips.length === 0) {
+        const still = skippedStills ? "静态照片不能用，Live Photo 要把照片和同名的 MOV 一起选上。" : "";
+        setDrop({ step: "message", text: still || "没有找到视频或 Live Photo。" });
+        return;
+      }
+      replaceWith(id, clips[0]);
+      setDrop(clips.length > 1 ? { step: "message", text: `选了 ${clips.length} 段，只用第一段替换。` } : null);
+    } catch (e) {
+      setDrop({ step: "message", text: `替换失败：${e}` });
+    } finally {
+      unlisten();
+    }
+  }
+
+  function replaceWith(id: string, clip: Clip) {
+    dispatch({ type: "replaceClip", id, clip });
+    // Show the new picture once the preview has it.
+    seekAfterRender.current = { id, peek: true };
+    setPickerOpen(false);
+    setReplacing(null);
+  }
+
+  function closePicker() {
+    setPickerOpen(false);
+    setReplacing(null);
   }
 
   // Files dragged from Finder anywhere onto the window.
@@ -758,6 +814,12 @@ function App() {
                 clip={project.clips[selectedIndex] ?? null}
                 index={selectedIndex}
                 thumb={selectedClip?.assetId ? thumbs[selectedClip.assetId] : undefined}
+                onReplace={(from) => {
+                  if (!selectedId) return;
+                  if (from === "mac") return void pickFiles(selectedId);
+                  setReplacing(selectedId);
+                  setPickerOpen(true);
+                }}
                 onTrim={() => {
                   setCrop(null);
                   setTrimming(selectedId);
@@ -796,9 +858,10 @@ function App() {
         error={addError}
         onRefresh={refresh}
         onLoadThumbs={loadThumbs}
-        onAdd={addClips}
-        onPickFiles={pickFiles}
-        onClose={() => setPickerOpen(false)}
+        onAdd={replacing ? (ids) => void replaceFromPhone(replacing, ids) : addClips}
+        onPickFiles={() => void pickFiles(replacing)}
+        onClose={closePicker}
+        replacing={replacing ? project.clips.findIndex((c) => c.id === replacing) + 1 || null : null}
       />
       <DropOverlay drop={drop} onDismiss={() => setDrop(null)} />
     </div>

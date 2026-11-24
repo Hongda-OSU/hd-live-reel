@@ -22,6 +22,7 @@ export type Action =
   /** The settings panel back to a new project's, keeping what was chosen
    * rather than tuned: title and watermark text, music track and export
    * folder. */
+  | { type: "replaceClip"; id: string; clip: Clip }
   | { type: "resetSettings"; defaults: Project };
 
 export function reducer(project: Project | null, action: Action): Project | null {
@@ -43,6 +44,15 @@ export function reducer(project: Project | null, action: Action): Project | null
       });
       return { ...project, clips: [...clips, ...fresh] };
     }
+    case "replaceClip":
+      // The new picture takes the old one's place and caption; its trim
+      // and crop start over, since what they framed is gone.
+      return {
+        ...project,
+        clips: project.clips.map((clip) =>
+          clip.id === action.id ? { ...action.clip, id: clip.id, caption: clip.caption } : clip,
+        ),
+      };
     case "moveClip": {
       const clips = [...project.clips];
       const [moved] = clips.splice(action.from, 1);
