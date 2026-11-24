@@ -42,7 +42,7 @@ const COLOURS: [string, string][] = [
 ];
 
 const styles = stylex.create({
-  // A column, so the reset can sit at the bottom of short pages.
+  // A column, so the 这一段 page's footer can sit at the bottom.
   panel: {
     display: "flex",
     flexDirection: "column",
@@ -157,8 +157,6 @@ interface Props {
   /** The 导出 page, which names, places and makes the video. */
   exportPage: ReactNode;
   dispatch: (action: Action) => void;
-  /** Asks, then puts every setting here back to a new project's. */
-  onReset: () => void;
 }
 
 export function Inspector({
@@ -173,7 +171,6 @@ export function Inspector({
   clip,
   exportPage,
   dispatch,
-  onReset,
 }: Props) {
   const set = (patch: Partial<Title>) => dispatch({ type: "updateTitle", patch });
   const setFilter = (patch: Partial<Filter>) => dispatch({ type: "updateFilter", patch });
@@ -410,15 +407,6 @@ export function Inspector({
       )}
       {page === "sound" && <SoundGroup audio={audio} dispatch={dispatch} />}
       {page === "export" && exportPage}
-      {/* Resets the project's settings, which the 这一段 page has none of;
-        that page has its own footer. */}
-      {page !== "clip" && (
-        <div {...stylex.props(ui.panelFooter)}>
-          <Button variant="ghost" onClick={onReset}>
-            恢复默认设置
-          </Button>
-        </div>
-      )}
     </aside>
   );
 }

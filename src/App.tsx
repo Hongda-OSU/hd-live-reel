@@ -678,6 +678,7 @@ function App() {
     {
       add: idle,
       export: idle && clipCount > 0,
+      reset: idle && clipCount > 0 && !exporting,
       clear: idle && clipCount > 0 && !exporting,
       first: canMove,
       last: canMove,
@@ -689,6 +690,7 @@ function App() {
       else if (command === "add") setPickerOpen(true);
       else if (command === "export") setInspectorPage("export");
       else if (command === "clear") void clearProject();
+      else if (command === "reset") void resetSettings();
       else moveSelected({ to: command === "first" ? 0 : clipCount - 1 });
     },
   );
@@ -829,7 +831,6 @@ function App() {
             }
             exportPage={<ExportPanel project={project} exporter={exporter} dispatch={dispatch} />}
             dispatch={dispatch}
-            onReset={resetSettings}
           />
         )}
         {project.clips.length > 0 && (
