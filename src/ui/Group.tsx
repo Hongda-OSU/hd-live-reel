@@ -4,9 +4,9 @@ import { colors } from "../tokens.stylex";
 
 const styles = stylex.create({
   group: {
-    paddingTop: "12px",
+    paddingTop: "16px",
     paddingRight: "16px",
-    paddingBottom: "14px",
+    paddingBottom: "18px",
     paddingLeft: "16px",
     borderBottomWidth: 1,
     borderBottomStyle: "solid",

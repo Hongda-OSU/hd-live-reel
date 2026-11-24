@@ -22,9 +22,9 @@ const styles = stylex.create({
   // Which clip, by its place in the list; the picture is already on the
   // stage and the timeline.
   head: {
-    paddingTop: "14px",
+    paddingTop: "16px",
     paddingRight: "16px",
-    paddingBottom: "12px",
+    paddingBottom: "16px",
     paddingLeft: "16px",
     borderBottomWidth: 1,
     borderBottomStyle: "solid",
