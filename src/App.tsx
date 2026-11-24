@@ -150,6 +150,14 @@ const styles = stylex.create({
     outline: "none",
     textAlign: "center",
     fontWeight: 600,
+    // The field is centred, so while typing into an empty name the caret
+    // would sit in the middle of "Untitled"; the hint steps aside.
+    "::placeholder": {
+      color: {
+        default: null,
+        ":focus": "transparent",
+      },
+    },
   },
   meta: {
     fontSize: 11,
