@@ -13,7 +13,7 @@ import type {
 } from "../api";
 import type { Action } from "../project";
 import { colors } from "../tokens.stylex";
-import { Button, Field, Group, Icon, Select, Seg, Slider, Swatches, ui } from "../ui";
+import { Button, Field, Group, Icon, NumberField, Select, Seg, Slider, Swatches, ui } from "../ui";
 import { FrameGroup } from "./FrameGroup";
 import { SoundGroup } from "./SoundGroup";
 import { WatermarkGroup } from "./WatermarkGroup";
@@ -22,6 +22,22 @@ import { WatermarkGroup } from "./WatermarkGroup";
 const FADE = 0.3;
 /** Cross-dissolve length when "淡入淡出" is first picked, in seconds. */
 const DISSOLVE = 0.3;
+
+/** Common gaps between title and subtitle, in pixels at 1080 wide. */
+const LINE_GAPS: [number, string][] = [
+  [8, "紧 · 8"],
+  [18, "适中 · 18（默认）"],
+  [32, "松 · 32"],
+];
+
+/** Common times the title stays, in seconds. */
+const SHOW_FOR: [number, string][] = [
+  [0.5, "0.5 秒"],
+  [1, "1 秒（默认）"],
+  [1.5, "1.5 秒"],
+  [2, "2 秒"],
+  [3, "3 秒"],
+];
 
 /** Title fonts that ship with macOS. */
 const FONTS: [string, string][] = [
@@ -225,26 +241,30 @@ export function Inspector({
               />
             </Field>
             <Field label="行距">
-              <Slider
+              <NumberField
+                label="行距"
                 min={0}
                 max={80}
                 step={2}
                 value={title.lineGap}
-                shown={String(title.lineGap)}
+                presets={LINE_GAPS}
                 onChange={(lineGap) => set({ lineGap })}
               />
             </Field>
             <Field label="显示">
-              <Slider
+              <NumberField
+                label="显示时长"
                 min={0.5}
                 max={3}
                 step={0.1}
+                decimals={1}
+                unit="秒"
                 value={title.showFor}
-                shown={`${title.showFor.toFixed(1)} 秒`}
+                presets={SHOW_FOR}
                 onChange={(showFor) => set({ showFor, fadeOut: Math.min(title.fadeOut, showFor) })}
               />
             </Field>
-            <Field label="消失">
+            <Field label="结尾">
               <Seg
                 options={[
                   [0, "直接消失"],
