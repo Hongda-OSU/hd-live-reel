@@ -11,9 +11,11 @@ const styles = stylex.create({
     opacity: 0.45,
   },
   // WebKit gives range inputs a 2px margin; without it the track lines
-  // up with the fields above and below.
+  // up with the fields above and below. minWidth 0 lets it shrink when
+  // the row shares its width.
   range: {
     flex: "1",
+    minWidth: 0,
     margin: 0,
     accentColor: colors.accent,
   },
