@@ -34,7 +34,7 @@ const styles = stylex.create({
     left: "50%",
     top: layout.toolbarHeight,
     display: "grid",
-    gridTemplateRows: "auto auto 1fr auto",
+    gridTemplateRows: "auto 1fr auto",
     width: "min(1040px, calc(100% - 60px))",
     height: "calc(100% - 92px)",
     borderTopLeftRadius: "0",
@@ -52,14 +52,20 @@ const styles = stylex.create({
     visibility: "visible",
     transitionDelay: "0s",
   },
+  // One row in three parts, like the Photos toolbar: where the photos come
+  // from, which kinds to show, and what to do with them.
   header: {
-    display: "flex",
+    display: "grid",
+    gridTemplateColumns: "1fr auto 1fr",
     alignItems: "center",
     gap: 12,
-    paddingTop: "16px",
+    paddingTop: "14px",
     paddingRight: "20px",
-    paddingBottom: "10px",
+    paddingBottom: "12px",
     paddingLeft: "20px",
+    borderBottomWidth: 1,
+    borderBottomStyle: "solid",
+    borderBottomColor: colors.border,
   },
   heading: {
     margin: 0,
@@ -68,9 +74,10 @@ const styles = stylex.create({
   device: {
     display: "flex",
     alignItems: "center",
-    gap: 6,
+    gap: 5,
+    height: 18,
     color: colors.muted,
-    fontSize: 12,
+    fontSize: 11,
   },
   dot: {
     width: 7,
@@ -89,18 +96,14 @@ const styles = stylex.create({
     backgroundColor: colors.muted,
     animationName: "none",
   },
-  bar: {
+  actions: {
     display: "flex",
+    justifyContent: "flex-end",
     alignItems: "center",
     gap: 8,
-    paddingTop: "0",
-    paddingRight: "20px",
-    paddingBottom: "12px",
-    paddingLeft: "20px",
-    borderBottomWidth: 1,
-    borderBottomStyle: "solid",
-    borderBottomColor: colors.border,
   },
+  // Narrower wraps "Live Photo": each option carries the button's own
+  // padding, and the chosen one is bolder.
   filter: {
     width: 240,
   },
@@ -537,26 +540,26 @@ export function PickerSheet({
         {...stylex.props(styles.sheet, open && styles.open)}
       >
         <header {...stylex.props(styles.header)}>
-          <h2 {...stylex.props(styles.heading)}>从 iPhone 选择</h2>
-          <span {...stylex.props(styles.device)}>
-            <span {...stylex.props(styles.dot, library.state !== "ready" && styles.dotOff)} />
-            {library.state === "ready" && `iPhone · 已连接 · ${count?.toLocaleString()} 项`}
-            {library.state === "loading" && "正在读取 iPhone…"}
-            {library.state === "error" && "未连接"}
-            <Button
-              variant="ghost"
-              onClick={refresh}
-              disabled={busy || library.state === "loading"}
-              aria-label="刷新"
-              title="刷新"
-            >
-              <Icon>
-                <path d="M13.2 8a5.2 5.2 0 1 1-1.6-3.7M13.3 2.4v2.9h-2.9" />
-              </Icon>
-            </Button>
-          </span>
-        </header>
-        <div {...stylex.props(styles.bar)}>
+          <div>
+            <h2 {...stylex.props(styles.heading)}>从 iPhone 选择</h2>
+            <span {...stylex.props(styles.device)}>
+              <span {...stylex.props(styles.dot, library.state !== "ready" && styles.dotOff)} />
+              {library.state === "ready" && `已连接 · ${count?.toLocaleString()} 项`}
+              {library.state === "loading" && "正在读取…"}
+              {library.state === "error" && "未连接"}
+              <Button
+                variant="ghost"
+                onClick={refresh}
+                disabled={busy || library.state === "loading"}
+                aria-label="刷新"
+                title="刷新"
+              >
+                <Icon>
+                  <path d="M13.2 8a5.2 5.2 0 1 1-1.6-3.7M13.3 2.4v2.9h-2.9" />
+                </Icon>
+              </Button>
+            </span>
+          </div>
           <Seg<Filter>
             options={[
               ["all", "全部"],
@@ -567,38 +570,39 @@ export function PickerSheet({
             onChange={setFilter}
             xstyle={styles.filter}
           />
-          <span {...stylex.props(ui.spacer)} />
-          <Button variant="ghost" onClick={onPickFiles} disabled={busy}>
-            <Icon>
-              <path d="M1.8 4.2A1.2 1.2 0 0 1 3 3h3.2l1.5 1.6H13a1.2 1.2 0 0 1 1.2 1.2v6.2a1.2 1.2 0 0 1-1.2 1.2H3a1.2 1.2 0 0 1-1.2-1.2z" />
-            </Icon>
-            从 Mac 选择…
-          </Button>
-          {/* The panel hangs from its button. */}
-          <span {...stylex.props(styles.aiAnchor)}>
-            <Button variant="ghost" onClick={() => setAiOpen((o) => !o)} disabled={busy}>
-              <span {...stylex.props(styles.aiLabel)}>
-                <Icon>
-                  <path d="M6.5 1.8 7.6 5.4l3.6 1.1-3.6 1.1-1.1 3.6-1.1-3.6-3.6-1.1 3.6-1.1zM12.3 9.8l.5 1.6 1.6.5-1.6.5-.5 1.6-.5-1.6-1.6-.5 1.6-.5z" />
-                </Icon>
-                {ai.busy ? "挑选中…" : "AI 选片…"}
-              </span>
+          <div {...stylex.props(styles.actions)}>
+            <Button variant="ghost" onClick={onPickFiles} disabled={busy}>
+              <Icon>
+                <path d="M1.8 4.2A1.2 1.2 0 0 1 3 3h3.2l1.5 1.6H13a1.2 1.2 0 0 1 1.2 1.2v6.2a1.2 1.2 0 0 1-1.2 1.2H3a1.2 1.2 0 0 1-1.2-1.2z" />
+              </Icon>
+              从 Mac 选择…
             </Button>
-            {aiOpen && (
-              <AiPanel
-                poolSize={pool.length}
-                again={again}
-                target={target}
-                people={people}
-                busy={ai.busy}
-                onTarget={setTarget}
-                onPeople={setPeople}
-                onRun={runAi}
-                onClose={closeAi}
-              />
-            )}
-          </span>
-        </div>
+            {/* The panel hangs from its button. */}
+            <span {...stylex.props(styles.aiAnchor)}>
+              <Button variant="ghost" onClick={() => setAiOpen((o) => !o)} disabled={busy}>
+                <span {...stylex.props(styles.aiLabel)}>
+                  <Icon>
+                    <path d="M6.5 1.8 7.6 5.4l3.6 1.1-3.6 1.1-1.1 3.6-1.1-3.6-3.6-1.1 3.6-1.1zM12.3 9.8l.5 1.6 1.6.5-1.6.5-.5 1.6-.5-1.6-1.6-.5 1.6-.5z" />
+                  </Icon>
+                  {ai.busy ? "挑选中…" : "AI 选片…"}
+                </span>
+              </Button>
+              {aiOpen && (
+                <AiPanel
+                  poolSize={pool.length}
+                  again={again}
+                  target={target}
+                  people={people}
+                  busy={ai.busy}
+                  onTarget={setTarget}
+                  onPeople={setPeople}
+                  onRun={runAi}
+                  onClose={closeAi}
+                />
+              )}
+            </span>
+          </div>
+        </header>
         <div ref={scroller} {...stylex.props(styles.scroll)}>
           {library.state === "error" && (
             <div {...stylex.props(styles.notice)}>
