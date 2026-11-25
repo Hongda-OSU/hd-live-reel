@@ -303,8 +303,8 @@ function TrimBar({
 }
 
 /** Text over this clip. Only the heading with 添加 shows until there is
- * some; where it sits and how long it shows appear once it has text.
- * Drawn in the 文字 page's look, a size smaller. */
+ * some; after 添加 the text, where it sits and how long it shows appear
+ * together. Drawn in the 文字 page's look, a size smaller. */
 function CaptionGroup({ clip, dispatch }: { clip: Clip; dispatch: (action: Action) => void }) {
   // The clip whose field is open without text yet: just added, or
   // emptied while typing, which should not fold the field away.
@@ -352,31 +352,27 @@ function CaptionGroup({ clip, dispatch }: { clip: Clip; dispatch: (action: Actio
           {...stylex.props(ui.textInput)}
         />
       </Field>
-      {hasCaption(clip) && (
-        <>
-          <Field label="位置">
-            <Seg<Caption["position"]>
-              options={[
-                ["top", "上"],
-                ["center", "中"],
-                ["bottom", "下"],
-              ]}
-              value={caption.position}
-              onChange={(position) => set({ position })}
-            />
-          </Field>
-          <Field label="显示">
-            <Seg<"whole" | "first">
-              options={[
-                ["whole", "整段"],
-                ["first", `前 ${CAPTION_FIRST_SECONDS} 秒`],
-              ]}
-              value={caption.showFor === null ? "whole" : "first"}
-              onChange={(shown) => set({ showFor: shown === "whole" ? null : CAPTION_FIRST_SECONDS })}
-            />
-          </Field>
-        </>
-      )}
+      <Field label="位置">
+        <Seg<Caption["position"]>
+          options={[
+            ["top", "上"],
+            ["center", "中"],
+            ["bottom", "下"],
+          ]}
+          value={caption.position}
+          onChange={(position) => set({ position })}
+        />
+      </Field>
+      <Field label="显示">
+        <Seg<"whole" | "first">
+          options={[
+            ["whole", "整段"],
+            ["first", `前 ${CAPTION_FIRST_SECONDS} 秒`],
+          ]}
+          value={caption.showFor === null ? "whole" : "first"}
+          onChange={(shown) => set({ showFor: shown === "whole" ? null : CAPTION_FIRST_SECONDS })}
+        />
+      </Field>
     </Group>
   );
 }
