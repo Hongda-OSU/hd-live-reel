@@ -83,8 +83,12 @@ const styles = stylex.create({
   status: {
     display: "flex",
     justifyContent: "space-between",
+    alignItems: "center",
     fontSize: 12,
     fontVariantNumeric: "tabular-nums",
+  },
+  percent: {
+    color: colors.muted,
   },
   track: {
     height: 6,
@@ -99,13 +103,16 @@ const styles = stylex.create({
     backgroundColor: colors.accent,
     transition: "width 0.2s linear",
   },
-  centered: {
-    display: "flex",
-    justifyContent: "center",
-    gap: 8,
+  // The file's name, and under it the link to it.
+  result: {
+    display: "grid",
+    justifyItems: "start",
+    gap: 6,
   },
   fileName: {
+    maxWidth: "100%",
     overflow: "hidden",
+    fontSize: 13,
     fontWeight: 600,
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
@@ -237,32 +244,38 @@ export function ExportPanel({ project, exporter, dispatch }: Props) {
           )}
           {phase.step === "running" && (
             <>
+              {/* Cancel is a quiet link on the status line, like 移除 and
+                  还原, not a dialog button under the bar. */}
               <div {...stylex.props(styles.status)}>
-                <span>{phase.cancelling ? "正在取消…" : "正在导出…"}</span>
-                <span {...stylex.props(ui.note)}>
-                  {Math.floor(phase.progress * 100)}%
-                  {phase.remaining !== null && ` · ${formatRemaining(phase.remaining)}`}
+                <span>
+                  {phase.cancelling ? "正在取消…" : "正在导出…"}{" "}
+                  <span {...stylex.props(styles.percent)}>{Math.floor(phase.progress * 100)}%</span>
                 </span>
+                <Button variant="mutedLink" disabled={phase.cancelling} onClick={exporter.cancel}>
+                  取消
+                </Button>
               </div>
               <div {...stylex.props(styles.track)}>
                 <i {...withStyle(stylex.props(styles.fill), { width: `${phase.progress * 100}%` })} />
               </div>
-              <div {...stylex.props(styles.centered)}>
-                <Button disabled={phase.cancelling} onClick={exporter.cancel}>
-                  取消
-                </Button>
-              </div>
+              {phase.remaining !== null && <p {...stylex.props(ui.note)}>{formatRemaining(phase.remaining)}</p>}
             </>
           )}
           {phase.step === "done" && (
             <>
-              <span {...stylex.props(ui.note)}>已导出</span>
-              <span title={phase.path} {...stylex.props(styles.fileName)}>
-                {phase.path.split("/").pop()}
-              </span>
-              <div {...stylex.props(styles.centered)}>
-                <Button onClick={exporter.reset}>完成</Button>
-                <Button variant="primary" onClick={() => revealItemInDir(phase.path)}>
+              {/* The same status line as while exporting, so the page
+                  settles instead of swapping in a pair of dialog buttons. */}
+              <div {...stylex.props(styles.status)}>
+                <span>已导出</span>
+                <Button variant="mutedLink" onClick={exporter.reset}>
+                  完成
+                </Button>
+              </div>
+              <div {...stylex.props(styles.result)}>
+                <span title={phase.path} {...stylex.props(styles.fileName)}>
+                  {phase.path.split("/").pop()}
+                </span>
+                <Button variant="link" onClick={() => revealItemInDir(phase.path)}>
                   在 Finder 中显示
                 </Button>
               </div>
