@@ -30,6 +30,14 @@ const LINE_GAPS: [number, string][] = [
   [32, "松 · 32"],
 ];
 
+/** Common title sizes, in pixels at 1080 wide; captions are 3/4 of it. */
+const FONT_SIZES: [number, string][] = [
+  [56, "56"],
+  [72, "72（默认）"],
+  [96, "96"],
+  [120, "120"],
+];
+
 /** Common times the title stays, in seconds. */
 const SHOW_FOR: [number, string][] = [
   [0.5, "0.5 秒"],
@@ -292,21 +300,14 @@ export function Inspector({
               />
             </Field>
             <Field label="字号">
-              <Slider
+              <NumberField
+                label="字号"
                 min={40}
                 max={140}
                 step={2}
                 value={title.fontSize}
-                shown={String(title.fontSize)}
+                presets={FONT_SIZES}
                 onChange={(fontSize) => set({ fontSize })}
-              />
-            </Field>
-            <Field label="颜色">
-              <Swatches
-                options={COLOURS}
-                value={title.color}
-                onChange={(color) => set({ color })}
-                customLabel="自定义颜色"
               />
             </Field>
             <Field label="效果">
@@ -318,6 +319,14 @@ export function Inspector({
                 ]}
                 value={title.textStyle}
                 onChange={(textStyle) => set({ textStyle })}
+              />
+            </Field>
+            <Field label="颜色">
+              <Swatches
+                options={COLOURS}
+                value={title.color}
+                onChange={(color) => set({ color })}
+                customLabel="自定义颜色"
               />
             </Field>
           </Group>

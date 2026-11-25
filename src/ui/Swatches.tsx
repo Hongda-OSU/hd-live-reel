@@ -6,17 +6,20 @@ const styles = stylex.create({
   // The selection ring is drawn outside the swatch: leave room for it
   // above and below. Sideways it hangs into the panel padding, like a
   // focus ring, so the swatches line up with the fields.
+  // Spread across the row, so it is as wide as the fields above.
   row: {
     display: "flex",
-    gap: 8,
+    alignItems: "center",
+    justifyContent: "space-between",
+    minHeight: 26,
     paddingBlock: 4,
   },
   swatch: {
     position: "relative",
     display: "block",
     flexShrink: 0,
-    width: 22,
-    height: 22,
+    width: 18,
+    height: 18,
     padding: 0,
     borderWidth: 1,
     borderStyle: "solid",
@@ -37,7 +40,7 @@ const styles = stylex.create({
     borderWidth: 0,
     backgroundImage:
       "conic-gradient(hsl(0 90% 60%), hsl(60 90% 55%), hsl(120 70% 50%), hsl(180 80% 50%), hsl(240 90% 65%), hsl(300 80% 60%), hsl(360 90% 60%))",
-    maskImage: "radial-gradient(circle, transparent 5.5px, #000 6.5px)",
+    maskImage: "radial-gradient(circle, transparent 4.5px, #000 5.5px)",
   },
   // The native picker sits invisibly on top so a click opens it.
   picker: {
