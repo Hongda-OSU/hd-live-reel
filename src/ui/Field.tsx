@@ -10,7 +10,7 @@ const styles = stylex.create({
     gridTemplateColumns: "minmax(0, 1fr)",
     gap: 4,
     marginBottom: {
-      default: 10,
+      default: 12,
       ":last-child": 0,
     },
   },
