@@ -1,11 +1,10 @@
-import { useRef, useState, type CSSProperties, type PointerEvent } from "react";
+import type { CSSProperties } from "react";
 import * as stylex from "@stylexjs/stylex";
 import { colors, shadows } from "../tokens.stylex";
 import { Button, withStyle } from "../ui";
 import type { Output } from "../api";
 import type { Playback } from "../hooks/usePlayback";
 import { FRAME } from "../project";
-import { CropLayer, fillFactor } from "./CropLayer";
 import { WarningIcon } from "./WarningIcon";
 
 const styles = stylex.create({
@@ -19,7 +18,6 @@ const styles = stylex.create({
     paddingLeft: "18px",
     backgroundColor: colors.stage,
   },
-  // Clips the uncropped still where it spills past the frame.
   // A size container, so the frame can be sized from the space it has
   // rather than from its contents.
   wrap: {
@@ -36,20 +34,13 @@ const styles = stylex.create({
     overflow: "hidden",
     backgroundColor: "#000",
     boxShadow: shadows.stage,
-    touchAction: "none",
+    cursor: "default",
   },
   // As large as fits: the full width, unless that would be too tall.
   // `--ratio` is the frame's width over its height.
   shaped: {
     width: "min(100cqw, 100cqh * var(--ratio))",
     aspectRatio: "var(--ratio)",
-  },
-  grab: {
-    cursor: "grab",
-  },
-  cropping: {
-    overflow: "visible",
-    cursor: "grabbing",
   },
   video: {
     display: "block",
@@ -69,10 +60,6 @@ const styles = stylex.create({
     fontSize: 11,
     whiteSpace: "nowrap",
     pointerEvents: "none",
-  },
-  hint: {
-    top: "auto",
-    bottom: 14,
   },
   notice: {
     display: "flex",
@@ -127,9 +114,6 @@ interface Props {
   /** Playable URL of the latest preview, or null before the first one. */
   src: string | null;
   aspect: Output["aspect"];
-  /** False when clips are fitted whole (black bars, blur), so there is
-   * nothing to drag. */
-  croppable: boolean;
   /** Play state; the timeline holds the controls. */
   playback: Playback;
   busy: boolean;
@@ -139,131 +123,37 @@ interface Props {
   skipped: string | null;
   /** Set while a lost clip is selected: why, and what to do about it. */
   missing: MissingView | null;
-  /** The crop being dragged or applied, if any. */
-  crop: CropView | null;
-  /** A drag began on the picture at this preview time. */
-  onCropStart: (time: number) => void;
-  onCropChange: (offset: number) => void;
-  onCropEnd: () => void;
 }
 
-export interface CropView {
-  /** Uncropped still, or null while it loads. */
-  frame: string | null;
-  /** Offset when the drag began. */
-  start: number;
-  offset: number;
-  /** Released and being re-normalized / re-rendered. */
-  applying: boolean;
-}
-
-/** Pointer travel before a press counts as a drag, not a click. */
-const DRAG_THRESHOLD = 4;
-/** Overflow below 1% of the frame is rounding, not something to crop. */
-const CROP_SLACK = 0.01;
-
-const clamp01 = (n: number) => Math.min(1, Math.max(0, n));
-
+/** The preview, as large as fits; a click plays or pauses it. */
 export function Stage(props: Props) {
-  const { src, aspect, croppable, playback, busy, error, crop, skipped, missing } = props;
+  const { src, aspect, playback, busy, error, skipped, missing } = props;
   const { video, playing } = playback;
   const [frameWidth, frameHeight] = FRAME[aspect];
-  const frameAspect = frameWidth / frameHeight;
-  const frame = useRef<HTMLDivElement>(null);
-  const [hovered, setHovered] = useState(false);
-  const [still, setStill] = useState<{ src: string; width: number; height: number } | null>(null);
-  const stillSize = crop && still?.src === crop.frame ? still : null;
-  const overflow = stillSize && fillFactor(stillSize.width, stillSize.height, frameAspect);
-  const nothingToCrop = overflow !== null && overflow.x < 1 + CROP_SLACK && overflow.y < 1 + CROP_SLACK;
-  const press = useRef<{ x: number; y: number; dragging: boolean } | null>(null);
-
-  function onPointerDown(e: PointerEvent<HTMLDivElement>) {
-    if (!src || e.button !== 0 || crop?.applying) return;
-    e.currentTarget.setPointerCapture(e.pointerId);
-    press.current = { x: e.clientX, y: e.clientY, dragging: false };
-  }
-
-  function onPointerMove(e: PointerEvent<HTMLDivElement>) {
-    const p = press.current;
-    if (!p) return;
-    const dx = e.clientX - p.x;
-    const dy = e.clientY - p.y;
-    if (!p.dragging) {
-      if (!croppable || Math.hypot(dx, dy) < DRAG_THRESHOLD) return;
-      p.dragging = true;
-      video.current?.pause();
-      props.onCropStart(video.current?.currentTime ?? 0);
-      return;
-    }
-    if (!crop || !overflow || nothingToCrop || !frame.current) return;
-    // Dragging the picture right shows more of its left side.
-    const rect = frame.current.getBoundingClientRect();
-    if (overflow.x >= 1 + CROP_SLACK) props.onCropChange(clamp01(crop.start - dx / (rect.width * (overflow.x - 1))));
-    else props.onCropChange(clamp01(crop.start - dy / (rect.height * (overflow.y - 1))));
-  }
-
-  function onPointerUp() {
-    const p = press.current;
-    press.current = null;
-    if (!p) return;
-    if (p.dragging) props.onCropEnd();
-    else playback.toggle();
-  }
 
   return (
     <section {...stylex.props(styles.area)}>
       <div {...stylex.props(styles.wrap)}>
         <div
-          ref={frame}
-          onPointerDown={onPointerDown}
-          onPointerMove={onPointerMove}
-          onPointerUp={onPointerUp}
-          onPointerCancel={onPointerUp}
-          onPointerEnter={() => setHovered(true)}
-          onPointerLeave={() => setHovered(false)}
-          {...withStyle(
-            stylex.props(
-              styles.frame,
-              styles.shaped,
-              src !== null && croppable && styles.grab,
-              crop !== null && styles.cropping,
-            ),
-            { "--ratio": `${frameWidth} / ${frameHeight}` } as CSSProperties,
-          )}
+          onClick={() => src && playback.toggle()}
+          {...withStyle(stylex.props(styles.frame, styles.shaped), {
+            "--ratio": `${frameWidth} / ${frameHeight}`,
+          } as CSSProperties)}
         >
           {src && (
             <video ref={video} key={src} src={src} playsInline {...playback.events} {...stylex.props(styles.video)} />
           )}
-          {crop?.frame && (
-            <CropLayer
-              src={crop.frame}
-              size={stillSize}
-              frameAspect={frameAspect}
-              offset={crop.offset}
-              onSize={(size) => setStill({ src: crop.frame!, ...size })}
-            />
-          )}
-          {src && croppable && hovered && !playing && !crop && !busy && (
-            <div {...stylex.props(styles.pill, styles.hint)}>拖动画面可调整裁切位置</div>
-          )}
-          {crop && nothingToCrop && !crop.applying && (
-            <div {...stylex.props(styles.pill)}>这段画面和画幅比例一致，不需要裁切</div>
-          )}
-          {crop?.applying ? (
-            <div {...stylex.props(styles.pill)}>正在应用裁切…</div>
-          ) : (
-            busy && <div {...stylex.props(styles.pill)}>正在更新预览…</div>
-          )}
+          {busy && <div {...stylex.props(styles.pill)}>正在更新预览…</div>}
           {error && !busy && <div {...stylex.props(styles.pill, styles.errorPill)}>{error}</div>}
-          {skipped && !missing && !error && !busy && !crop && !playing && (
+          {skipped && !missing && !error && !busy && !playing && (
             <div {...stylex.props(styles.pill, styles.notice)}>
               <WarningIcon size={12} />
               {skipped}原件丢失，预览里先跳过
             </div>
           )}
           {missing && (
-            // Its buttons must not start a crop drag on the frame below.
-            <div onPointerDown={(e) => e.stopPropagation()} {...stylex.props(styles.missing)}>
+            // Its buttons must not also play the preview below.
+            <div onClick={(e) => e.stopPropagation()} {...stylex.props(styles.missing)}>
               <WarningIcon size={28} />
               <h3 {...stylex.props(styles.missingTitle)}>{missing.title}</h3>
               <p {...stylex.props(styles.missingText)}>{missing.reason}</p>

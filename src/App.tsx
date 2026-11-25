@@ -5,7 +5,6 @@ import * as stylex from "@stylexjs/stylex";
 import {
   addFileClips,
   addIphoneClips,
-  cropFrame,
   defaultProject,
   fileUrl,
   loadProject,
@@ -24,7 +23,7 @@ import { ClipGrid } from "./components/ClipGrid";
 import { ClipPanel } from "./components/ClipPanel";
 import { Inspector, type InspectorPage } from "./components/Inspector";
 import { PickerSheet } from "./components/PickerSheet";
-import { Stage, type CropView } from "./components/Stage";
+import { Stage } from "./components/Stage";
 import { Timeline } from "./components/Timeline";
 import { TrimEditor } from "./components/TrimEditor";
 import { Welcome } from "./components/Welcome";
@@ -32,7 +31,6 @@ import {
   captionImageKey,
   clipSpans,
   clipStart,
-  crossfade,
   hasCaption,
   hasTitleText,
   isMissing,
@@ -187,13 +185,6 @@ interface Preview {
   error: string | null;
 }
 
-interface Crop extends Omit<CropView, "applying"> {
-  clipId: string;
-  /** "rendering" once the new crop is in the project; the overlay stays
-   * until the preview that includes it arrives. */
-  phase: "drag" | "rendering";
-}
-
 const SIDEBAR_KEY = "sidebarOpen";
 
 /** Whether the clip grid was left open; open the first time. */
@@ -229,7 +220,6 @@ function App() {
   const [drop, setDrop] = useState<Drop | null>(null);
   const [preview, setPreview] = useState<Preview>({ url: null, busy: false, error: null });
   const [seekTo, setSeekTo] = useState<SeekTo | null>(null);
-  const [crop, setCrop] = useState<Crop | null>(null);
   /** Clip open in the large trim view, which takes the preview's place. */
   const [trimming, setTrimming] = useState<string | null>(null);
   const [inspectorPage, setInspectorPage] = useState<InspectorPage>("title");
@@ -370,8 +360,6 @@ function App() {
   const watermarkReady = watermarkKey !== null && watermarkKey === markKey;
   const latest = useRef(project);
   latest.current = project;
-  const latestCrop = useRef(crop);
-  latestCrop.current = crop;
   /** Clip to show once the preview in the works arrives; `peek` when it
    * was edited, so play still starts from the top. */
   const seekAfterRender = useRef<{ id: string; peek: boolean } | null>(null);
@@ -394,11 +382,8 @@ function App() {
         if (seq === renderSeq.current) {
           setPreview({ url: fileUrl(path), busy: false, error: null });
           shownKey.current = renderKey(rendered);
-          const applied = latestCrop.current;
-          if (applied?.phase === "rendering") setCrop(null);
-          // Show the clip that was just cropped, trimmed or picked, not the
-          // start.
-          const target = applied?.phase === "rendering" ? { id: applied.clipId, peek: true } : seekAfterRender.current;
+          // Show the clip that was just trimmed or picked, not the start.
+          const target = seekAfterRender.current;
           seekAfterRender.current = null;
           if (target && rendered.clips.some((c) => c.id === target.id)) {
             setSeekTo({ time: clipStart(rendered, target.id), nonce: Date.now(), peek: target.peek });
@@ -407,7 +392,6 @@ function App() {
       } catch (e) {
         if (seq === renderSeq.current) {
           setPreview((p) => ({ ...p, busy: false, error: String(e) }));
-          setCrop((c) => (c?.phase === "rendering" ? null : c));
         }
       }
     }, PREVIEW_DELAY);
@@ -617,44 +601,6 @@ function App() {
     else seekAfterRender.current = { id, peek: false };
   }
 
-  // ---------- crop ----------
-  function startCrop(time: number) {
-    if (!project) return;
-    // Times on the preview, which leaves lost clips out.
-    const shown = playable(project);
-    const spans = clipSpans(shown);
-    const found = spans.findIndex((_, i) => time < spans.slice(0, i + 1).reduce((a, b) => a + b, 0));
-    const index = found === -1 ? shown.clips.length - 1 : found;
-    const clip = shown.clips[index];
-    if (!clip) return;
-    // The same moment inside the clip's own file: the time into its span,
-    // plus the half dissolve its span starts after, plus its trimmed head.
-    const spanStart = spans.slice(0, index).reduce((a, b) => a + b, 0);
-    const into = time - spanStart + (index > 0 ? crossfade(shown) / 2 : 0);
-    const at = Math.min(clip.trimStart + Math.max(0, into), clip.trimEnd);
-    setSelectedId(clip.id);
-    setCrop({ clipId: clip.id, frame: null, start: clip.cropOffset, offset: clip.cropOffset, phase: "drag" });
-    cropFrame(clip, at)
-      .then((path) => setCrop((c) => (c?.clipId === clip.id ? { ...c, frame: fileUrl(path) } : c)))
-      .catch((e) => {
-        setCrop(null);
-        setPreview((p) => ({ ...p, error: String(e) }));
-      });
-  }
-
-  function endCrop() {
-    const clip = project?.clips.find((c) => c.id === crop?.clipId);
-    // Whole percent: finer steps are invisible and only churn the preview.
-    const offset = crop ? Math.round(crop.offset * 100) / 100 : 0;
-    if (!crop || !clip || offset === clip.cropOffset) {
-      setCrop(null);
-      return;
-    }
-    // The crop is applied while composing, so only the preview re-renders.
-    dispatch({ type: "updateClip", id: clip.id, patch: { cropOffset: offset } });
-    setCrop({ ...crop, offset, phase: "rendering" });
-  }
-
   function finishTrim() {
     const id = trimming;
     setTrimming(null);
@@ -814,7 +760,6 @@ function App() {
           <Stage
             src={preview.url}
             aspect={project.output.aspect}
-            croppable={project.output.fill === "crop"}
             playback={playback}
             busy={preview.busy}
             error={preview.error}
@@ -830,10 +775,6 @@ function App() {
                 onReadd: () => (selectedLost.source === "file" ? void pickFiles() : openPicker()),
               }
             }
-            crop={crop && { ...crop, applying: crop.phase !== "drag" }}
-            onCropStart={startCrop}
-            onCropChange={(offset) => setCrop((c) => c && { ...c, offset })}
-            onCropEnd={endCrop}
           />
         )}
         {project.clips.length > 0 && (
@@ -856,10 +797,7 @@ function App() {
                   setReplacing(selectedId);
                   openPicker();
                 }}
-                onTrim={() => {
-                  setCrop(null);
-                  setTrimming(selectedId);
-                }}
+                onTrim={() => setTrimming(selectedId)}
                 dispatch={clipDispatch}
               />
             }
