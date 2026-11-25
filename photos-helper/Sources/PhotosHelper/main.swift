@@ -60,6 +60,7 @@ let usage = """
            photos-helper download <id>... --to <dir>
            photos-helper thumbnails <id>... --to <dir> [--size <pixels>]
            photos-helper score <image file>...
+           photos-helper durations <id>...
     """
 
 /// Splits "<id>... --to <dir> [--size <n>]" into its parts.
@@ -104,6 +105,12 @@ case "thumbnails":
             Thumbnails.fetch(
                 ids: batch.ids, from: session.files, to: batch.dir, maxPixels: batch.size ?? 320
             ))
+    }
+case "durations":
+    let ids = Array(args.dropFirst())
+    guard !ids.isEmpty else { fail(usage, code: 64) }
+    withSession { session in
+        printJSON(Durations.fetch(ids: ids, from: session.files), pretty: false)
     }
 case "score":
     let paths = Array(args.dropFirst())

@@ -402,9 +402,11 @@ const usable = (item: MediaItem) => item.kind !== "photo";
 /** Pause between automatic rereads of a phone that could not be read. */
 const RETRY_MS = 3000;
 
-/** Rough length of `items` in the reel, as AI selection counts it
- * (`LIVE_PHOTO_SECONDS` and `VIDEO_SECONDS` in src-tauri/src/select.rs). */
-const estimate = (items: MediaItem[]) => items.reduce((sum, item) => sum + (item.kind === "video" ? 5 : 2), 0);
+/** Rough length of `items` in the reel, in whole seconds, as AI selection
+ * counts it: the real length where AI has read it, otherwise
+ * `LIVE_PHOTO_SECONDS` or `VIDEO_SECONDS` (src-tauri/src/select.rs). */
+const estimate = (items: MediaItem[], verdicts: Map<string, AiVerdict>) =>
+  Math.round(items.reduce((sum, item) => sum + (verdicts.get(item.id)?.seconds ?? (item.kind === "video" ? 5 : 2)), 0));
 
 /** "26 秒" or "3 分 20 秒". */
 function formatSeconds(seconds: number): string {
@@ -440,6 +442,10 @@ function explainReason(reason: AiReason): [string, string] {
       return ["评分较低", "画面评分较低，可能模糊、太暗或逆光"];
     case "portrait":
       return ["人像", "有人像或自拍；打开「包含人像」才会选"];
+    case "short": {
+      const seconds = reason.seconds.toFixed(1);
+      return [`太短 · ${seconds} 秒`, `这张 Live Photo 只有 ${seconds} 秒，放进成片一闪而过`];
+    }
   }
 }
 
@@ -839,7 +845,13 @@ export function PickerSheet({
           ) : library.state !== "ready" ? null : chosen.size ? (
             <>
               <span {...stylex.props(styles.picked)}>
-                已选 {chosen.size} 项 · 约 {formatSeconds(estimate(items.filter((i) => chosen.has(i.id))))}
+                已选 {chosen.size} 项 · 约{" "}
+                {formatSeconds(
+                  estimate(
+                    items.filter((i) => chosen.has(i.id)),
+                    verdicts,
+                  ),
+                )}
               </span>
               <Button variant="ghost" onClick={() => setChosen(new Set())}>
                 <span {...stylex.props(styles.clear)}>清除</span>

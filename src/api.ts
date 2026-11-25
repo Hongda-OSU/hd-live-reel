@@ -33,7 +33,9 @@ export type AiReason =
   | { type: "utility" }
   | { type: "cut" }
   | { type: "lowScore" }
-  | { type: "portrait" };
+  | { type: "portrait" }
+  /** A Live Photo too short to show for long (`SHORT_LIVE_PHOTO`). */
+  | { type: "short"; seconds: number };
 
 export interface AiVerdict {
   id: string;
@@ -41,6 +43,8 @@ export interface AiVerdict {
   /** Aesthetics after penalties, about -1 to 1. */
   value: number;
   reason: AiReason;
+  /** Seconds it adds to the reel, by its real length once read. */
+  seconds: number;
 }
 
 // ---------- project.json ----------

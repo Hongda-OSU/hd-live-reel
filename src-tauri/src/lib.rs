@@ -176,11 +176,14 @@ async fn ai_select(
             })
             .unzip();
         let scores = iphone::score(&paths).map_err(|e| e.to_string())?;
+        let ids: Vec<String> = items.iter().map(|item| item.id.clone()).collect();
+        let lengths = iphone::durations(&ids, &cache.join("durations.json"));
         let candidates: Vec<select::Candidate> = items
             .into_iter()
             .zip(scores)
             .filter_map(|(item, score)| {
                 Some(select::Candidate {
+                    duration: lengths.get(&item.id).copied(),
                     id: item.id,
                     kind: item.kind,
                     taken_at: item.created_at,

@@ -4,6 +4,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::clips::{DEFAULT_SLICE, LONG_VIDEO};
 use crate::iphone::MediaKind;
 
 /// A new scene starts after this long without a picture, in seconds. The
@@ -29,10 +30,15 @@ const UTILITY_PENALTY: f64 = 0.3;
 const PLAIN_PENALTY: f64 = 0.5;
 /// Nothing scoring below this is picked, even to fill the target.
 pub const MIN_VALUE: f64 = 0.2;
-/// Expected length on the reel, in seconds: Live Photos run about 2 s and
-/// long videos start as a 5 s slice.
+/// Expected length on the reel, in seconds, when the video's own length
+/// isn't known: Live Photos run about 2 s and long videos start as a 5 s
+/// slice.
 const LIVE_PHOTO_SECONDS: f64 = 2.0;
 const VIDEO_SECONDS: f64 = 5.0;
+/// Live Photos shorter than this flash by on the reel, and squeeze every
+/// dissolve around them; they aren't picked. Of 35 shots on one trip, two
+/// ran 0.70 and 0.93 s and the rest 1.4 s or more.
+pub const SHORT_LIVE_PHOTO: f64 = 1.2;
 
 /// What `photos-helper score` says about one picture.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
@@ -57,6 +63,26 @@ pub struct Candidate {
     /// ISO 8601 UTC, as `photos-helper list` prints it.
     pub taken_at: Option<String>,
     pub score: Score,
+    /// The video's length in seconds, if it could be read.
+    #[serde(default)]
+    pub duration: Option<f64>,
+}
+
+impl Candidate {
+    /// Seconds it adds to the reel: a Live Photo's whole video, a long
+    /// video's opening slice.
+    fn reel_seconds(&self) -> f64 {
+        match (self.kind, self.duration) {
+            (MediaKind::Video, Some(d)) if d > LONG_VIDEO => DEFAULT_SLICE,
+            (_, Some(d)) => d,
+            (MediaKind::Video, None) => VIDEO_SECONDS,
+            (_, None) => LIVE_PHOTO_SECONDS,
+        }
+    }
+
+    fn too_short(&self) -> bool {
+        self.kind == MediaKind::LivePhoto && self.duration.is_some_and(|d| d < SHORT_LIVE_PHOTO)
+    }
 }
 
 /// Why an item was or wasn't picked; the frontend words it.
@@ -80,6 +106,10 @@ pub enum Reason {
     LowScore,
     /// A selfie or portrait, left out unless people are wanted.
     Portrait,
+    /// A Live Photo under `SHORT_LIVE_PHOTO` seconds long.
+    Short {
+        seconds: f64,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -90,6 +120,8 @@ pub struct Verdict {
     /// Aesthetics after penalties; stored as the clip's `aiScore`.
     pub value: f64,
     pub reason: Reason,
+    /// Seconds it would add to the reel, by its real length when known.
+    pub seconds: f64,
 }
 
 /// Picks about `target_seconds` of items, returning a verdict for every
@@ -128,6 +160,12 @@ pub fn select(candidates: &[Candidate], target_seconds: f64, people: bool) -> Ve
     let mut reasons: Vec<Option<Reason>> = vec![None; candidates.len()];
     let mut representatives: Vec<usize> = Vec::new();
     for &i in &by_value {
+        if candidates[i].too_short() {
+            reasons[i] = Some(Reason::Short {
+                seconds: candidates[i].reel_seconds(),
+            });
+            continue;
+        }
         if !people && candidates[i].score.face_area >= PORTRAIT_FACE {
             reasons[i] = Some(Reason::Portrait);
             continue;
@@ -175,10 +213,7 @@ pub fn select(candidates: &[Candidate], target_seconds: f64, people: bool) -> Ve
             break;
         };
         let i = queues[scene][next[scene]];
-        let seconds = match candidates[i].kind {
-            MediaKind::Video => VIDEO_SECONDS,
-            _ => LIVE_PHOTO_SECONDS,
-        };
+        let seconds = candidates[i].reel_seconds();
         reasons[i] = Some(if next[scene] == 0 {
             Reason::BestInScene
         } else {
@@ -210,6 +245,7 @@ pub fn select(candidates: &[Candidate], target_seconds: f64, people: bool) -> Ve
                 picked: picked[i],
                 value: value[i],
                 reason,
+                seconds: candidates[i].reel_seconds(),
             }
         })
         .collect()
@@ -276,6 +312,7 @@ mod tests {
                 face_area: 0.0,
                 feature_print: vec![angle.cos(), angle.sin()],
             },
+            duration: None,
         }
     }
 
@@ -411,10 +448,42 @@ mod tests {
     }
 
     #[test]
+    fn short_live_photos_are_left_out_and_real_lengths_fill_the_target() {
+        let with = |mut c: Candidate, seconds: f64| {
+            c.duration = Some(seconds);
+            c
+        };
+        // The best is too short; the others' real lengths, 2.5 + 2.5,
+        // fill 5 s where the 2 s guess would have taken a third.
+        let verdicts = select(
+            &[
+                with(photo("short", 0, 0.9, 0.0), 0.7),
+                with(photo("a", 1, 0.6, 1.0), 2.5),
+                with(photo("b", 2, 0.5, 2.0), 2.5),
+                photo("c", 3, 0.4, 3.0),
+            ],
+            5.0,
+            true,
+        );
+        assert_eq!(picked(&verdicts), ["a", "b"]);
+        assert_eq!(verdicts[0].reason, Reason::Short { seconds: 0.7 });
+        assert_eq!(verdicts[0].seconds, 0.7);
+        assert_eq!(verdicts[3].seconds, 2.0, "unknown length: the guess");
+
+        // A long video counts as its opening slice.
+        let mut video = with(photo("v", 0, 0.9, 0.0), 60.0);
+        video.kind = MediaKind::Video;
+        assert_eq!(video.reel_seconds(), DEFAULT_SLICE);
+        assert!(!video.too_short());
+    }
+
+    #[test]
     fn reasons_serialize_for_the_frontend() {
         let json = serde_json::to_value(Reason::Duplicate { of: "x".into() }).unwrap();
         assert_eq!(json, serde_json::json!({"type": "duplicate", "of": "x"}));
         let json = serde_json::to_value(Reason::BestInScene).unwrap();
         assert_eq!(json, serde_json::json!({"type": "bestInScene"}));
+        let json = serde_json::to_value(Reason::Short { seconds: 0.7 }).unwrap();
+        assert_eq!(json, serde_json::json!({"type": "short", "seconds": 0.7}));
     }
 }

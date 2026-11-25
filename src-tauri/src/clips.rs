@@ -238,8 +238,8 @@ struct Item {
 
 /// Videos longer than this start trimmed to their first `DEFAULT_SLICE`
 /// seconds, so one long video doesn't fill the reel by itself.
-const LONG_VIDEO: f64 = 10.0;
-const DEFAULT_SLICE: f64 = 5.0;
+pub const LONG_VIDEO: f64 = 10.0;
+pub const DEFAULT_SLICE: f64 = 5.0;
 
 /// Normalizes `item` under the cache id `id` and describes it, reporting
 /// the share done through `on_share`.

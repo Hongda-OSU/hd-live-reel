@@ -1,6 +1,7 @@
 //! Lists and copies photos from a USB-connected iPhone via the Swift
 //! `photos-helper` sidecar, which prints JSON.
 
+use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::fmt;
 use std::path::{Path, PathBuf};
@@ -187,6 +188,36 @@ pub fn thumbnails(ids: &[String], dir: &Path, max_pixels: u32) -> Result<Vec<Thu
                 }),
         })
         .collect())
+}
+
+/// Each item's video length in seconds, read from its header on the phone
+/// (a Live Photo's video, or the video itself). Lengths found are kept in
+/// `cache` as JSON, so each item is asked once; without the phone only
+/// those come back. Items whose length is unknown are left out.
+pub fn durations(ids: &[String], cache: &Path) -> HashMap<String, f64> {
+    #[derive(Deserialize)]
+    struct Found {
+        id: String,
+        seconds: Option<f64>,
+    }
+    let mut known: HashMap<String, f64> = std::fs::read(cache)
+        .ok()
+        .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+        .unwrap_or_default();
+    let missing: Vec<&String> = ids.iter().filter(|id| !known.contains_key(*id)).collect();
+    if !missing.is_empty() {
+        let mut args: Vec<&OsStr> = vec!["durations".as_ref()];
+        args.extend(missing.iter().map(OsStr::new));
+        if let Ok(found) = on_phone::<Vec<Found>, _, _>(args) {
+            known.extend(found.into_iter().filter_map(|f| Some((f.id, f.seconds?))));
+            if let Ok(json) = serde_json::to_vec(&known) {
+                let _ = std::fs::write(cache, json);
+            }
+        }
+    }
+    ids.iter()
+        .filter_map(|id| Some((id.clone(), *known.get(id)?)))
+        .collect()
 }
 
 /// Vision scores for each image file, in order; `None` where the helper
