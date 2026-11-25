@@ -423,9 +423,6 @@ export function Inspector({
                 />
               </Field>
             )}
-            <p {...stylex.props(ui.note)}>
-              {transition.type === "fade" ? "相邻两段画面和声音交叠过渡，总长会相应变短。" : "片段之间直接切换。"}
-            </p>
           </Group>
           <WatermarkGroup watermark={watermark} dispatch={dispatch} />
         </>
