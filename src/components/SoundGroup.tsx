@@ -3,24 +3,39 @@ import { open } from "@tauri-apps/plugin-dialog";
 import * as stylex from "@stylexjs/stylex";
 import { importMusic, type Audio } from "../api";
 import { musicName, type Action } from "../project";
-import { Button, Field, Group, Seg, Slider, ui } from "../ui";
+import { colors } from "../tokens.stylex";
+import { Button, Field, Group, Icon, Slider, Switch, ui } from "../ui";
 
 const AUDIO_EXTENSIONS = ["mp3", "m4a", "aac", "wav", "aif", "aiff", "flac", "ogg"];
 
 const styles = stylex.create({
+  // The song's name with a note before it and 更换… at the right.
   track: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    minWidth: 0,
+  },
+  song: {
+    display: "flex",
+    alignItems: "center",
+    gap: 6,
+    minWidth: 0,
+    flexGrow: 1,
+    color: colors.muted,
+  },
+  name: {
     minWidth: 0,
     overflow: "hidden",
+    color: colors.text,
+    fontSize: 12,
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
-    fontSize: 12,
+  },
+  none: {
+    color: colors.muted,
   },
 });
-
-const NOTES: Partial<Record<Audio["mode"], string>> = {
-  music: "配乐自动裁到视频长度，结尾 2 秒淡出；比视频短会循环。",
-  mix: "配乐为主，原声压低保留。",
-};
 
 const percent = (gain: number) => `${Math.round(gain * 100)}%`;
 
@@ -29,7 +44,10 @@ interface Props {
   dispatch: (action: Action) => void;
 }
 
-/** Original sound, music, or both, with the music file picker. */
+/** The 声音 page: the clips' own sound, always there with a volume (0
+ * mutes it), and music switched on or off over it. Stored as `mode`:
+ * music off is `original`, on is `mix`. The older music-only `music`
+ * mode shows as the clips' sound at 0 and becomes `mix` once moved. */
 export function SoundGroup({ audio, dispatch }: Props) {
   const set = (patch: Partial<Audio>) => dispatch({ type: "updateAudio", patch });
   const [importing, setImporting] = useState(false);
@@ -49,60 +67,61 @@ export function SoundGroup({ audio, dispatch }: Props) {
     }
   }
 
-  const withMusic = audio.mode !== "original";
+  const music = audio.mode !== "original";
+  const clips = audio.mode === "music" ? 0 : audio.originalVolume;
   const track = audio.musicPath ? musicName(audio.musicPath) : null;
-  const note = withMusic && !audio.musicPath ? "还没选音乐，现在播放的仍是原声。" : NOTES[audio.mode];
   return (
-    <Group>
-      <Field>
-        <Seg<Audio["mode"]>
-          options={[
-            ["original", "原声"],
-            ["music", "配乐"],
-            ["mix", "配乐 + 原声"],
-          ]}
-          value={audio.mode}
-          onChange={(mode) => set({ mode })}
-        />
-      </Field>
-      {withMusic && (
-        <Field label="配乐" stacked>
-          <div {...stylex.props(ui.inline)}>
-            <span title={track ?? undefined} {...stylex.props(styles.track, ui.spacer)}>
-              {importing ? "正在导入…" : (track ?? "还没选音乐")}
-            </span>
-            <Button disabled={importing} onClick={chooseMusic}>
-              {audio.musicPath ? "更换…" : "选择音乐…"}
-            </Button>
-          </div>
-        </Field>
-      )}
-      {withMusic && (
-        <Field label="配乐音量">
+    <>
+      <Group title="原声">
+        <Field label="音量">
           <Slider
             min={0}
             max={2}
             step={0.05}
-            value={audio.musicVolume}
-            shown={percent(audio.musicVolume)}
-            onChange={(musicVolume) => set({ musicVolume })}
+            value={clips}
+            shown={percent(clips)}
+            onChange={(originalVolume) => set({ originalVolume, mode: music ? "mix" : "original" })}
           />
         </Field>
-      )}
-      {audio.mode === "mix" && (
-        <Field label="原声音量">
-          <Slider
-            min={0}
-            max={2}
-            step={0.05}
-            value={audio.originalVolume}
-            shown={percent(audio.originalVolume)}
-            onChange={(originalVolume) => set({ originalVolume })}
-          />
-        </Field>
-      )}
-      {error && <p {...stylex.props(ui.error)}>{error}</p>}
-      {note && <p {...stylex.props(ui.note)}>{note}</p>}
-    </Group>
+      </Group>
+      <Group
+        title="配乐"
+        action={<Switch on={music} label="配乐" onToggle={() => set({ mode: music ? "original" : "mix" })} />}
+      >
+        {music && (
+          <>
+            <Field label="音乐">
+              <div {...stylex.props(styles.track)}>
+                <span title={track ?? undefined} {...stylex.props(styles.song)}>
+                  <Icon>
+                    <path d="M6 12.5V4l7-1.5V11" />
+                    <circle cx="4.5" cy="12.5" r="1.5" />
+                    <circle cx="11.5" cy="11" r="1.5" />
+                  </Icon>
+                  <span {...stylex.props(styles.name, !track && !importing && styles.none)}>
+                    {importing ? "正在导入…" : (track ?? "还没选")}
+                  </span>
+                </span>
+                <Button variant="link" disabled={importing} onClick={chooseMusic}>
+                  {audio.musicPath ? "更换…" : "选择…"}
+                </Button>
+              </div>
+            </Field>
+            <Field label="音量">
+              <Slider
+                min={0}
+                max={2}
+                step={0.05}
+                value={audio.musicVolume}
+                shown={percent(audio.musicVolume)}
+                onChange={(musicVolume) => set({ musicVolume })}
+              />
+            </Field>
+            {error && <p {...stylex.props(ui.error)}>{error}</p>}
+            {!audio.musicPath && !importing && <p {...stylex.props(ui.note)}>还没选音乐，现在播放的仍是原声。</p>}
+          </>
+        )}
+      </Group>
+    </>
   );
 }
