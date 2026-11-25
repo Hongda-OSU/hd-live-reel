@@ -19,14 +19,17 @@ const styles = stylex.create({
   },
 });
 
-/** A native drop-down for one of several labelled values. */
+/** A native drop-down for one of several labelled values; `groups`
+ * follow `options` under their own headings. */
 export function Select<T extends string>({
   options,
+  groups = [],
   value,
   onChange,
   label,
 }: {
   options: [T, string][];
+  groups?: [string, [T, string][]][];
   value: T;
   onChange: (value: T) => void;
   label: string;
@@ -42,6 +45,15 @@ export function Select<T extends string>({
         <option key={v} value={v}>
           {text}
         </option>
+      ))}
+      {groups.map(([heading, items]) => (
+        <optgroup key={heading} label={heading}>
+          {items.map(([v, text]) => (
+            <option key={v} value={v}>
+              {text}
+            </option>
+          ))}
+        </optgroup>
       ))}
     </select>
   );

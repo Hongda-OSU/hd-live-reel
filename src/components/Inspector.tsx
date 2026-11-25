@@ -142,6 +142,29 @@ const PAGES: [InspectorPage, string, ReactNode][] = [
   ["export", "导出", <path key="export" d="M8 10V2.5M5 5.5 8 2.5l3 3M3.5 8.5v4a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1v-4" />],
 ];
 
+/** The looks in the 滤镜 menu after 原片: ones for the places I shoot,
+ * then styled ones. More go in either group. */
+const FILTER_GROUPS: [string, [Filter["preset"], string][]][] = [
+  [
+    "自然",
+    [
+      ["forest", "林间"],
+      ["river", "水色"],
+      ["golden", "暖阳"],
+      ["sky", "晴空"],
+    ],
+  ],
+  [
+    "风格",
+    [
+      ["court", "球场"],
+      ["city", "城市"],
+      ["vapor", "蒸汽波"],
+      ["mono", "黑白"],
+    ],
+  ],
+];
+
 const NEUTRAL: Pick<Filter, "brightness" | "contrast" | "saturation"> = {
   brightness: 0,
   contrast: 1,
@@ -322,36 +345,30 @@ export function Inspector({
       {page === "picture" && (
         <>
           <Group title="滤镜">
-            {/* Two rows; one value, so a pick in either row clears the other.
-              Natural looks first, styled ones below. */}
-            <Field>
-              <Seg<Filter["preset"]>
-                options={[
-                  ["none", "原片"],
-                  ["forest", "林间"],
-                  ["river", "水色"],
-                  ["golden", "暖阳"],
-                  ["sky", "晴空"],
-                ]}
-                value={filter.preset}
-                onChange={(preset) => setFilter({ preset })}
-              />
-              <Seg<Filter["preset"]>
-                options={[
-                  ["court", "球场"],
-                  ["city", "城市"],
-                  ["vapor", "蒸汽波"],
-                  ["mono", "黑白"],
-                ]}
+            <Field label="预设">
+              <Select<Filter["preset"]>
+                label="滤镜"
+                options={[["none", "原片"]]}
+                groups={FILTER_GROUPS}
                 value={filter.preset}
                 onChange={(preset) => setFilter({ preset })}
               />
             </Field>
+          </Group>
+          <Group
+            title="调整"
+            action={
+              <Button variant="link" disabled={!adjusted} onClick={() => setFilter(NEUTRAL)}>
+                还原
+              </Button>
+            }
+          >
             <Field label="亮度">
               <Slider
                 min={-0.2}
                 max={0.2}
                 step={0.01}
+                origin={0}
                 value={filter.brightness}
                 shown={signed(filter.brightness)}
                 onChange={(brightness) => setFilter({ brightness })}
@@ -362,6 +379,7 @@ export function Inspector({
                 min={0.7}
                 max={1.3}
                 step={0.01}
+                origin={1}
                 value={filter.contrast}
                 shown={signed(filter.contrast - 1)}
                 onChange={(contrast) => setFilter({ contrast })}
@@ -372,17 +390,13 @@ export function Inspector({
                 min={0.5}
                 max={1.5}
                 step={0.01}
+                origin={1}
                 value={filter.saturation}
                 shown={signed(filter.saturation - 1)}
                 disabled={filter.preset === "mono"}
                 onChange={(saturation) => setFilter({ saturation })}
               />
             </Field>
-            {adjusted && (
-              <Button variant="ghost" onClick={() => setFilter(NEUTRAL)}>
-                重置滑块
-              </Button>
-            )}
           </Group>
           <Group title="转场">
             <Field>
