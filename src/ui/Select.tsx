@@ -1,10 +1,21 @@
 import * as stylex from "@stylexjs/stylex";
+import { colors } from "../tokens.stylex";
 import { ui } from "./styles";
 
 const styles = stylex.create({
+  // The text field's focus ring stays on after the menu closes, so show
+  // it only when focus came from the keyboard, like a Mac pop-up button.
   select: {
     width: "100%",
     paddingInline: 6,
+    borderColor: {
+      default: colors.border,
+      ":focus-visible": colors.accent,
+    },
+    outline: {
+      default: "none",
+      ":focus-visible": `3px solid ${colors.accentSoft}`,
+    },
   },
 });
 
