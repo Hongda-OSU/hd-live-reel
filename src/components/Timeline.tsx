@@ -17,7 +17,7 @@ import type { Clip } from "../api";
 import type { Playback } from "../hooks/usePlayback";
 import { clipLabel, formatTime, hasCaption, isMissing } from "../project";
 import { colors, shadows } from "../tokens.stylex";
-import { Icon, withStyle } from "../ui";
+import { Icon, Slider, withStyle } from "../ui";
 import { WarningIcon } from "./WarningIcon";
 
 /** Space before the first clip and after the last, in px. */
@@ -101,9 +101,8 @@ const styles = stylex.create({
     color: colors.muted,
   },
   zoomRange: {
+    display: "block",
     width: 90,
-    margin: 0,
-    accentColor: colors.accent,
   },
   // Scrolls sideways once zoomed past the window's width.
   scroller: {
@@ -443,16 +442,9 @@ export function Timeline({ clips, spans, selectedId, thumbs, playback, ready, on
             <circle cx="7" cy="7" r="4.5" />
             <path d="M10.5 10.5 14 14M5 7h4" />
           </svg>
-          <input
-            type="range"
-            aria-label="缩放时间线"
-            min={0}
-            max={1}
-            step={0.01}
-            value={zoom}
-            onChange={(e) => setZoom(Number(e.target.value))}
-            {...stylex.props(styles.zoomRange)}
-          />
+          <span {...stylex.props(styles.zoomRange)}>
+            <Slider label="缩放时间线" min={0} max={1} step={0.01} value={zoom} onChange={setZoom} />
+          </span>
           <svg viewBox="0 0 16 16" aria-hidden {...stylex.props(styles.badgeIcon)}>
             <circle cx="7" cy="7" r="4.5" />
             <path d="M10.5 10.5 14 14M5 7h4M7 5v4" />

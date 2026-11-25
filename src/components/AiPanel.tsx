@@ -1,16 +1,16 @@
 import { useEffect } from "react";
 import * as stylex from "@stylexjs/stylex";
 import { colors, shadows } from "../tokens.stylex";
-import { Button, Field, Switch, ui } from "../ui";
+import { Button, Field, Slider, SLIDER_THUMB, Switch, ui } from "../ui";
 
 /** Default and range of the AI target, in seconds; Live Photos run ~2 s. */
 export const TARGET = { initial: 40, min: 15, max: 180, step: 5 };
 const SECONDS_PER_PICK = 2;
 /** A tick every 30 s, plus the minimum; minutes are labelled. */
 const MARKS = [TARGET.min, 30, 60, 90, 120, 150, 180];
-/** WebKit's range thumb is 24 px wide and its centre stops half of
- * that short of each end, so ticks span the track less the thumb. */
-const THUMB = 24;
+/** Ticks span the track less the thumb, whose centre stops half of it
+ * short of each end. */
+const THUMB = SLIDER_THUMB;
 
 const styles = stylex.create({
   panel: {
@@ -33,12 +33,6 @@ const styles = stylex.create({
   pool: {
     margin: 0,
     fontSize: 12,
-  },
-  slider: {
-    display: "block",
-    width: "100%",
-    margin: 0,
-    accentColor: colors.accent,
   },
   scale: {
     position: "relative",
@@ -124,15 +118,13 @@ export function AiPanel({ poolSize, again, target, people, busy, onTarget, onPeo
           }
         >
           <div>
-            <input
-              type="range"
-              aria-label="目标时长"
+            <Slider
+              label="目标时长"
               min={TARGET.min}
               max={TARGET.max}
               step={TARGET.step}
               value={target}
-              onChange={(e) => onTarget(Number(e.target.value))}
-              {...stylex.props(styles.slider)}
+              onChange={onTarget}
             />
             <div aria-hidden {...stylex.props(styles.scale)}>
               {MARKS.map((s) => (

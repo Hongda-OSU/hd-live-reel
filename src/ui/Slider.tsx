@@ -3,8 +3,11 @@ import * as stylex from "@stylexjs/stylex";
 import { colors } from "../tokens.stylex";
 import { ui, withStyle } from "./styles";
 
-/** Thumb diameter; the input is this tall so the thumb isn't clipped. */
-const THUMB = 15;
+/** Thumb diameter; the input is this tall so the thumb isn't clipped.
+ * The thumb's centre stops half of it short of each end, which marks
+ * laid along the track need to allow for. */
+export const SLIDER_THUMB = 15;
+const THUMB = SLIDER_THUMB;
 
 const styles = stylex.create({
   // As tall as the other controls, so slider rows keep the same rhythm.
@@ -47,9 +50,10 @@ const styles = stylex.create({
   },
 });
 
-/** A range input with its formatted value on the right. The fill grows
- * from `origin` (default `min`); a middle origin, such as 0 on a −/+
- * scale, gets a tick so "no change" is easy to find. */
+/** A range input with its formatted value on the right, when `shown`
+ * is given. The fill grows from `origin` (default `min`); a middle
+ * origin, such as 0 on a −/+ scale, gets a tick so "no change" is easy
+ * to find. */
 export function Slider({
   min,
   max,
@@ -58,14 +62,17 @@ export function Slider({
   shown,
   origin = min,
   disabled = false,
+  label,
   onChange,
 }: {
   min: number;
   max: number;
   step: number;
   value: number;
-  shown: string;
+  shown?: string;
   origin?: number;
+  /** Names it for screen readers when no Field label does. */
+  label?: string;
   disabled?: boolean;
   onChange: (value: number) => void;
 }) {
@@ -74,6 +81,7 @@ export function Slider({
     <div {...stylex.props(ui.inline, styles.row, disabled && styles.disabled)}>
       <input
         type="range"
+        aria-label={label}
         min={min}
         max={max}
         step={step}
@@ -86,7 +94,7 @@ export function Slider({
           "--tick": `${pct(origin)}%`,
         } as CSSProperties)}
       />
-      <span {...stylex.props(ui.value)}>{shown}</span>
+      {shown !== undefined && <span {...stylex.props(ui.value)}>{shown}</span>}
     </div>
   );
 }

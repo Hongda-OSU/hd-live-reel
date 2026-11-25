@@ -9,7 +9,7 @@ export { IconButton } from "./IconButton";
 export { NumberField } from "./NumberField";
 export { Seg } from "./Seg";
 export { Select } from "./Select";
-export { Slider } from "./Slider";
+export { Slider, SLIDER_THUMB } from "./Slider";
 export { Swatches } from "./Swatches";
 export { Switch } from "./Switch";
 export { ui, withStyle } from "./styles";
