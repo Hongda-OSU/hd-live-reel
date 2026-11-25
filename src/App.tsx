@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useEffectEvent, useMemo, useReducer, useRef, useState } from "react";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
-import { ask, open } from "@tauri-apps/plugin-dialog";
+import { ask, message, open } from "@tauri-apps/plugin-dialog";
 import * as stylex from "@stylexjs/stylex";
 import {
   addFileClips,
   addIphoneClips,
   defaultProject,
+  saveDefaults,
   fileUrl,
   loadProject,
   onClipsProgress,
@@ -551,13 +552,35 @@ function App() {
     setSelectedId(null);
   }
 
-  async function resetSettings() {
+  /** Keeps this project's looks as where new and cleared projects start. */
+  async function keepDefaults() {
+    if (!project) return;
     const confirmed = await ask(
-      "文字样式、片头的位置和时长、声音、滤镜和转场会回到新工程的样子。片头文字、配乐文件和导出文件夹保留，片段和字幕不受影响。",
-      { title: "恢复默认设置", kind: "warning", okLabel: "恢复", cancelLabel: "取消" },
+      "以后「清空工程」和新工程都从这套设置开始。\n\n会存：片头和字幕的样式、滤镜和调整、转场、水印、原声和配乐的音量。\n不存：片段、片头和字幕的文字、配乐、文件名和导出文件夹。",
+      { title: "存为我的默认设置？", okLabel: "存为默认", cancelLabel: "取消" },
     );
     if (!confirmed) return;
-    dispatch({ type: "resetSettings", defaults: await defaultProject() });
+    try {
+      await saveDefaults(project);
+    } catch (e) {
+      await message(String(e), { title: "没能存为默认设置", kind: "error" });
+    }
+  }
+
+  /** Back to the user's kept settings, or the built-in ones. */
+  async function resetSettings(factory: boolean) {
+    const to = factory ? "app 出厂的样子" : "你存的默认设置（没存过就是出厂设置）";
+    const confirmed = await ask(
+      `文字样式、片头的位置和时长、声音、滤镜、转场和水印会回到${to}。片头文字、配乐文件和导出文件夹保留，片段和字幕不受影响。`,
+      {
+        title: factory ? "恢复出厂设置" : "恢复为我的默认设置",
+        kind: "warning",
+        okLabel: "恢复",
+        cancelLabel: "取消",
+      },
+    );
+    if (!confirmed) return;
+    dispatch({ type: "resetSettings", defaults: await defaultProject(factory) });
   }
 
   /** Edits in the clip panel, such as a caption, show on that clip once
@@ -647,7 +670,9 @@ function App() {
     {
       add: idle,
       export: idle && clipCount > 0,
+      keep: idle && clipCount > 0 && !exporting,
       reset: idle && clipCount > 0 && !exporting,
+      factory: idle && clipCount > 0 && !exporting,
       clear: idle && clipCount > 0 && !exporting,
       first: canMove,
       last: canMove,
@@ -659,7 +684,9 @@ function App() {
       else if (command === "add") openPicker();
       else if (command === "export") setInspectorPage("export");
       else if (command === "clear") void clearProject();
-      else if (command === "reset") void resetSettings();
+      else if (command === "keep") void keepDefaults();
+      else if (command === "reset") void resetSettings(false);
+      else if (command === "factory") void resetSettings(true);
       else moveSelected({ to: command === "first" ? 0 : clipCount - 1 });
     },
   );

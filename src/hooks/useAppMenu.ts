@@ -1,13 +1,15 @@
 import { useEffect, useEffectEvent, useState } from "react";
 import { Menu, MenuItem, PredefinedMenuItem, Submenu } from "@tauri-apps/api/menu";
 
-export type MenuCommand = "add" | "export" | "reset" | "clear" | "first" | "last" | "sidebar";
+export type MenuCommand = "add" | "export" | "keep" | "reset" | "factory" | "clear" | "first" | "last" | "sidebar";
 
 const COMMANDS: [MenuCommand, string, string][] = [
   ["add", "添加照片…", "CmdOrCtrl+O"],
   ["export", "导出…", "CmdOrCtrl+E"],
   // Rarely wanted, so here rather than on every settings page.
-  ["reset", "恢复默认设置…", ""],
+  ["keep", "存为我的默认设置…", ""],
+  ["reset", "恢复为我的默认设置…", ""],
+  ["factory", "恢复出厂设置…", ""],
   ["clear", "清空工程…", "CmdOrCtrl+Shift+Backspace"],
   // No shortcut: ⌥← and ⌥→ already move a clip, and a menu shortcut
   // would also fire while typing a caption.
@@ -77,7 +79,10 @@ export function useAppMenu(
               commands.get("add")!,
               commands.get("export")!,
               await separator(),
+              commands.get("keep")!,
               commands.get("reset")!,
+              commands.get("factory")!,
+              await separator(),
               commands.get("clear")!,
               await separator(),
               await PredefinedMenuItem.new({ item: "CloseWindow", text: "关闭窗口" }),
@@ -110,12 +115,22 @@ export function useAppMenu(
     })();
   }, []);
 
-  const { add, export: exporting, reset, clear, first, last, sidebar } = enabled;
+  const { add, export: exporting, keep, reset, factory, clear, first, last, sidebar } = enabled;
   useEffect(() => {
     if (!items) return;
-    const now: Record<MenuCommand, boolean> = { add, export: exporting, reset, clear, first, last, sidebar };
+    const now: Record<MenuCommand, boolean> = {
+      add,
+      export: exporting,
+      keep,
+      reset,
+      factory,
+      clear,
+      first,
+      last,
+      sidebar,
+    };
     for (const [id, item] of items) void item.setEnabled(now[id]);
-  }, [items, add, exporting, reset, clear, first, last, sidebar]);
+  }, [items, add, exporting, keep, reset, factory, clear, first, last, sidebar]);
 
   useEffect(() => {
     void items?.get("sidebar")!.setText(sidebarOpen ? "隐藏片段栏" : "显示片段栏");

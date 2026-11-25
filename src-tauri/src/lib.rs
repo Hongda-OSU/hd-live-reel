@@ -131,10 +131,20 @@ fn save_project(current: State<CurrentProject>, project: project::Project) -> Re
 }
 
 /// Photos, videos and Live Photos on the connected iPhone, newest first.
-/// A new project's settings, for resetting the open one's.
+/// A new project's settings, for clearing or resetting the open one:
+/// the user's kept settings, or the built-in ones when `factory`.
 #[tauri::command]
-fn default_project() -> project::Project {
-    project::Project::default()
+fn default_project(app: AppHandle, factory: bool) -> Result<project::Project, String> {
+    if factory {
+        return Ok(project::Project::default());
+    }
+    Ok(project_store(&app)?.defaults())
+}
+
+/// Keeps `project`'s settings as where new projects start.
+#[tauri::command]
+fn save_defaults(app: AppHandle, project: project::Project) -> Result<(), String> {
+    project_store(&app)?.save_defaults(&project)
 }
 
 #[tauri::command]
@@ -347,6 +357,7 @@ pub fn run() {
             load_project,
             save_project,
             default_project,
+            save_defaults,
             list_iphone_media,
             thumbnails,
             add_iphone_clips,

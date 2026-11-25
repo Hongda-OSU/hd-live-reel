@@ -485,6 +485,36 @@ impl Project {
         changed
     }
 
+    /// What a new project starts from when this one's settings are kept
+    /// as the user's own: its looks, without its clips, words, music
+    /// track, name or export folder.
+    pub fn as_defaults(&self) -> Project {
+        Project {
+            title: Title {
+                text: String::new(),
+                subtitle: String::new(),
+                text_image: None,
+                ..self.title.clone()
+            },
+            filter: self.filter.clone(),
+            audio: Audio {
+                original_volume: self.audio.original_volume,
+                music_volume: self.audio.music_volume,
+                ..Audio::default()
+            },
+            transition: self.transition.clone(),
+            output: Output {
+                folder: None,
+                ..self.output.clone()
+            },
+            watermark: Watermark {
+                image: None,
+                ..self.watermark.clone()
+            },
+            ..Project::default()
+        }
+    }
+
     /// Moves a watermark lettered in an older style to `Pen`, dropping its
     /// image so the frontend draws it again. Returns whether it changed.
     pub fn retire_old_mark(&mut self) -> bool {
@@ -537,6 +567,23 @@ impl Store {
         Self { dir: data_dir }
     }
 
+    fn defaults_path(&self) -> PathBuf {
+        self.dir.join("defaults.json")
+    }
+
+    /// The user's own starting settings, or the built-in ones if none
+    /// were kept or the file can no longer be read.
+    pub fn defaults(&self) -> Project {
+        load(&self.defaults_path())
+            .map(|kept| kept.as_defaults())
+            .unwrap_or_default()
+    }
+
+    /// Keeps `project`'s settings as where new projects start.
+    pub fn save_defaults(&self, project: &Project) -> Result<(), String> {
+        save(&self.defaults_path(), &project.as_defaults())
+    }
+
     /// Reopens the last project, or starts a fresh one if there is none
     /// (or it can no longer be read).
     pub fn open_last(&self) -> Result<(PathBuf, Project), String> {
@@ -558,7 +605,7 @@ impl Store {
             millis += 1;
             path = self.dir.join("projects").join(format!("{millis}.json"));
         }
-        let project = Project::default();
+        let project = self.defaults();
         save(&path, &project)?;
         self.remember(&path)?;
         Ok((path, project))
@@ -855,6 +902,58 @@ mod tests {
         // The fresh file may reuse the deleted name if created in the same ms.
         assert!(fresh_saved);
         assert_eq!(fresh, Project::default());
+    }
+
+    #[test]
+    fn kept_settings_start_new_projects_without_the_old_ones_words() {
+        let dir = temp_dir("defaults");
+        let store = Store::new(dir.clone());
+        let built_in = store.defaults();
+
+        let mut project = Project {
+            name: "Devil's Lake".into(),
+            clips: vec![Clip {
+                caption: Some(Caption::default()),
+                ..clip_for_images()
+            }],
+            ..Project::default()
+        };
+        project.title.text = "Turkey Run".into();
+        project.title.font = "Songti SC".into();
+        project.title.font_size = 56;
+        project.title.text_image = Some("/c/titles/t.png".into());
+        project.filter.preset = Preset::Forest;
+        project.audio.mode = AudioMode::Mix;
+        project.audio.music_path = Some("/c/music/song.flac".into());
+        project.audio.original_volume = 0.4;
+        project.transition.duration = 0.5;
+        project.output.folder = Some("/Users/me/Movies".into());
+        project.watermark.size = 48;
+        project.watermark.image = Some("/c/titles/m.png".into());
+        store.save_defaults(&project).unwrap();
+        let kept = store.defaults();
+        let (_, fresh) = store.create().unwrap();
+
+        std::fs::write(dir.join("defaults.json"), b"{ not json").unwrap();
+        let damaged = store.defaults();
+        std::fs::remove_dir_all(&dir).unwrap();
+
+        assert_eq!(built_in, Project::default(), "none kept yet");
+        assert_eq!(kept.title.font, "Songti SC");
+        assert_eq!(kept.title.font_size, 56);
+        assert_eq!(kept.filter.preset, Preset::Forest);
+        assert_eq!(kept.audio.original_volume, 0.4);
+        assert_eq!(kept.transition.duration, 0.5);
+        assert_eq!(kept.watermark.size, 48);
+        assert!(kept.clips.is_empty() && kept.name.is_empty());
+        assert_eq!(kept.title.text, "", "words stay with their project");
+        assert_eq!(kept.title.text_image, None);
+        assert_eq!(kept.audio.mode, AudioMode::Original, "music is per video");
+        assert_eq!(kept.audio.music_path, None);
+        assert_eq!(kept.output.folder, None);
+        assert_eq!(kept.watermark.image, None);
+        assert_eq!(fresh, kept, "new projects start from them");
+        assert_eq!(damaged, Project::default());
     }
 
     #[test]
