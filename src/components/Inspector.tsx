@@ -9,8 +9,35 @@ import { WatermarkGroup } from "./WatermarkGroup";
 
 /** Fade used by the "淡出" choice, in seconds. */
 const FADE = 0.3;
-/** Cross-dissolve length when "淡入淡出" is first picked, in seconds. */
-const DISSOLVE = 0.3;
+/** The transitions after 硬切, each with the length it looked right at
+ * in side-by-side samples; picking one sets that length. */
+const TRANSITIONS: [string, [Transition["type"], string, number][]][] = [
+  [
+    "淡化",
+    [
+      ["fade", "叠化", 0.3],
+      ["black", "黑场过渡", 0.5],
+      ["gray", "褪色过渡", 0.5],
+    ],
+  ],
+  [
+    "移动",
+    [
+      ["push", "推入", 0.4],
+      ["pushUp", "上推", 0.4],
+      ["zoom", "放大", 0.5],
+      ["blur", "横向模糊", 0.4],
+    ],
+  ],
+  [
+    "图形",
+    [
+      ["circle", "圆形展开", 0.5],
+      ["wipe", "擦除", 0.4],
+    ],
+  ],
+];
+const TRANSITION_LENGTH = new Map(TRANSITIONS.flatMap(([, items]) => items.map(([type, , length]) => [type, length])));
 
 /** Common gaps between title and subtitle, in pixels at 1080 wide. */
 const LINE_GAPS: [number, string][] = [
@@ -399,19 +426,18 @@ export function Inspector({
             </Field>
           </Group>
           <Group title="转场">
-            <Field>
-              <Seg<Transition["type"]>
-                options={[
-                  ["none", "硬切"],
-                  ["fade", "淡入淡出"],
-                ]}
+            <Field label="样式">
+              <Select<Transition["type"]>
+                label="转场"
+                options={[["none", "硬切"]]}
+                groups={TRANSITIONS.map(([heading, items]) => [heading, items.map(([type, text]) => [type, text])])}
                 value={transition.type}
                 onChange={(type) =>
-                  setTransition(type === "fade" && transition.duration <= 0 ? { type, duration: DISSOLVE } : { type })
+                  setTransition({ type, duration: TRANSITION_LENGTH.get(type) ?? transition.duration })
                 }
               />
             </Field>
-            {transition.type === "fade" && (
+            {transition.type !== "none" && (
               <Field label="时长">
                 <Slider
                   min={0.2}

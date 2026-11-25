@@ -9,7 +9,8 @@
 use std::path::{Path, PathBuf};
 
 use hd_live_reel_lib::ffmpeg::{
-    compose, loudness, normalize, probe, Composition, Fill, Grade, Quality, Segment, Shape, Title,
+    compose, loudness, normalize, probe, Composition, Fill, Grade, Join, Quality, Segment, Shape,
+    Title,
 };
 
 const BASELINE: &str = "devils-lake-baseline.mp4";
@@ -63,7 +64,7 @@ fn matches_compose_py_baseline() {
             clips,
             shape: Shape::Portrait,
             fill: Fill::Crop,
-            transition: 0.0,
+            transition: Join::CUT,
             grade: Grade::default(),
             title,
             music: None,

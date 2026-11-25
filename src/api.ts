@@ -115,8 +115,9 @@ export interface Audio {
 }
 
 export interface Transition {
-  type: "none" | "fade";
-  /** Seconds each join cross-dissolves over. */
+  /** "fade" is a cross-dissolve; the rest are other FFmpeg xfade looks. */
+  type: "none" | "fade" | "black" | "gray" | "push" | "pushUp" | "zoom" | "blur" | "circle" | "wipe";
+  /** Seconds each join takes; the sound cross-fades over the same time. */
   duration: number;
 }
 

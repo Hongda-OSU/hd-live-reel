@@ -256,7 +256,16 @@ impl Default for Audio {
 #[serde(rename_all = "camelCase")]
 pub enum TransitionKind {
     None,
+    /// A cross-dissolve; named before the other looks existed.
     Fade,
+    Black,
+    Gray,
+    Push,
+    PushUp,
+    Zoom,
+    Blur,
+    Circle,
+    Wipe,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -647,6 +656,12 @@ mod tests {
             assert_eq!(serde_json::to_value(aspect).unwrap(), ratio);
         }
         assert_eq!(json["transition"]["type"], "none");
+        for (kind, name) in [
+            (TransitionKind::Fade, "fade"),
+            (TransitionKind::PushUp, "pushUp"),
+        ] {
+            assert_eq!(serde_json::to_value(kind).unwrap(), name);
+        }
         assert_eq!(json["title"]["showFor"], 1.0);
         assert_eq!(json["title"]["lineGap"], 18.0);
         assert_eq!(json["title"]["textStyle"], "outline");

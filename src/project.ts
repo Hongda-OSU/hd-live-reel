@@ -156,11 +156,11 @@ export function parseTime(text: string): number | null {
 
 const FPS = 30;
 
-/** Seconds each join cross-dissolves over, computed as the Rust side does:
+/** Seconds each join overlaps two clips, computed as the Rust side does:
  * whole frames, at most half the shortest clip. */
 export function crossfade(project: Project): number {
   const { clips, transition } = project;
-  if (transition.type !== "fade" || clips.length < 2 || transition.duration <= 0) return 0;
+  if (transition.type === "none" || clips.length < 2 || transition.duration <= 0) return 0;
   const shortest = Math.min(...clips.map(clipLength));
   return Math.floor(Math.min(transition.duration, shortest / 2) * FPS + 1e-6) / FPS;
 }

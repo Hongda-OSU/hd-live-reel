@@ -6,7 +6,9 @@ use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
-use crate::ffmpeg::{self, Composition, Fill, Grade, Look, Music, Quality, Segment, Shape, Title};
+use crate::ffmpeg::{
+    self, Composition, Fill, Grade, Join, Look, Music, Quality, Segment, Shape, Title,
+};
 use crate::project::{self as p, Audio, AudioMode, Filter, Preset, Project, TransitionKind};
 
 /// What FFmpeg should join for `project`.
@@ -60,10 +62,22 @@ pub fn composition(project: &Project) -> Result<Composition, String> {
             })
         })
         .collect();
-    let transition = match project.transition.kind {
-        TransitionKind::None => 0.0,
-        TransitionKind::Fade => project.transition.duration,
+    let style = match project.transition.kind {
+        TransitionKind::None => None,
+        TransitionKind::Fade => Some("fade"),
+        TransitionKind::Black => Some("fadeblack"),
+        TransitionKind::Gray => Some("fadegrays"),
+        TransitionKind::Push => Some("smoothleft"),
+        TransitionKind::PushUp => Some("smoothup"),
+        TransitionKind::Zoom => Some("zoomin"),
+        TransitionKind::Blur => Some("hblur"),
+        TransitionKind::Circle => Some("circleopen"),
+        TransitionKind::Wipe => Some("wipeleft"),
     };
+    let transition = style.map_or(Join::CUT, |style| Join {
+        style,
+        seconds: project.transition.duration,
+    });
     // A watermark with text whose PNG the frontend has rendered.
     let mark = &project.watermark;
     let watermark = match (&mark.image, mark.text.trim().is_empty()) {
@@ -430,12 +444,25 @@ mod tests {
             ..Default::default()
         };
         project.transition.duration = 0.3;
-        assert_eq!(composition(&project).unwrap().transition, 0.0, "type none");
+        assert_eq!(
+            composition(&project).unwrap().transition,
+            Join::CUT,
+            "type none"
+        );
 
         project.transition.kind = TransitionKind::Fade;
-        let composition = composition(&project).unwrap();
-        assert_eq!(composition.transition, 0.3);
-        assert!((composition.length() - 3.7).abs() < 1e-9);
+        let faded = composition(&project).unwrap();
+        assert_eq!(
+            faded.transition,
+            Join {
+                style: "fade",
+                seconds: 0.3
+            }
+        );
+        assert!((faded.length() - 3.7).abs() < 1e-9);
+
+        project.transition.kind = TransitionKind::Black;
+        assert_eq!(composition(&project).unwrap().transition.style, "fadeblack");
     }
 
     #[test]

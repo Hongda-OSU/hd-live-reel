@@ -141,14 +141,28 @@ impl Segment {
     }
 }
 
+/// How neighbouring clips join: one of FFmpeg's xfade transitions over
+/// `seconds`, the sound cross-fading alongside; 0 seconds is a hard cut.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Join {
+    pub style: &'static str,
+    pub seconds: f64,
+}
+
+impl Join {
+    pub const CUT: Join = Join {
+        style: "fade",
+        seconds: 0.0,
+    };
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Composition {
     /// Normalized clips in playback order.
     pub clips: Vec<Segment>,
     pub shape: Shape,
     pub fill: Fill,
-    /// Seconds each join cross-dissolves over; 0 is a hard cut.
-    pub transition: f64,
+    pub transition: Join,
     pub grade: Grade,
     pub title: Option<Title>,
     /// Text over single clips, in any order.
@@ -161,7 +175,7 @@ impl Composition {
     /// The cross-dissolve actually used: whole frames, and never more than
     /// half the shortest segment, so no segment is consumed by its fades.
     pub fn crossfade(&self) -> f64 {
-        if self.clips.len() < 2 || self.transition <= 0.0 {
+        if self.clips.len() < 2 || self.transition.seconds <= 0.0 {
             return 0.0;
         }
         let shortest = self
@@ -169,7 +183,7 @@ impl Composition {
             .iter()
             .map(Segment::length)
             .fold(f64::INFINITY, f64::min);
-        snap_down(self.transition.min(shortest / 2.0))
+        snap_down(self.transition.seconds.min(shortest / 2.0))
     }
 
     /// Length of the result; each join overlaps two segments.
@@ -289,7 +303,8 @@ fn filter_graph(composition: &Composition, quality: Quality) -> String {
         .collect();
     let crossfade = composition.crossfade();
     if crossfade > 0.0 {
-        join_with_crossfades(&composition.clips, &labels, crossfade, &mut graph);
+        let style = composition.transition.style;
+        join_with_crossfades(&composition.clips, &labels, style, crossfade, &mut graph);
     } else {
         let inputs: String = labels.iter().map(|(v, a)| format!("[{v}][{a}]")).collect();
         graph.push_str(&format!("{inputs}concat=n={n}:v=1:a=1[joined][a0];"));
@@ -378,12 +393,13 @@ fn filter_graph(composition: &Composition, quality: Quality) -> String {
     graph
 }
 
-/// Chains the segments pairwise: each one dissolves into the next over
-/// `crossfade` seconds, picture with xfade and sound with acrossfade.
-/// Leaves `[joined]` and `[a0]` like concat does.
+/// Chains the segments pairwise: each one passes into the next over
+/// `crossfade` seconds, picture with xfade's `style` and sound with
+/// acrossfade. Leaves `[joined]` and `[a0]` like concat does.
 fn join_with_crossfades(
     segments: &[Segment],
     labels: &[(String, String)],
+    style: &str,
     crossfade: f64,
     graph: &mut String,
 ) {
@@ -398,7 +414,7 @@ fn join_with_crossfades(
         };
         // The offset is where the dissolve starts on the joined timeline.
         graph.push_str(&format!(
-            "[{video}][{next_video}]xfade=transition=fade:duration={crossfade:.4}:offset={:.4}[{out_video}];\
+            "[{video}][{next_video}]xfade=transition={style}:duration={crossfade:.4}:offset={:.4}[{out_video}];\
              [{audio}][{next_audio}]acrossfade=d={crossfade:.4}[{out_audio}];",
             length - crossfade,
         ));
@@ -538,7 +554,7 @@ mod tests {
             grade: Grade::default(),
             shape: Shape::Portrait,
             fill: Fill::Crop,
-            transition: 0.0,
+            transition: Join::CUT,
             music: None,
             clips: vec![
                 Segment::whole("a.mov".into(), 2.0),
@@ -632,7 +648,7 @@ mod tests {
     fn clip_windows_skip_the_dissolves() {
         let mut faded = composition(None);
         faded.clips.push(Segment::whole("c.mov".into(), 2.0));
-        faded.transition = 0.5;
+        faded.transition.seconds = 0.5;
         assert_eq!(faded.clip_windows(), [(0.0, 1.5), (2.0, 3.0), (3.5, 5.0)]);
     }
 
@@ -703,7 +719,7 @@ mod tests {
             grade: Grade::default(),
             shape: Shape::Portrait,
             fill: Fill::Crop,
-            transition: 0.0,
+            transition: Join::CUT,
             music: None,
             clips: vec![
                 Segment {
@@ -760,7 +776,7 @@ mod tests {
     fn crossfades_chain_each_join() {
         let mut three = composition(None);
         three.clips.push(Segment::whole("c.mov".into(), 2.0));
-        three.transition = 0.3;
+        three.transition.seconds = 0.3;
         assert!(filter_graph(&three, Quality::Export).ends_with(
             "[s0v][s1v]xfade=transition=fade:duration=0.3000:offset=1.7000[x1v];\
              [0:a][1:a]acrossfade=d=0.3000[x1a];\
@@ -769,6 +785,19 @@ mod tests {
              [joined]null[v];[a0]alimiter=limit=0.89[a]"
         ));
         assert!((three.length() - 5.4).abs() < 1e-9);
+
+        three.transition.style = "fadeblack";
+        let graph = filter_graph(&three, Quality::Export);
+        assert_eq!(
+            graph.matches("xfade=transition=fadeblack:").count(),
+            2,
+            "every join"
+        );
+        assert_eq!(
+            graph.matches("acrossfade=d=0.3000").count(),
+            2,
+            "sound still cross-fades"
+        );
     }
 
     #[test]
@@ -840,11 +869,11 @@ mod tests {
     #[test]
     fn crossfade_is_whole_frames_and_at_most_half_the_shortest_clip() {
         let mut short = composition(None);
-        short.transition = 0.8;
+        short.transition.seconds = 0.8;
         short.clips[1].trim = Some((0.0, 0.5));
         // Half of 0.5 s is 7.5 frames; it rounds down to 7.
         assert!((short.crossfade() - 7.0 / 30.0).abs() < 1e-9);
-        short.transition = 0.11;
+        short.transition.seconds = 0.11;
         assert!((short.crossfade() - 0.1).abs() < 1e-9, "3 frames");
         short.clips.truncate(1);
         assert_eq!(short.crossfade(), 0.0, "nothing to join");
@@ -977,7 +1006,7 @@ mod tests {
             grade: Grade::default(),
             shape: Shape::Portrait,
             fill: Fill::Crop,
-            transition: 0.0,
+            transition: Join::CUT,
             music: None,
             clips: vec![
                 Segment {
@@ -1062,7 +1091,7 @@ mod tests {
             grade: Grade::default(),
             shape: Shape::Portrait,
             fill: Fill::Crop,
-            transition: 0.0,
+            transition: Join::CUT,
             music: None,
             clips: clips.clone(),
             title: None,
@@ -1077,7 +1106,7 @@ mod tests {
             grade: Grade::default(),
             shape: Shape::Portrait,
             fill: Fill::Crop,
-            transition: 0.0,
+            transition: Join::CUT,
             music: None,
             clips,
             title: Some(Title {
@@ -1193,7 +1222,7 @@ mod tests {
                 grade: Grade::default(),
                 shape: Shape::Portrait,
                 fill: Fill::Crop,
-                transition: 0.0,
+                transition: Join::CUT,
                 title: None,
                 music: Some(Music {
                     path: track.clone(),
@@ -1267,7 +1296,10 @@ mod tests {
             clips,
             shape: Shape::Portrait,
             fill: Fill::Crop,
-            transition: 0.3,
+            transition: Join {
+                style: "fade",
+                seconds: 0.3,
+            },
             grade: Grade::default(),
             title: None,
             music: None,
@@ -1337,7 +1369,7 @@ mod tests {
                     clips: vec![Segment::whole(norm.clone(), duration)],
                     shape,
                     fill,
-                    transition: 0.0,
+                    transition: Join::CUT,
                     grade: Grade::default(),
                     title: None,
                     music: None,
