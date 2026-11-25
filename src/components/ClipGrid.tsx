@@ -14,7 +14,8 @@ import * as stylex from "@stylexjs/stylex";
 import type { Clip } from "../api";
 import { clipLabel, hasCaption, isMissing } from "../project";
 import { colors, shadows } from "../tokens.stylex";
-import { Icon, withStyle } from "../ui";
+import { IconButton, withStyle } from "../ui";
+import { AddClipsButton } from "./AddClipsButton";
 import { WarningIcon } from "./WarningIcon";
 
 const styles = stylex.create({
@@ -23,31 +24,24 @@ const styles = stylex.create({
     alignItems: "center",
     justifyContent: "space-between",
   },
+  // As much room above as below, which the selected card's ring needs,
+  // so the buttons centre on the heading with no nudging.
   heading: {
     margin: 0,
-    paddingTop: "10px",
-    // Room for the selected card's ring, which sits outside its picture.
+    paddingTop: "14px",
     paddingBottom: "14px",
     paddingInline: "6px",
     color: colors.muted,
     fontSize: 11,
     fontWeight: 600,
   },
-  hide: {
-    display: "grid",
-    placeItems: "center",
-    width: 22,
-    height: 20,
-    marginTop: -4,
-    padding: 0,
-    borderWidth: 0,
-    borderRadius: 5,
-    backgroundColor: {
-      default: "transparent",
-      ":hover": colors.hover,
-    },
-    color: colors.muted,
-    cursor: "pointer",
+  // The last glyph, the ‹, ends where the cards do: the row runs 6 past
+  // them (the grid's inset) but the glyph sits 9 inside its button, so
+  // it falls 3 short without the pull.
+  buttons: {
+    display: "flex",
+    gap: 6,
+    marginRight: -3,
   },
   grid: {
     display: "grid",
@@ -155,12 +149,18 @@ interface Props {
   thumbs: Record<string, string>;
   onSelect: (id: string) => void;
   onMove: (from: number, to: number) => void;
+  /** Opens the picker; with `after`, after the selected clip. */
+  onAdd: (after: boolean) => void;
+  /** Asks, then empties the project. */
+  onClear: () => void;
+  /** False while exporting, when the clips must stay. */
+  canClear: boolean;
   onHide: () => void;
 }
 
 /** The clips as pictures, for finding one by eye; the timeline below shows
  * their timing. Cards drag to reorder, which suits long moves. */
-export function ClipGrid({ clips, selectedId, thumbs, onSelect, onMove, onHide }: Props) {
+export function ClipGrid({ clips, selectedId, thumbs, onSelect, onMove, onAdd, onClear, canClear, onHide }: Props) {
   // A small move threshold keeps plain clicks as clicks.
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
@@ -180,11 +180,16 @@ export function ClipGrid({ clips, selectedId, thumbs, onSelect, onMove, onHide }
     <>
       <div {...stylex.props(styles.head)}>
         <h2 {...stylex.props(styles.heading)}>片段</h2>
-        <button aria-label="隐藏片段栏" title="隐藏片段栏 ⌃⌘S" onClick={onHide} {...stylex.props(styles.hide)}>
-          <Icon>
+        {/* What they act on is this list: adding to it, emptying it. */}
+        <div {...stylex.props(styles.buttons)}>
+          <AddClipsButton clips={clips} selectedId={selectedId} onAdd={onAdd} />
+          <IconButton label="清空工程" shortcut="⇧⌘⌫" disabled={!canClear} onClick={onClear}>
+            <path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.5h5.8l.6-8.5" />
+          </IconButton>
+          <IconButton label="隐藏片段栏" shortcut="⌃⌘S" onClick={onHide}>
             <path d="M10 4 6 8l4 4" />
-          </Icon>
-        </button>
+          </IconButton>
+        </div>
       </div>
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
         <SortableContext items={clips.map((c) => c.id)} strategy={rectSortingStrategy}>

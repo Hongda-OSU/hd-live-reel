@@ -5,6 +5,7 @@ export { CheckCircle, checkState, type CheckState } from "./CheckCircle";
 export { Field } from "./Field";
 export { Group } from "./Group";
 export { Icon } from "./Icon";
+export { IconButton } from "./IconButton";
 export { NumberField } from "./NumberField";
 export { PopupSelect } from "./PopupSelect";
 export { Seg } from "./Seg";

@@ -19,6 +19,7 @@ import {
 } from "./api";
 import { DropOverlay, type Drop } from "./components/DropOverlay";
 import { ExportPanel } from "./components/ExportPanel";
+import { AddClipsButton } from "./components/AddClipsButton";
 import { ClipGrid } from "./components/ClipGrid";
 import { ClipPanel } from "./components/ClipPanel";
 import { Inspector, type InspectorPage } from "./components/Inspector";
@@ -47,7 +48,7 @@ import {
 } from "./project";
 import { renderCaptionPng, renderTitlePng, renderWatermarkPng } from "./title";
 import { colors, layout } from "./tokens.stylex";
-import { Icon } from "./ui";
+import { IconButton } from "./ui";
 import { useAppMenu } from "./hooks/useAppMenu";
 import { useExport } from "./hooks/useExport";
 import { useLibrary } from "./hooks/useLibrary";
@@ -143,7 +144,9 @@ const styles = stylex.create({
   rail: {
     ...frosted,
     display: "flex",
-    justifyContent: "center",
+    flexDirection: "column",
+    alignItems: "center",
+    gap: 4,
     paddingTop: "8px",
     borderRightWidth: 1,
     borderRightStyle: "solid",
@@ -156,21 +159,6 @@ const styles = stylex.create({
     borderRightWidth: 1,
     borderRightStyle: "solid",
     borderRightColor: colors.border,
-  },
-  sidebarToggle: {
-    display: "grid",
-    placeItems: "center",
-    width: 22,
-    height: 20,
-    padding: 0,
-    borderWidth: 0,
-    borderRadius: 5,
-    backgroundColor: {
-      default: "transparent",
-      ":hover": colors.hover,
-    },
-    color: colors.muted,
-    cursor: "pointer",
   },
 });
 
@@ -734,22 +722,23 @@ function App() {
               thumbs={thumbs}
               onSelect={pickClip}
               onMove={(from, to) => dispatch({ type: "moveClip", from, to })}
+              onAdd={(after) => openPicker(after ? selectedId : null)}
+              onClear={() => void clearProject()}
+              canClear={!exporting}
               onHide={toggleSidebar}
             />
           </aside>
         )}
         {showRail && (
           <aside {...stylex.props(styles.rail)}>
-            <button
-              aria-label="显示片段栏"
-              title="显示片段栏 ⌃⌘S"
-              onClick={toggleSidebar}
-              {...stylex.props(styles.sidebarToggle)}
-            >
-              <Icon>
-                <path d="M6 4l4 4-4 4" />
-              </Icon>
-            </button>
+            <IconButton label="显示片段栏" shortcut="⌃⌘S" onClick={toggleSidebar}>
+              <path d="M6 4l4 4-4 4" />
+            </IconButton>
+            <AddClipsButton
+              clips={project.clips}
+              selectedId={selectedId}
+              onAdd={(after) => openPicker(after ? selectedId : null)}
+            />
           </aside>
         )}
         {project.clips.length === 0 ? (
@@ -813,9 +802,6 @@ function App() {
             thumbs={thumbs}
             playback={playback}
             ready={preview.url !== null && !trimClip}
-            onAdd={(after) => openPicker(after ? selectedId : null)}
-            onClear={() => void clearProject()}
-            canClear={!exporting}
             onSelect={pickClip}
             onMove={(from, to) => dispatch({ type: "moveClip", from, to })}
           />

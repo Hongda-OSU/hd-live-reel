@@ -1,12 +1,4 @@
-import {
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-  type CSSProperties,
-  type MouseEvent,
-  type PointerEvent,
-} from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type PointerEvent } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -21,13 +13,11 @@ import {
 } from "@dnd-kit/core";
 import { SortableContext, sortableKeyboardCoordinates, useSortable } from "@dnd-kit/sortable";
 import * as stylex from "@stylexjs/stylex";
-import { LogicalPosition } from "@tauri-apps/api/dpi";
-import { Menu, MenuItem } from "@tauri-apps/api/menu";
 import type { Clip } from "../api";
 import type { Playback } from "../hooks/usePlayback";
 import { clipLabel, formatTime, hasCaption, isMissing } from "../project";
 import { colors, shadows } from "../tokens.stylex";
-import { Button, Icon, withStyle } from "../ui";
+import { Icon, withStyle } from "../ui";
 import { WarningIcon } from "./WarningIcon";
 
 /** Space before the first clip and after the last, in px. */
@@ -100,10 +90,6 @@ const styles = stylex.create({
     flex: "1",
   },
   // Adding and clearing the clips sit together, closer than the rest.
-  actions: {
-    display: "flex",
-    gap: 6,
-  },
   hint: {
     color: colors.muted,
     fontSize: 11,
@@ -339,48 +325,13 @@ interface Props {
   ready: boolean;
   onSelect: (id: string) => void;
   onMove: (from: number, to: number) => void;
-  /** Opens the picker; with `after`, what it adds goes after the
-   * selected clip, otherwise on the end. */
-  onAdd: (after: boolean) => void;
-  /** Asks, then empties the project. */
-  onClear: () => void;
-  /** False while exporting, when the clips must stay. */
-  canClear: boolean;
-}
-
-/** With a clip selected before the last, asks whether new photos go
- * after it or on the end; otherwise they go on the end. */
-async function askWhere(event: MouseEvent<HTMLButtonElement>, selected: number, onAdd: Props["onAdd"]) {
-  const box = event.currentTarget.getBoundingClientRect();
-  const menu = await Menu.new({
-    items: await Promise.all([
-      MenuItem.new({ text: `加到第 ${selected} 段后面`, action: () => onAdd(true) }),
-      MenuItem.new({ text: "加到最后", action: () => onAdd(false) }),
-    ]),
-  });
-  await menu.popup(new LogicalPosition(box.left, box.bottom + 4));
 }
 
 /** The clips in play order, each as wide as its time: picks, reorders and
  * plays the reel. */
-export function Timeline({
-  clips,
-  spans,
-  selectedId,
-  thumbs,
-  playback,
-  ready,
-  onSelect,
-  onMove,
-  onAdd,
-  onClear,
-  canClear,
-}: Props) {
+export function Timeline({ clips, spans, selectedId, thumbs, playback, ready, onSelect, onMove }: Props) {
   const scroller = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
-  // The selected clip's number; adding asks where only when it isn't last.
-  const selectedNumber = clips.findIndex((clip) => clip.id === selectedId) + 1;
-  const asksWhere = selectedNumber > 0 && selectedNumber < clips.length;
   const [zoom, setZoom] = useState(0);
   const [dragging, setDragging] = useState<string | null>(null);
   const [over, setOver] = useState<string | null>(null);
@@ -486,23 +437,6 @@ export function Timeline({
           低清预览
         </span>
         <span {...stylex.props(styles.spacer)} />
-        <span {...stylex.props(styles.actions)}>
-          <Button
-            onClick={(e) => (asksWhere ? void askWhere(e, selectedNumber, onAdd) : onAdd(false))}
-            aria-haspopup={asksWhere ? "menu" : undefined}
-          >
-            <Icon>
-              <path d="M8 3v10M3 8h10" />
-            </Icon>
-            添加照片
-          </Button>
-          <Button disabled={!canClear} title="清空工程 ⇧⌘⌫" onClick={onClear}>
-            <Icon>
-              <path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.5h5.8l.6-8.5" />
-            </Icon>
-            清空
-          </Button>
-        </span>
         <span {...stylex.props(styles.hint)}>{clips.length} 段 · 拖动或 ⌥← ⌥→ 换位置</span>
         <label {...stylex.props(styles.zoom)}>
           <svg viewBox="0 0 16 16" aria-hidden {...stylex.props(styles.badgeIcon)}>
