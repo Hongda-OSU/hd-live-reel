@@ -589,9 +589,19 @@ function App() {
   }
 
   /** Edits in the clip panel, such as a caption, show on that clip once
-   * the preview has them, not back at the start. */
+   * the preview has them, not back at the start. Removing a clip selects
+   * and shows the one now in its place, as Mail and Photos do (the one
+   * before it, if it was last), so bad clips can go one after another. */
   function clipDispatch(action: Action) {
     if (action.type === "updateClip") seekAfterRender.current = { id: action.id, peek: true };
+    if (action.type === "removeClip" && project) {
+      const at = project.clips.findIndex((clip) => clip.id === action.id);
+      const next = project.clips[at + 1] ?? project.clips[at - 1];
+      if (at !== -1 && action.id === selectedId) {
+        setSelectedId(next?.id ?? null);
+        if (next) seekAfterRender.current = { id: next.id, peek: true };
+      }
+    }
     dispatch(action);
   }
 
@@ -816,7 +826,7 @@ function App() {
                   selectedLost.source === "file"
                     ? "原来的文件被移动或删除了，找到它再添加一次。"
                     : "缓存被系统清理过，插上 iPhone 重新添加这一张，会放回原来的位置。",
-                onRemove: () => dispatch({ type: "removeClip", id: selectedLost.id }),
+                onRemove: () => clipDispatch({ type: "removeClip", id: selectedLost.id }),
                 onReadd: () => (selectedLost.source === "file" ? void pickFiles() : openPicker()),
               }
             }
