@@ -5,7 +5,7 @@ import type { Project } from "../api";
 import type { Exporter } from "../hooks/useExport";
 import { folderLabel, FRAME, isMissing, missingLabel, totalLength, UNTITLED, type Action } from "../project";
 import { colors } from "../tokens.stylex";
-import { Button, Group, Icon, ui, withStyle } from "../ui";
+import { Button, Field, Group, Icon, ui, withStyle } from "../ui";
 import { WarningIcon } from "./WarningIcon";
 
 const styles = stylex.create({
@@ -18,17 +18,30 @@ const styles = stylex.create({
     flex: "1",
     minWidth: 0,
   },
+  // Plain values start where the text inside the name box does: past its
+  // 8 px padding and 1 px border, so the page reads down one edge.
+  inset: {
+    paddingLeft: 9,
+  },
+  folderRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    minWidth: 0,
+  },
   folder: {
+    flexGrow: 1,
     minWidth: 0,
     overflow: "hidden",
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
     fontSize: 12,
   },
+  // Label and value rows on the same columns as the Field rows above.
   facts: {
     display: "grid",
-    gridTemplateColumns: "auto 1fr",
-    columnGap: 14,
+    gridTemplateColumns: "52px minmax(0, 1fr)",
+    columnGap: 8,
     rowGap: 6,
     margin: 0,
     fontSize: 12,
@@ -129,48 +142,48 @@ export function ExportPanel({ project, exporter, dispatch }: Props) {
 
   return (
     <>
-      <Group title="文件名">
-        <div {...stylex.props(styles.nameRow)}>
-          {/* Edits the project name, so the toolbar and the file agree. */}
-          <input
-            value={project.name}
-            placeholder={UNTITLED}
-            aria-label="文件名"
-            disabled={running}
-            onChange={(e) => dispatch({ type: "rename", name: e.target.value })}
-            onKeyDown={(e) => e.key === "Enter" && start()}
-            {...stylex.props(ui.textInput, styles.nameInput)}
-          />
-          <span {...stylex.props(ui.note)}>.mp4</span>
-        </div>
-      </Group>
-      <Group title="保存到">
-        <div {...stylex.props(ui.inline)}>
-          <span title={output.folder ?? undefined} {...stylex.props(styles.folder, ui.spacer)}>
-            {folderLabel(output.folder)}
-          </span>
-          <Button disabled={running} onClick={chooseFolder}>
-            更改…
-          </Button>
-        </div>
-        {output.folder && (
-          <Button variant="ghost" disabled={running} onClick={() => setFolder(null)}>
-            恢复默认（影片 › HD Live Reel）
-          </Button>
-        )}
+      <Group>
+        <Field label="文件名">
+          <div {...stylex.props(styles.nameRow)}>
+            {/* Edits the project name, so the toolbar and the file agree. */}
+            <input
+              value={project.name}
+              placeholder={UNTITLED}
+              aria-label="文件名"
+              disabled={running}
+              onChange={(e) => dispatch({ type: "rename", name: e.target.value })}
+              onKeyDown={(e) => e.key === "Enter" && start()}
+              {...stylex.props(ui.textInput, styles.nameInput)}
+            />
+            <span {...stylex.props(ui.note)}>.mp4</span>
+          </div>
+        </Field>
+        <Field label="保存到">
+          <div {...stylex.props(styles.folderRow, styles.inset)}>
+            <span title={output.folder ?? undefined} {...stylex.props(styles.folder)}>
+              {folderLabel(output.folder)}
+            </span>
+            {output.folder && (
+              <Button variant="mutedLink" disabled={running} onClick={() => setFolder(null)}>
+                还原
+              </Button>
+            )}
+            <Button variant="link" disabled={running} onClick={chooseFolder}>
+              更改…
+            </Button>
+          </div>
+        </Field>
       </Group>
       <Group>
         <dl {...stylex.props(styles.facts)}>
           <dt {...stylex.props(styles.factName)}>尺寸</dt>
-          <dd {...stylex.props(styles.factValue)}>
-            {FRAME[output.aspect].join("×")}（{output.aspect}）
-          </dd>
+          <dd {...stylex.props(styles.factValue, styles.inset)}>{FRAME[output.aspect].join(" × ")}</dd>
           <dt {...stylex.props(styles.factName)}>时长</dt>
-          <dd {...stylex.props(styles.factValue)}>
+          <dd {...stylex.props(styles.factValue, styles.inset)}>
             {formatLength(totalLength(project))} · {project.clips.length} 段
           </dd>
           <dt {...stylex.props(styles.factName)}>格式</dt>
-          <dd {...stylex.props(styles.factValue)}>MP4（H.264 + AAC），微信可以直接发</dd>
+          <dd {...stylex.props(styles.factValue, styles.inset)}>MP4 · H.264</dd>
         </dl>
       </Group>
       <Group>
@@ -202,7 +215,6 @@ export function ExportPanel({ project, exporter, dispatch }: Props) {
               </div>
               {phase.step === "idle" && phase.cancelled && <p {...stylex.props(ui.note)}>已取消，没有保存任何文件。</p>}
               {phase.step === "error" && <p {...stylex.props(ui.error)}>{phase.message}</p>}
-              <p {...stylex.props(ui.note)}>重名会自动加编号。快捷键 ⌘E 打开这一页。</p>
             </>
           )}
           {phase.step === "running" && (
