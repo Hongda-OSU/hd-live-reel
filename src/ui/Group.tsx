@@ -35,6 +35,10 @@ const styles = stylex.create({
     fontSize: 10,
     fontWeight: 500,
   },
+  // Nothing under it, so no gap under the heading.
+  headingAlone: {
+    marginBottom: 0,
+  },
   dimmed: {
     opacity: 0.45,
   },
@@ -42,7 +46,8 @@ const styles = stylex.create({
 
 /** A section of a settings panel, titled unless it is alone on its page.
  * `dimmed` greys out the body but keeps the heading and badge readable;
- * `action`, such as a link button, sits at the heading's right. */
+ * `action`, such as a link button, sits at the heading's right. Without
+ * children only the heading shows. */
 export function Group({
   title,
   badge,
@@ -54,18 +59,18 @@ export function Group({
   badge?: string;
   action?: ReactNode;
   dimmed?: boolean;
-  children: ReactNode;
+  children?: ReactNode;
 }) {
   return (
     <div {...stylex.props(styles.group)}>
       {(title || badge || action) && (
-        <div {...stylex.props(styles.heading)}>
+        <div {...stylex.props(styles.heading, !children && styles.headingAlone)}>
           <h3 {...stylex.props(styles.title)}>{title}</h3>
           {badge && <span {...stylex.props(styles.badge)}>{badge}</span>}
           {action}
         </div>
       )}
-      <div {...stylex.props(dimmed && styles.dimmed)}>{children}</div>
+      {children && <div {...stylex.props(dimmed && styles.dimmed)}>{children}</div>}
     </div>
   );
 }

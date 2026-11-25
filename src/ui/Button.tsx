@@ -56,6 +56,14 @@ const styles = stylex.create({
     fontSize: 12,
     fontWeight: 400,
   },
+  // A link that takes something away, quieter than the blue one that
+  // added it.
+  muted: {
+    color: {
+      default: colors.muted,
+      ":hover": colors.text,
+    },
+  },
   disabled: {
     opacity: 0.45,
     cursor: "default",
@@ -63,7 +71,7 @@ const styles = stylex.create({
   },
 });
 
-type Variant = "default" | "primary" | "ghost" | "danger" | "link";
+type Variant = "default" | "primary" | "ghost" | "danger" | "link" | "mutedLink";
 
 export function Button({
   variant = "default",
@@ -79,9 +87,10 @@ export function Button({
         styles.base,
         variant === "default" && !disabled && styles.hoverable,
         variant === "primary" && styles.primary,
-        (variant === "ghost" || variant === "danger" || variant === "link") && styles.ghost,
+        (variant === "ghost" || variant === "danger" || variant === "link" || variant === "mutedLink") && styles.ghost,
         variant === "danger" && styles.danger,
-        variant === "link" && styles.link,
+        (variant === "link" || variant === "mutedLink") && styles.link,
+        variant === "mutedLink" && styles.muted,
         disabled && styles.disabled,
       )}
     >

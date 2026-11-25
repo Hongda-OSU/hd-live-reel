@@ -1,4 +1,4 @@
-import { useRef, type CSSProperties, type MouseEvent, type ReactNode } from "react";
+import { useRef, useState, type CSSProperties, type MouseEvent, type ReactNode } from "react";
 import * as stylex from "@stylexjs/stylex";
 import { LogicalPosition } from "@tauri-apps/api/dpi";
 import { Menu, MenuItem } from "@tauri-apps/api/menu";
@@ -225,9 +225,7 @@ export function ClipPanel({ clip, index, thumb, onTrim, onReplace, dispatch }: P
               </Readout>
             </div>
           </Group>
-          <Group title="字幕">
-            <CaptionFields clip={clip} dispatch={dispatch} />
-          </Group>
+          <CaptionGroup clip={clip} dispatch={dispatch} />
         </>
       )}
       <div {...stylex.props(ui.panelFooter)}>
@@ -304,20 +302,53 @@ function TrimBar({
   );
 }
 
-/** Text over this clip; where it sits and how long it shows appear once
- * there is some. Drawn in the 文字 page's look, a size smaller. */
-function CaptionFields({ clip, dispatch }: { clip: Clip; dispatch: (action: Action) => void }) {
+/** Text over this clip. Only the heading with 添加 shows until there is
+ * some; where it sits and how long it shows appear once it has text.
+ * Drawn in the 文字 page's look, a size smaller. */
+function CaptionGroup({ clip, dispatch }: { clip: Clip; dispatch: (action: Action) => void }) {
+  // The clip whose field is open without text yet: just added, or
+  // emptied while typing, which should not fold the field away.
+  const [openFor, setOpenFor] = useState<string | null>(null);
   const caption = clip.caption ?? NEW_CAPTION;
   const set = (patch: Partial<Caption>) =>
     dispatch({ type: "updateClip", id: clip.id, patch: { caption: { ...caption, ...patch } } });
+  const remove = () => {
+    setOpenFor(null);
+    dispatch({ type: "updateClip", id: clip.id, patch: { caption: null } });
+  };
+
+  if (!hasCaption(clip) && openFor !== clip.id) {
+    return (
+      <Group
+        title="字幕"
+        action={
+          <Button variant="link" onClick={() => setOpenFor(clip.id)}>
+            添加
+          </Button>
+        }
+      />
+    );
+  }
   return (
-    <>
+    <Group
+      title="字幕"
+      action={
+        <Button variant="mutedLink" onClick={remove}>
+          移除
+        </Button>
+      }
+    >
       <Field>
         <input
           value={caption.text}
-          placeholder="叠在这一段上，可不填"
           aria-label="这一段的字幕"
-          onChange={(e) => set({ text: e.target.value })}
+          // Only right after 添加; selecting a clip that has a caption
+          // leaves the keyboard with the grid and timeline.
+          autoFocus={!hasCaption(clip)}
+          onChange={(e) => {
+            setOpenFor(clip.id);
+            set({ text: e.target.value });
+          }}
           {...stylex.props(ui.textInput)}
         />
       </Field>
@@ -346,6 +377,6 @@ function CaptionFields({ clip, dispatch }: { clip: Clip; dispatch: (action: Acti
           </Field>
         </>
       )}
-    </>
+    </Group>
   );
 }
