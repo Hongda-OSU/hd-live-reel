@@ -15,69 +15,31 @@ import {
   type Action,
 } from "../project";
 import { colors } from "../tokens.stylex";
-import { Button, Field, Group, Icon, Seg, ui, withStyle } from "../ui";
+import { Button, Field, Group, Seg, ui, withStyle } from "../ui";
 import { WarningIcon } from "./WarningIcon";
 
 const styles = stylex.create({
-  // Which clip, by its place in the list; the picture is already on the
-  // stage and the timeline.
-  head: {
-    paddingTop: "16px",
-    paddingRight: "16px",
-    paddingBottom: "16px",
-    paddingLeft: "16px",
-    borderBottomWidth: 1,
-    borderBottomStyle: "solid",
-    borderBottomColor: colors.border,
-  },
-  headRow: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 8,
-  },
-  title: {
-    display: "flex",
-    alignItems: "center",
-    gap: 8,
-  },
-  name: {
-    fontSize: 14,
-    fontWeight: 600,
-  },
-  replace: {
-    display: "inline-flex",
-    alignItems: "center",
-    gap: 4,
-    height: 24,
-    paddingInline: 8,
-    borderWidth: 0,
-    borderRadius: 6,
-    backgroundColor: {
-      default: colors.hover,
-      ":hover": colors.surface2,
-    },
-    color: colors.text,
+  // What the clip is, in plain lines flush with the headings: when it
+  // was taken, then what kind and where from. No label column, which
+  // would add an edge that lines up with nothing else on the page.
+  info: {
+    display: "grid",
+    rowGap: 4,
     fontSize: 12,
-    cursor: "pointer",
-  },
-  kind: {
-    paddingBlock: "1px",
-    paddingInline: "6px",
-    borderRadius: 4,
-    backgroundColor: colors.surface2,
-    color: colors.muted,
-    fontSize: 10,
-    fontWeight: 600,
-  },
-  meta: {
-    marginTop: 2,
-    overflow: "hidden",
-    color: colors.muted,
-    fontSize: 11,
     fontVariantNumeric: "tabular-nums",
+  },
+  infoLine: {
+    display: "flex",
+    alignItems: "center",
+    gap: 5,
+    minWidth: 0,
+    margin: 0,
+    overflow: "hidden",
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
+  },
+  faint: {
+    color: colors.muted,
   },
   empty: {
     paddingBlock: "40px",
@@ -196,16 +158,24 @@ async function askReplace(event: MouseEvent<HTMLButtonElement>, onReplace: Props
   await menu.popup(new LogicalPosition(box.left, box.bottom + 4));
 }
 
-/** "11月22日 15:20" when the clip says when it was taken. */
+/** "11月22日 周日 15:20" when the clip says when it was taken. */
 function takenLabel(takenAt?: string | null): string | null {
   const date = takenAt ? new Date(takenAt) : null;
   if (!date || Number.isNaN(date.getTime())) return null;
+  const day = date.toLocaleDateString("zh-CN", { weekday: "short" });
   const time = date.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", hour12: false });
-  return `${date.getMonth() + 1}月${date.getDate()}日 ${time}`;
+  return `${date.getMonth() + 1}月${date.getDate()}日 ${day} ${time}`;
 }
 
-/** The inspector's 这一段 page: trim and caption of the selected clip,
- * with removing it in the panel's footer. */
+/** Where the original came from, after its file name. */
+const SOURCE: Record<Clip["source"], string> = {
+  iphone: "iPhone",
+  file: "Mac",
+  library: "照片图库",
+};
+
+/** The inspector's 这一段 page: what the selected clip is, its trim and
+ * caption, with removing it in the panel's footer. */
 export function ClipPanel({ clip, index, thumb, onTrim, onReplace, dispatch }: Props) {
   if (!clip) return <p {...stylex.props(styles.empty)}>在下面的时间线上选一段来编辑</p>;
   const thumbImage = thumb ? { backgroundImage: `url("${thumb}")` } : undefined;
@@ -214,25 +184,22 @@ export function ClipPanel({ clip, index, thumb, onTrim, onReplace, dispatch }: P
 
   return (
     <>
-      <div {...stylex.props(styles.head)}>
-        <div {...stylex.props(styles.headRow)}>
-          <span {...stylex.props(styles.title)}>
-            <span {...stylex.props(styles.name)}>第 {index + 1} 段</span>
-            {missing ? (
-              <WarningIcon size={14} />
-            ) : (
-              <span {...stylex.props(styles.kind)}>{clip.kind === "video" ? "视频" : "Live Photo"}</span>
-            )}
-          </span>
-          <button onClick={(e) => void askReplace(e, onReplace)} {...stylex.props(styles.replace)}>
-            <Icon>
-              <path d="M3 6h9.5L10 3.5M13 10H3.5L6 12.5" />
-            </Icon>
+      <Group
+        title={`第 ${index + 1} 段`}
+        action={
+          <Button variant="link" onClick={(e) => void askReplace(e, onReplace)}>
             替换…
-          </button>
+          </Button>
+        }
+      >
+        <div {...stylex.props(styles.info)}>
+          {taken && <p {...stylex.props(styles.infoLine)}>{taken}</p>}
+          <p {...stylex.props(styles.infoLine, styles.faint)}>
+            {missing && <WarningIcon size={13} />}
+            {[clip.kind === "video" ? "视频" : "Live Photo", clipLabel(clip), SOURCE[clip.source]].join(" · ")}
+          </p>
         </div>
-        <div {...stylex.props(styles.meta)}>{[clipLabel(clip), taken].filter(Boolean).join(" · ")}</div>
-      </div>
+      </Group>
       {missing ? (
         // The stage says what happened and offers to add it again.
         <Group>
