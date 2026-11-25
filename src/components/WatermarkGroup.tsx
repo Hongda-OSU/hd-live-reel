@@ -1,48 +1,16 @@
-import * as stylex from "@stylexjs/stylex";
-import type { MarkStyle, Watermark } from "../api";
+import type { Watermark } from "../api";
 import type { Action } from "../project";
-import { MARK_LOOKS, MARK_NAME, markText } from "../title";
-import { Field, Group, PopupSelect, Slider, Switch } from "../ui";
-
-const styles = stylex.create({
-  // A style's name written in that style, as the menu shows it.
-  look: (fontFamily: string, fontWeight: number, fontStyle: string, letterSpacing: string, fontSize: number) => ({
-    fontFamily: `"${fontFamily}", "PingFang SC", sans-serif`,
-    fontWeight,
-    fontStyle,
-    letterSpacing,
-    fontSize,
-    lineHeight: 1,
-  }),
-});
-
-/** The menu's order: the recommended look first, the plain one last. */
-const ORDER: MarkStyle[] = ["script", "spaced", "italic", "credits", "plain"];
-
-function Lettering({ style }: { style: MarkStyle }) {
-  const look = MARK_LOOKS[style];
-  // About 13 px for plain text, so every look reads at a similar size.
-  const size = Math.min(18, 13 * look.scale);
-  return (
-    <span
-      title={look.label}
-      {...stylex.props(
-        styles.look(look.family, look.weight, look.italic ? "italic" : "normal", `${look.spacing}em`, size),
-      )}
-    >
-      {markText(MARK_NAME, style)}
-    </span>
-  );
-}
+import { MARK_NAME } from "../title";
+import { Field, Group, Slider, Switch } from "../ui";
 
 interface Props {
   watermark: Watermark;
   dispatch: (action: Action) => void;
 }
 
-/** The app's name in the corner of every frame (bottom right by default),
- * on or off, in one of a few letterings. On and off are stored as the
- * text, empty when off. */
+/** 鴻鵠誌達 down the bottom-right corner of every frame, on or off, with
+ * its size and transparency; the preview shows how it looks. On and off
+ * are stored as the text, empty when off. */
 export function WatermarkGroup({ watermark, dispatch }: Props) {
   const set = (patch: Partial<Watermark>) => dispatch({ type: "updateWatermark", patch });
   const on = watermark.text.trim() !== "";
@@ -53,14 +21,6 @@ export function WatermarkGroup({ watermark, dispatch }: Props) {
     >
       {on && (
         <>
-          <Field label="样式">
-            <PopupSelect<MarkStyle>
-              label="水印样式"
-              options={ORDER.map((style) => [style, <Lettering key={style} style={style} />])}
-              value={watermark.style}
-              onChange={(style) => set({ style })}
-            />
-          </Field>
           <Field label="大小">
             <Slider
               min={24}

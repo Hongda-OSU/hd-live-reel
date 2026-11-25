@@ -96,6 +96,7 @@ async fn load_project(
         let mut changed = clips::restore(&mut project.clips, &cache, &media.join("originals"))?;
         changed |= music::restore(&mut project.audio.music_path, &cache, &media)?;
         changed |= project.forget_missing_images();
+        changed |= project.retire_old_mark();
         if changed {
             project::save(&save_to, &project)?;
         }

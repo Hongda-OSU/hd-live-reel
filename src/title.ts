@@ -1,7 +1,7 @@
 // Lays out the opening title, the captions over single clips and the
 // watermark on transparent output-sized canvases. FFmpeg overlays the PNGs, so what is
 // drawn here is exactly what gets exported.
-import type { Caption, MarkStyle, Output, Title, TitlePosition, TitleWeight, Watermark } from "./api";
+import type { Caption, Output, Title, TitlePosition, TitleWeight, Watermark } from "./api";
 import { FRAME } from "./project";
 
 /** Text never runs wider than this share of the frame. */
@@ -104,103 +104,45 @@ export function renderCaptionPng(caption: Caption, title: Title, aspect: Output[
  * short side. */
 const WATERMARK_MARGIN = 0.04;
 
-/** How each watermark style sets the app's name: the font, how big
- * against the chosen size (scripts run small, spaced capitals wide), and
- * the spelling. Text other than the name keeps its own spelling. */
-export const MARK_LOOKS: Record<
-  MarkStyle,
-  { label: string; family: string; weight: number; italic: boolean; spacing: number; scale: number; name: string }
-> = {
-  script: {
-    label: "手写签名",
-    family: "Snell Roundhand",
-    weight: 700,
-    italic: false,
-    spacing: 0,
-    scale: 1.45,
-    name: "HD Live Reel",
-  },
-  spaced: {
-    label: "宽字距大写",
-    family: "Avenir Next",
-    weight: 600,
-    italic: false,
-    spacing: 0.32,
-    scale: 0.72,
-    name: "HD LIVE REEL",
-  },
-  italic: {
-    label: "杂志斜体",
-    family: "Didot",
-    weight: 400,
-    italic: true,
-    spacing: 0,
-    scale: 1.2,
-    name: "HD Live Reel",
-  },
-  credits: {
-    label: "片尾字幕",
-    family: "Didot",
-    weight: 400,
-    italic: false,
-    spacing: 0.24,
-    scale: 0.82,
-    name: "HD LIVE REEL",
-  },
-  plain: {
-    label: "苹方",
-    family: "PingFang SC",
-    weight: 600,
-    italic: false,
-    spacing: 0,
-    scale: 1,
-    name: "hd-live-reel",
-  },
-};
+/** The watermark: 鴻鵠誌達 in 刻石录钢笔鹤体, from the portfolio, one
+ * character under another against the corner. The font file holds only
+ * these four characters (global.css). */
+const MARK_TEXT = "鴻鵠誌達";
+const MARK_FONT = "Keshilu Pen Crane";
+/** Against the chosen size: the pen's strokes are thin, so a size up. */
+const MARK_SCALE = 1.3;
+/** Each character's advance, as a share of the size. */
+const MARK_STEP = 1.08;
 
-/** The watermark's text as `style` writes it. */
-export function markText(text: string, style: MarkStyle): string {
-  const trimmed = fixApostrophes(text.trim());
-  const look = MARK_LOOKS[style];
-  if (trimmed === MARK_NAME) return look.name;
-  return look.spacing > 0 ? trimmed.toUpperCase() : trimmed;
-}
-
-/** The text the watermark switch turns on; matches the Rust default. */
+/** The text the watermark switch turns on; matches the Rust default. On
+ * or off is all it says now: the mark always reads MARK_TEXT. */
 export const MARK_NAME = "hd-live-reel";
 
-/** White text with a soft shadow, so it reads on bright and dark frames
- * alike; the opacity is applied when the video is composed. */
-export function renderWatermarkPng(watermark: Watermark, aspect: Output["aspect"]): Promise<Uint8Array> {
+/** White with a soft shadow, so it reads on bright and dark frames alike;
+ * the opacity is applied when the video is composed. */
+export async function renderWatermarkPng(watermark: Watermark, aspect: Output["aspect"]): Promise<Uint8Array> {
   const [width, height] = FRAME[aspect];
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
   const ctx = canvas.getContext("2d")!;
-  const look = MARK_LOOKS[watermark.style];
-  const text = markText(watermark.text, watermark.style);
-  const spec = (size: number) =>
-    `${look.italic ? "italic " : ""}${look.weight} ${size}px "${look.family}", "PingFang SC", -apple-system, sans-serif`;
-  // Shrunk until it fits in 60% of the width, like the other text.
-  let size = watermark.size * look.scale;
-  for (;;) {
-    ctx.font = spec(size);
-    ctx.letterSpacing = `${size * look.spacing}px`;
-    if (ctx.measureText(text).width <= width * 0.6 || size <= 12) break;
-    size -= 2;
-  }
+  const size = watermark.size * MARK_SCALE;
+  ctx.font = `400 ${size}px "${MARK_FONT}", "PingFang SC", serif`;
+  // A web font draws as the fallback until loaded.
+  await document.fonts.load(ctx.font, MARK_TEXT);
+  const chars = [...MARK_TEXT];
   const margin = Math.min(width, height) * WATERMARK_MARGIN;
   const left = watermark.position.endsWith("Left");
   const top = watermark.position.startsWith("top");
-  ctx.textAlign = left ? "left" : "right";
-  ctx.textBaseline = top ? "top" : "bottom";
+  const x = left ? margin + size / 2 : width - margin - size / 2;
+  const y = top ? margin : height - margin - size * MARK_STEP * chars.length;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
   ctx.shadowColor = "rgba(0, 0, 0, 0.5)";
   ctx.shadowBlur = size * 0.25;
   ctx.shadowOffsetY = size * 0.06;
   ctx.fillStyle = "#ffffff";
-  // Letter spacing trails the last letter too; keep the margin to the ink.
-  const trail = left ? 0 : size * look.spacing;
-  ctx.fillText(text, left ? margin : width - margin + trail, top ? margin : height - margin);
+  chars.forEach((char, i) => ctx.fillText(char, x, y + i * size * MARK_STEP));
   return encode(canvas);
 }
 

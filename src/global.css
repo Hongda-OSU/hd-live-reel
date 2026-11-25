@@ -1,5 +1,12 @@
 /* Document-level defaults StyleX does not cover; components style
    themselves with StyleX. */
+
+/* The watermark's Chinese lettering, from the portfolio: a subset that
+   holds only 鴻鵠誌達. */
+@font-face {
+  font-family: "Keshilu Pen Crane";
+  src: url("./assets/fonts/keshilu-pen-crane.woff") format("woff");
+}
 :root {
   color-scheme: light dark;
   font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", sans-serif;

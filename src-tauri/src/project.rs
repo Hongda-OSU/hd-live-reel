@@ -368,7 +368,8 @@ pub struct Watermark {
     pub size: u32,
     /// 0 is invisible, 1 fully opaque.
     pub opacity: f64,
-    /// How the frontend writes it; Rust only keeps it.
+    /// How the frontend writes it; Rust only keeps it. Only `Pen` is drawn
+    /// now; the rest stay so older files still load.
     pub style: MarkStyle,
     /// The laid-out text as a transparent PNG, rendered by the frontend.
     pub image: Option<PathBuf>,
@@ -381,16 +382,20 @@ impl Default for Watermark {
             position: Corner::BottomRight,
             size: 36,
             opacity: 0.7,
-            style: MarkStyle::Script,
+            style: MarkStyle::Pen,
             image: None,
         }
     }
 }
 
 /// The watermark's lettering; each names a font and how the text is set.
+/// The app draws only `Pen`; the others are from when there was a choice.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum MarkStyle {
+    /// 刻石录钢笔鹤体, the name in Chinese (鴻鵠誌達) set top to bottom,
+    /// as on the portfolio's front page.
+    Pen,
     /// PingFang, as the app's name is spelled; the look before styles.
     Plain,
     /// Snell Roundhand, like a signature.
@@ -478,6 +483,17 @@ impl Project {
             }
         }
         changed
+    }
+
+    /// Moves a watermark lettered in an older style to `Pen`, dropping its
+    /// image so the frontend draws it again. Returns whether it changed.
+    pub fn retire_old_mark(&mut self) -> bool {
+        if self.watermark.style == MarkStyle::Pen {
+            return false;
+        }
+        self.watermark.style = MarkStyle::Pen;
+        self.watermark.image = None;
+        true
     }
 }
 
@@ -728,11 +744,11 @@ mod tests {
         assert_eq!(json["watermark"]["text"], "@hd");
         assert_eq!(json["watermark"]["position"], "topLeft");
         assert_eq!(json["watermark"]["opacity"], 0.7);
-        assert_eq!(json["watermark"]["style"], "script", "new marks are signed");
+        assert_eq!(json["watermark"]["style"], "pen", "new marks are in pen");
         let older: Watermark = serde_json::from_str(r#"{"text": "hd-live-reel"}"#).unwrap();
         assert_eq!(
             older.style,
-            MarkStyle::Script,
+            MarkStyle::Pen,
             "a saved mark without a style takes the default"
         );
         let again: Project = serde_json::from_value(json).unwrap();
@@ -890,6 +906,21 @@ mod tests {
         assert_eq!(project.title.text_image, Some(kept));
         assert_eq!(project.watermark.image, None);
         assert_eq!(project.clips[0].caption.as_ref().unwrap().image, None);
+    }
+
+    #[test]
+    fn marks_in_older_styles_are_redrawn_in_pen() {
+        let mut project = Project::default();
+        project.watermark.style = MarkStyle::Script;
+        project.watermark.image = Some("/c/titles/old.png".into());
+
+        assert!(project.retire_old_mark());
+        assert_eq!(project.watermark.style, MarkStyle::Pen);
+        assert_eq!(project.watermark.image, None, "drawn again");
+
+        project.watermark.image = Some("/c/titles/new.png".into());
+        assert!(!project.retire_old_mark(), "a pen mark stays");
+        assert!(project.watermark.image.is_some());
     }
 
     fn clip_for_images() -> Clip {

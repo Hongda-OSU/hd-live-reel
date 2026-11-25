@@ -156,13 +156,13 @@ export interface Watermark {
   size: number;
   /** 0 is invisible, 1 fully opaque. */
   opacity: number;
-  /** The lettering; see `MARK_LOOKS` in src/title.ts. */
+  /** The lettering; only `pen` is drawn (src/title.ts), the rest load from older files. */
   style: MarkStyle;
   /** The laid-out text as a transparent PNG, rendered by the frontend. */
   image?: string | null;
 }
 
-export type MarkStyle = "plain" | "script" | "italic" | "spaced" | "credits";
+export type MarkStyle = "pen" | "plain" | "script" | "italic" | "spaced" | "credits";
 
 export interface Project {
   version: number;
