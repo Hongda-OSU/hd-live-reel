@@ -23,6 +23,11 @@ const styles = stylex.create({
     gap: 6,
     paddingRight: "clamp(24px, 5vw, 64px)",
   },
+  // Text outside the entries starts where their icons do, past the
+  // entries' 12 px padding, so the column reads down one edge.
+  inset: {
+    paddingLeft: 12,
+  },
   title: {
     margin: 0,
     color: colors.text,
@@ -164,8 +169,8 @@ export function Welcome({ onAdd, onPickFiles }: Props) {
   return (
     <section {...stylex.props(styles.page)}>
       <div {...stylex.props(styles.left)}>
-        <h1 {...stylex.props(styles.title)}>HD Live Reel</h1>
-        <p {...stylex.props(styles.tagline)}>把 Live Photo 拼成一段视频</p>
+        <h1 {...stylex.props(styles.title, styles.inset)}>HD Live Reel</h1>
+        <p {...stylex.props(styles.tagline, styles.inset)}>把 Live Photo 拼成一段视频</p>
         <Entry
           main
           icon={
@@ -186,7 +191,7 @@ export function Welcome({ onAdd, onPickFiles }: Props) {
           note="文件或整个文件夹；也可以直接拖进窗口"
           onClick={onPickFiles}
         />
-        {version && <span {...stylex.props(styles.note, styles.version)}>版本 {version}</span>}
+        {version && <span {...stylex.props(styles.note, styles.version, styles.inset)}>版本 {version}</span>}
       </div>
       <div {...stylex.props(styles.divider)} />
       <div {...stylex.props(styles.right)}>
