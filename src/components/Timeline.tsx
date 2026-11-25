@@ -1,4 +1,12 @@
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type PointerEvent } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type MouseEvent,
+  type PointerEvent,
+} from "react";
 import {
   DndContext,
   DragOverlay,
@@ -13,6 +21,8 @@ import {
 } from "@dnd-kit/core";
 import { SortableContext, sortableKeyboardCoordinates, useSortable } from "@dnd-kit/sortable";
 import * as stylex from "@stylexjs/stylex";
+import { LogicalPosition } from "@tauri-apps/api/dpi";
+import { Menu, MenuItem } from "@tauri-apps/api/menu";
 import type { Clip } from "../api";
 import type { Playback } from "../hooks/usePlayback";
 import { clipLabel, formatTime, hasCaption, isMissing } from "../project";
@@ -33,6 +43,18 @@ const TICK_STEPS = [1, 2, 5, 10, 15, 30, 60, 120];
 const TICK_SPACING = 64;
 
 const styles = stylex.create({
+  // Says the add button opens a menu first.
+  caret: {
+    width: 9,
+    height: 9,
+    marginLeft: -2,
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 1.4,
+    strokeLinecap: "round",
+    strokeLinejoin: "round",
+    opacity: 0.7,
+  },
   timeline: {
     gridColumnStart: 1,
     gridColumnEnd: -1,
@@ -329,12 +351,26 @@ interface Props {
   ready: boolean;
   onSelect: (id: string) => void;
   onMove: (from: number, to: number) => void;
-  /** Opens the picker; what it adds goes on the end. */
-  onAdd: () => void;
+  /** Opens the picker; with `after`, what it adds goes after the
+   * selected clip, otherwise on the end. */
+  onAdd: (after: boolean) => void;
   /** Asks, then empties the project. */
   onClear: () => void;
   /** False while exporting, when the clips must stay. */
   canClear: boolean;
+}
+
+/** With a clip selected before the last, asks whether new photos go
+ * after it or on the end; otherwise they go on the end. */
+async function askWhere(event: MouseEvent<HTMLButtonElement>, selected: number, onAdd: Props["onAdd"]) {
+  const box = event.currentTarget.getBoundingClientRect();
+  const menu = await Menu.new({
+    items: await Promise.all([
+      MenuItem.new({ text: `加到第 ${selected} 段后面`, action: () => onAdd(true) }),
+      MenuItem.new({ text: "加到最后", action: () => onAdd(false) }),
+    ]),
+  });
+  await menu.popup(new LogicalPosition(box.left, box.bottom + 4));
 }
 
 /** The clips in play order, each as wide as its time: picks, reorders and
@@ -354,6 +390,9 @@ export function Timeline({
 }: Props) {
   const scroller = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
+  // The selected clip's number; adding asks where only when it isn't last.
+  const selectedNumber = clips.findIndex((clip) => clip.id === selectedId) + 1;
+  const asksWhere = selectedNumber > 0 && selectedNumber < clips.length;
   const [zoom, setZoom] = useState(0);
   const [dragging, setDragging] = useState<string | null>(null);
   const [over, setOver] = useState<string | null>(null);
@@ -460,11 +499,19 @@ export function Timeline({
         </span>
         <span {...stylex.props(styles.spacer)} />
         <span {...stylex.props(styles.actions)}>
-          <Button onClick={onAdd}>
+          <Button
+            onClick={(e) => (asksWhere ? void askWhere(e, selectedNumber, onAdd) : onAdd(false))}
+            aria-haspopup={asksWhere ? "menu" : undefined}
+          >
             <Icon>
               <path d="M8 3v10M3 8h10" />
             </Icon>
             添加照片
+            {asksWhere && (
+              <svg viewBox="0 0 10 10" {...stylex.props(styles.caret)}>
+                <path d="M2.5 4 5 6.5 7.5 4" />
+              </svg>
+            )}
           </Button>
           <Button disabled={!canClear} title="清空工程 ⇧⌘⌫" onClick={onClear}>
             <Icon>

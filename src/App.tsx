@@ -219,6 +219,8 @@ function App() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  /** The clip the picker's photos go after; null puts them at the end. */
+  const [addAfter, setAddAfter] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   /** The clip being swapped for another photo, while picking it. */
   const [replacing, setReplacing] = useState<string | null>(null);
@@ -431,52 +433,68 @@ function App() {
   const added = useMemo(() => new Set(clipAssetKey.split("|").filter(Boolean)), [clipAssetKey]);
 
   // ---------- actions ----------
-  const addClips = useCallback(async (ids: string[]) => {
-    setAdding("starting");
-    setAddError(null);
-    const unlisten = await onClipsProgress(setAdding);
-    try {
-      const clips = await addIphoneClips(ids);
-      dispatch({ type: "addClips", clips });
-      setSelectedId((current) => current ?? clips[0]?.id ?? null);
-      setPickerOpen(false);
-    } catch (e) {
-      setAddError(String(e));
-    } finally {
-      unlisten();
-      setAdding(null);
-    }
+  /** Shows clips just put after `after`: selects the last, so the next
+   * batch follows it, and moves the preview there once it has them. */
+  const showInserted = useCallback((clips: Clip[], after: string | null | undefined) => {
+    const last = clips[clips.length - 1]?.id;
+    if (after && last) {
+      setSelectedId(last);
+      seekAfterRender.current = { id: clips[0].id, peek: true };
+    } else setSelectedId((current) => current ?? clips[0]?.id ?? null);
   }, []);
 
-  const addFiles = useCallback(async (paths: string[]) => {
-    setDrop({ step: "adding", progress: null });
-    const unlisten = await onClipsProgress((progress) => setDrop({ step: "adding", progress }));
-    try {
-      const { clips, skippedStills } = await addFileClips(paths);
-      dispatch({ type: "addClips", clips });
-      setSelectedId((current) => current ?? clips[0]?.id ?? null);
-      if (clips.length) setPickerOpen(false);
-      const skipped = skippedStills ? `跳过了 ${skippedStills} 张没有配对视频的静态照片。` : "";
-      if (clips.length === 0) setDrop({ step: "message", text: skipped || "没有找到视频或 Live Photo。" });
-      else setDrop(skipped ? { step: "message", text: `已添加 ${clips.length} 段，${skipped}` } : null);
-    } catch (e) {
-      setDrop({ step: "message", text: `添加失败：${e}` });
-    } finally {
-      unlisten();
-    }
-  }, []);
+  const addClips = useCallback(
+    async (ids: string[], after?: string | null) => {
+      setAdding("starting");
+      setAddError(null);
+      const unlisten = await onClipsProgress(setAdding);
+      try {
+        const clips = await addIphoneClips(ids);
+        dispatch({ type: "addClips", clips, after });
+        showInserted(clips, after);
+        setPickerOpen(false);
+      } catch (e) {
+        setAddError(String(e));
+      } finally {
+        unlisten();
+        setAdding(null);
+      }
+    },
+    [showInserted],
+  );
+
+  const addFiles = useCallback(
+    async (paths: string[], after?: string | null) => {
+      setDrop({ step: "adding", progress: null });
+      const unlisten = await onClipsProgress((progress) => setDrop({ step: "adding", progress }));
+      try {
+        const { clips, skippedStills } = await addFileClips(paths);
+        dispatch({ type: "addClips", clips, after });
+        showInserted(clips, after);
+        if (clips.length) setPickerOpen(false);
+        const skipped = skippedStills ? `跳过了 ${skippedStills} 张没有配对视频的静态照片。` : "";
+        if (clips.length === 0) setDrop({ step: "message", text: skipped || "没有找到视频或 Live Photo。" });
+        else setDrop(skipped ? { step: "message", text: `已添加 ${clips.length} 段，${skipped}` } : null);
+      } catch (e) {
+        setDrop({ step: "message", text: `添加失败：${e}` });
+      } finally {
+        unlisten();
+      }
+    },
+    [showInserted],
+  );
 
   /** Adds files from the Mac, or with `replace` puts the first in that
    * clip's place. Several can still be picked, since a Live Photo is its
    * picture and its video together. */
-  async function pickFiles(replace?: string | null) {
+  async function pickFiles(replace?: string | null, after?: string | null) {
     const picked = await open({
       multiple: true,
       filters: [{ name: "视频和 Live Photo", extensions: MEDIA_EXTENSIONS }],
     });
     if (!picked?.length) return;
     if (replace) void replaceFromFiles(replace, picked);
-    else void addFiles(picked);
+    else void addFiles(picked, after);
   }
 
   /** Swaps clip `id` for a photo from the phone, keeping its place. */
@@ -520,6 +538,13 @@ function App() {
     seekAfterRender.current = { id, peek: true };
     setPickerOpen(false);
     setReplacing(null);
+  }
+
+  /** Opens the picker; what it adds goes after clip `after`, or at the
+   * end without it. */
+  function openPicker(after: string | null = null) {
+    setAddAfter(after);
+    setPickerOpen(true);
   }
 
   function closePicker() {
@@ -687,7 +712,7 @@ function App() {
     sidebarOpen,
     (command) => {
       if (command === "sidebar") toggleSidebar();
-      else if (command === "add") setPickerOpen(true);
+      else if (command === "add") openPicker();
       else if (command === "export") setInspectorPage("export");
       else if (command === "clear") void clearProject();
       else if (command === "reset") void resetSettings();
@@ -772,7 +797,7 @@ function App() {
           </aside>
         )}
         {project.clips.length === 0 ? (
-          <Welcome onAdd={() => setPickerOpen(true)} onPickFiles={() => void pickFiles()} />
+          <Welcome onAdd={() => openPicker()} onPickFiles={() => void pickFiles()} />
         ) : trimClip ? (
           <TrimEditor key={trimClip.id} clip={trimClip} dispatch={dispatch} onDone={finishTrim} />
         ) : (
@@ -792,7 +817,7 @@ function App() {
                     ? "原来的文件被移动或删除了，找到它再添加一次。"
                     : "缓存被系统清理过，插上 iPhone 重新添加这一张，会放回原来的位置。",
                 onRemove: () => dispatch({ type: "removeClip", id: selectedLost.id }),
-                onReadd: () => (selectedLost.source === "file" ? void pickFiles() : setPickerOpen(true)),
+                onReadd: () => (selectedLost.source === "file" ? void pickFiles() : openPicker()),
               }
             }
             crop={crop && { ...crop, applying: crop.phase !== "drag" }}
@@ -819,7 +844,7 @@ function App() {
                   if (!selectedId) return;
                   if (from === "mac") return void pickFiles(selectedId);
                   setReplacing(selectedId);
-                  setPickerOpen(true);
+                  openPicker();
                 }}
                 onTrim={() => {
                   setCrop(null);
@@ -840,7 +865,7 @@ function App() {
             thumbs={thumbs}
             playback={playback}
             ready={preview.url !== null && !trimClip}
-            onAdd={() => setPickerOpen(true)}
+            onAdd={(after) => openPicker(after ? selectedId : null)}
             onClear={() => void clearProject()}
             canClear={!exporting}
             onSelect={pickClip}
@@ -858,8 +883,8 @@ function App() {
         error={addError}
         onRefresh={refresh}
         onLoadThumbs={loadThumbs}
-        onAdd={replacing ? (ids) => void replaceFromPhone(replacing, ids) : addClips}
-        onPickFiles={() => void pickFiles(replacing)}
+        onAdd={replacing ? (ids) => void replaceFromPhone(replacing, ids) : (ids) => void addClips(ids, addAfter)}
+        onPickFiles={() => void (replacing ? pickFiles(replacing) : pickFiles(null, addAfter))}
         onClose={closePicker}
         replacing={replacing ? project.clips.findIndex((c) => c.id === replacing) + 1 || null : null}
       />

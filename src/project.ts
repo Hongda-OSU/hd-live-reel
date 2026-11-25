@@ -7,7 +7,8 @@ type Aspect = Output["aspect"];
 export type Action =
   | { type: "load"; project: Project }
   | { type: "rename"; name: string }
-  | { type: "addClips"; clips: Clip[] }
+  /** New clips go after clip `after`, or at the end without it. */
+  | { type: "addClips"; clips: Clip[]; after?: string | null }
   | { type: "moveClip"; from: number; to: number }
   | { type: "updateClip"; id: string; patch: Partial<Clip> }
   | { type: "removeClip"; id: string }
@@ -42,7 +43,9 @@ export function reducer(project: Project | null, action: Action): Project | null
         const { id, cropOffset, caption } = clip;
         return { ...found, id, cropOffset, caption, trimStart: Math.min(clip.trimStart, trimEnd), trimEnd };
       });
-      return { ...project, clips: [...clips, ...fresh] };
+      const at = action.after ? clips.findIndex((clip) => clip.id === action.after) : -1;
+      if (at === -1) return { ...project, clips: [...clips, ...fresh] };
+      return { ...project, clips: [...clips.slice(0, at + 1), ...fresh, ...clips.slice(at + 1)] };
     }
     case "replaceClip":
       // The new picture takes the old one's place and caption; its trim
