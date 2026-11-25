@@ -3,7 +3,7 @@ import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import * as stylex from "@stylexjs/stylex";
 import type { Project } from "../api";
 import type { Exporter } from "../hooks/useExport";
-import { folderLabel, FRAME, isMissing, missingLabel, totalLength, UNTITLED, type Action } from "../project";
+import { folderLabel, FPS, FRAME, isMissing, missingLabel, totalLength, UNTITLED, type Action } from "../project";
 import { colors } from "../tokens.stylex";
 import { Button, Field, Group, Icon, ui, withStyle } from "../ui";
 import { WarningIcon } from "./WarningIcon";
@@ -37,20 +37,29 @@ const styles = stylex.create({
     whiteSpace: "nowrap",
     fontSize: 12,
   },
-  // Label and value rows on the same columns as the Field rows above.
-  facts: {
-    display: "grid",
-    gridTemplateColumns: "52px minmax(0, 1fr)",
-    columnGap: 8,
-    rowGap: 6,
+  // A spec sheet: names on the left, values to the right edge, hairlines
+  // between the rows.
+  specs: {
     margin: 0,
     fontSize: 12,
     fontVariantNumeric: "tabular-nums",
   },
-  factName: {
+  spec: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 12,
+    height: 28,
+  },
+  specLine: {
+    borderTopWidth: 1,
+    borderTopStyle: "solid",
+    borderTopColor: colors.border,
+  },
+  specName: {
     color: colors.muted,
   },
-  factValue: {
+  specValue: {
     margin: 0,
   },
   stack: {
@@ -107,6 +116,12 @@ const styles = stylex.create({
 function formatLength(seconds: number) {
   const s = Math.round(seconds);
   return s < 60 ? `${s} 秒` : `${Math.floor(s / 60)} 分 ${s % 60} 秒`;
+}
+
+/** "1:06", "0:48". */
+function formatClock(seconds: number) {
+  const s = Math.round(seconds);
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 }
 
 function formatRemaining(seconds: number) {
@@ -174,16 +189,20 @@ export function ExportPanel({ project, exporter, dispatch }: Props) {
           </div>
         </Field>
       </Group>
-      <Group>
-        <dl {...stylex.props(styles.facts)}>
-          <dt {...stylex.props(styles.factName)}>尺寸</dt>
-          <dd {...stylex.props(styles.factValue, styles.inset)}>{FRAME[output.aspect].join(" × ")}</dd>
-          <dt {...stylex.props(styles.factName)}>时长</dt>
-          <dd {...stylex.props(styles.factValue, styles.inset)}>
-            {formatLength(totalLength(project))} · {project.clips.length} 段
-          </dd>
-          <dt {...stylex.props(styles.factName)}>格式</dt>
-          <dd {...stylex.props(styles.factValue, styles.inset)}>MP4 · H.264</dd>
+      <Group title="规格">
+        <dl {...stylex.props(styles.specs)}>
+          {[
+            ["分辨率", FRAME[output.aspect].join(" × ")],
+            ["帧率", `${FPS} fps`],
+            ["时长", formatClock(totalLength(project))],
+            ["视频", "H.264"],
+            ["音频", "AAC 立体声"],
+          ].map(([name, value], i) => (
+            <div key={name} {...stylex.props(styles.spec, i > 0 && styles.specLine)}>
+              <dt {...stylex.props(styles.specName)}>{name}</dt>
+              <dd {...stylex.props(styles.specValue)}>{value}</dd>
+            </div>
+          ))}
         </dl>
       </Group>
       <Group>

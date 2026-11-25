@@ -157,7 +157,8 @@ export function parseTime(text: string): number | null {
   return Number(match[1] ?? 0) * 60 + seconds;
 }
 
-const FPS = 30;
+/** Every clip is normalized to this frame rate, as in Rust's `FPS`. */
+export const FPS = 30;
 /** Least a clip shows whole between its joins, and the shortest join
  * that isn't a cut; `CLEAR` and `SHORTEST_JOIN` in compose.rs. */
 const CLEAR = 0.8;
