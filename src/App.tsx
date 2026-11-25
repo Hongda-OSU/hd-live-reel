@@ -91,6 +91,7 @@ const styles = stylex.create({
   toolbarCenter: {
     display: "grid",
     justifyItems: "center",
+    rowGap: 3,
   },
   // Export says what it will make before it is clicked: the button's
   // right part, a shade darker, shows the size and length.
