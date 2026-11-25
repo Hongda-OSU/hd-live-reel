@@ -1,20 +1,9 @@
 import type { ReactNode } from "react";
 import * as stylex from "@stylexjs/stylex";
-import type {
-  Audio,
-  Filter,
-  Output,
-  Title,
-  TitlePosition,
-  TitleTextStyle,
-  TitleWeight,
-  Transition,
-  Watermark,
-} from "../api";
+import type { Audio, Filter, Title, TitlePosition, TitleTextStyle, TitleWeight, Transition, Watermark } from "../api";
 import type { Action } from "../project";
 import { colors } from "../tokens.stylex";
 import { Button, Field, Group, Icon, NumberField, Select, Seg, Slider, Swatches, ui } from "../ui";
-import { FrameGroup } from "./FrameGroup";
 import { SoundGroup } from "./SoundGroup";
 import { WatermarkGroup } from "./WatermarkGroup";
 
@@ -168,7 +157,6 @@ interface Props {
   audio: Audio;
   filter: Filter;
   transition: Transition;
-  output: Output;
   watermark: Watermark;
   /** The page shown; the app turns to 这一段 when a clip is picked. */
   page: InspectorPage;
@@ -185,7 +173,6 @@ export function Inspector({
   audio,
   filter,
   transition,
-  output,
   watermark,
   page,
   onPage,
@@ -334,7 +321,6 @@ export function Inspector({
       )}
       {page === "picture" && (
         <>
-          <FrameGroup output={output} dispatch={dispatch} />
           <Group title="滤镜">
             {/* Two rows; one value, so a pick in either row clears the other.
               Natural looks first, styled ones below. */}

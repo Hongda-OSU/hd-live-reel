@@ -556,7 +556,7 @@ function App() {
 
   async function resetSettings() {
     const confirmed = await ask(
-      "文字样式、片头的位置和时长、声音、滤镜、转场和画幅会回到新工程的样子。片头文字、配乐文件和导出文件夹保留，片段和字幕不受影响。",
+      "文字样式、片头的位置和时长、声音、滤镜和转场会回到新工程的样子。片头文字、配乐文件和导出文件夹保留，片段和字幕不受影响。",
       { title: "恢复默认设置", kind: "warning", okLabel: "恢复", cancelLabel: "取消" },
     );
     if (!confirmed) return;
@@ -807,7 +807,6 @@ function App() {
             audio={project.audio}
             filter={project.filter}
             transition={project.transition}
-            output={project.output}
             watermark={project.watermark}
             page={inspectorPage}
             onPage={setInspectorPage}
