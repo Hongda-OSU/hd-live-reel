@@ -43,18 +43,6 @@ const TICK_STEPS = [1, 2, 5, 10, 15, 30, 60, 120];
 const TICK_SPACING = 64;
 
 const styles = stylex.create({
-  // Says the add button opens a menu first.
-  caret: {
-    width: 9,
-    height: 9,
-    marginLeft: -2,
-    fill: "none",
-    stroke: "currentColor",
-    strokeWidth: 1.4,
-    strokeLinecap: "round",
-    strokeLinejoin: "round",
-    opacity: 0.7,
-  },
   timeline: {
     gridColumnStart: 1,
     gridColumnEnd: -1,
@@ -507,11 +495,6 @@ export function Timeline({
               <path d="M8 3v10M3 8h10" />
             </Icon>
             添加照片
-            {asksWhere && (
-              <svg viewBox="0 0 10 10" {...stylex.props(styles.caret)}>
-                <path d="M2.5 4 5 6.5 7.5 4" />
-              </svg>
-            )}
           </Button>
           <Button disabled={!canClear} title="清空工程 ⇧⌘⌫" onClick={onClear}>
             <Icon>
