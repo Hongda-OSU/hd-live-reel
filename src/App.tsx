@@ -154,9 +154,13 @@ const styles = stylex.create({
     borderRightStyle: "solid",
     borderRightColor: colors.border,
   },
+  // Scrolls without a bar: thumbnails cut off at the bottom already show
+  // there is more.
   sidebar: {
     ...frosted,
     overflowY: "auto",
+    scrollbarWidth: "none",
+    "::-webkit-scrollbar": { display: "none" },
     paddingInline: "10px",
     borderRightWidth: 1,
     borderRightStyle: "solid",
