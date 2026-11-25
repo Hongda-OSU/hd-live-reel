@@ -67,6 +67,7 @@ fn matches_compose_py_baseline() {
             transition: Join::CUT,
             grade: Grade::default(),
             title,
+            original: 1.0,
             music: None,
         },
         Quality::Export,

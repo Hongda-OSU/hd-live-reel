@@ -105,21 +105,30 @@ pub fn composition(project: &Project) -> Result<Composition, String> {
         transition,
         grade: grade(&project.filter),
         title,
+        original: original(&project.audio),
         music: music(&project.audio),
     })
 }
 
+/// Gain on the clips' own sound: its volume, with or without music
+/// (0 silences it). The music-only mode, from before that volume
+/// applied on its own, drops it once a track has been chosen.
+fn original(audio: &Audio) -> f64 {
+    match audio.mode {
+        AudioMode::Music if audio.music_path.is_some() => 0.0,
+        AudioMode::Music => 1.0,
+        AudioMode::Original | AudioMode::Mix => audio.original_volume,
+    }
+}
+
 /// The music track, if a music mode is on and a track has been chosen.
 fn music(audio: &Audio) -> Option<Music> {
-    let original = match audio.mode {
-        AudioMode::Original => return None,
-        AudioMode::Music => None,
-        AudioMode::Mix => Some(audio.original_volume),
-    };
+    if matches!(audio.mode, AudioMode::Original) {
+        return None;
+    }
     Some(Music {
         path: audio.music_path.clone()?,
         volume: audio.music_volume,
-        original,
     })
 }
 
@@ -425,20 +434,26 @@ mod tests {
             ..Default::default()
         };
         project.audio.mode = AudioMode::Music;
-        assert_eq!(composition(&project).unwrap().music, None, "no track yet");
+        let alone = composition(&project).unwrap();
+        assert_eq!(alone.music, None, "no track yet");
+        assert_eq!(alone.original, 1.0, "so the clips' sound plays");
 
         project.audio.music_path = Some("/c/music/song.flac".into());
-        assert_eq!(composition(&project).unwrap().music.unwrap().original, None);
+        let music_only = composition(&project).unwrap();
+        assert!(music_only.music.is_some());
+        assert_eq!(music_only.original, 0.0);
 
         project.audio.mode = AudioMode::Mix;
         project.audio.original_volume = 1.5;
-        assert_eq!(
-            composition(&project).unwrap().music.unwrap().original,
-            Some(1.5)
-        );
+        assert_eq!(composition(&project).unwrap().original, 1.5);
 
         project.audio.mode = AudioMode::Original;
-        assert_eq!(composition(&project).unwrap().music, None);
+        let clips_only = composition(&project).unwrap();
+        assert_eq!(clips_only.music, None);
+        assert_eq!(clips_only.original, 1.5, "the volume counts without music");
+
+        project.audio.original_volume = 0.0;
+        assert_eq!(composition(&project).unwrap().original, 0.0, "silent");
     }
 
     #[test]
