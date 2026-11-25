@@ -213,7 +213,6 @@ export function ExportPanel({ project, exporter, dispatch }: Props) {
                   导出视频
                 </Button>
               </div>
-              {phase.step === "idle" && phase.cancelled && <p {...stylex.props(ui.note)}>已取消，没有保存任何文件。</p>}
               {phase.step === "error" && <p {...stylex.props(ui.error)}>{phase.message}</p>}
             </>
           )}

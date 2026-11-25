@@ -2,7 +2,7 @@ import { useState } from "react";
 import { cancelExport, EXPORT_CANCELLED, exportVideo, onExportProgress, type Project } from "../api";
 
 export type ExportPhase =
-  | { step: "idle"; cancelled: boolean }
+  | { step: "idle" }
   | {
       step: "running";
       progress: number;
@@ -32,7 +32,7 @@ function explain(message: string) {
 /** One export at a time, kept above the 导出 page so switching pages
  * mid-export loses nothing. */
 export function useExport() {
-  const [phase, setPhase] = useState<ExportPhase>({ step: "idle", cancelled: false });
+  const [phase, setPhase] = useState<ExportPhase>({ step: "idle" });
 
   async function start(project: Project) {
     const startedAt = Date.now();
@@ -45,11 +45,8 @@ export function useExport() {
     try {
       setPhase({ step: "done", path: await exportVideo(project) });
     } catch (e) {
-      setPhase(
-        String(e) === EXPORT_CANCELLED
-          ? { step: "idle", cancelled: true }
-          : { step: "error", message: explain(String(e)) },
-      );
+      // A cancel just goes back to the form; nothing was saved.
+      setPhase(String(e) === EXPORT_CANCELLED ? { step: "idle" } : { step: "error", message: explain(String(e)) });
     } finally {
       unlisten();
     }
@@ -61,7 +58,7 @@ export function useExport() {
   }
 
   /** Back to the form after a finished or failed export. */
-  const reset = () => setPhase({ step: "idle", cancelled: false });
+  const reset = () => setPhase({ step: "idle" });
 
   return { phase, start, cancel, reset };
 }
