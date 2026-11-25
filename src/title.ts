@@ -1,7 +1,7 @@
 // Lays out the opening title, the captions over single clips and the
 // watermark on transparent output-sized canvases. FFmpeg overlays the PNGs, so what is
 // drawn here is exactly what gets exported.
-import type { Caption, Output, Title, TitlePosition, TitleWeight, Watermark } from "./api";
+import type { Caption, MarkStyle, Output, Title, TitlePosition, TitleWeight, Watermark } from "./api";
 import { FRAME } from "./project";
 
 /** Text never runs wider than this share of the frame. */
@@ -104,6 +104,71 @@ export function renderCaptionPng(caption: Caption, title: Title, aspect: Output[
  * short side. */
 const WATERMARK_MARGIN = 0.04;
 
+/** How each watermark style sets the app's name: the font, how big
+ * against the chosen size (scripts run small, spaced capitals wide), and
+ * the spelling. Text other than the name keeps its own spelling. */
+export const MARK_LOOKS: Record<
+  MarkStyle,
+  { label: string; family: string; weight: number; italic: boolean; spacing: number; scale: number; name: string }
+> = {
+  script: {
+    label: "手写签名",
+    family: "Snell Roundhand",
+    weight: 700,
+    italic: false,
+    spacing: 0,
+    scale: 1.45,
+    name: "HD Live Reel",
+  },
+  spaced: {
+    label: "宽字距大写",
+    family: "Avenir Next",
+    weight: 600,
+    italic: false,
+    spacing: 0.32,
+    scale: 0.72,
+    name: "HD LIVE REEL",
+  },
+  italic: {
+    label: "杂志斜体",
+    family: "Didot",
+    weight: 400,
+    italic: true,
+    spacing: 0,
+    scale: 1.2,
+    name: "HD Live Reel",
+  },
+  credits: {
+    label: "片尾字幕",
+    family: "Didot",
+    weight: 400,
+    italic: false,
+    spacing: 0.24,
+    scale: 0.82,
+    name: "HD LIVE REEL",
+  },
+  plain: {
+    label: "苹方",
+    family: "PingFang SC",
+    weight: 600,
+    italic: false,
+    spacing: 0,
+    scale: 1,
+    name: "hd-live-reel",
+  },
+};
+
+/** The watermark's text as `style` writes it. */
+export function markText(text: string, style: MarkStyle): string {
+  const trimmed = fixApostrophes(text.trim());
+  const look = MARK_LOOKS[style];
+  if (trimmed === MARK_NAME) return look.name;
+  return look.spacing > 0 ? trimmed.toUpperCase() : trimmed;
+}
+
+/** The text the watermark switch turns on; matches the Rust default. */
+export const MARK_NAME = "hd-live-reel";
+
 /** White text with a soft shadow, so it reads on bright and dark frames
  * alike; the opacity is applied when the video is composed. */
 export function renderWatermarkPng(watermark: Watermark, aspect: Output["aspect"]): Promise<Uint8Array> {
@@ -112,19 +177,30 @@ export function renderWatermarkPng(watermark: Watermark, aspect: Output["aspect"
   canvas.width = width;
   canvas.height = height;
   const ctx = canvas.getContext("2d")!;
-  const text = fixApostrophes(watermark.text.trim());
-  const size = fitFont(ctx, text, 600, watermark.size, "PingFang SC", width * 0.6);
+  const look = MARK_LOOKS[watermark.style];
+  const text = markText(watermark.text, watermark.style);
+  const spec = (size: number) =>
+    `${look.italic ? "italic " : ""}${look.weight} ${size}px "${look.family}", "PingFang SC", -apple-system, sans-serif`;
+  // Shrunk until it fits in 60% of the width, like the other text.
+  let size = watermark.size * look.scale;
+  for (;;) {
+    ctx.font = spec(size);
+    ctx.letterSpacing = `${size * look.spacing}px`;
+    if (ctx.measureText(text).width <= width * 0.6 || size <= 12) break;
+    size -= 2;
+  }
   const margin = Math.min(width, height) * WATERMARK_MARGIN;
   const left = watermark.position.endsWith("Left");
   const top = watermark.position.startsWith("top");
-  ctx.font = fontSpec(600, size, "PingFang SC");
   ctx.textAlign = left ? "left" : "right";
   ctx.textBaseline = top ? "top" : "bottom";
   ctx.shadowColor = "rgba(0, 0, 0, 0.5)";
   ctx.shadowBlur = size * 0.25;
   ctx.shadowOffsetY = size * 0.06;
   ctx.fillStyle = "#ffffff";
-  ctx.fillText(text, left ? margin : width - margin, top ? margin : height - margin);
+  // Letter spacing trails the last letter too; keep the margin to the ink.
+  const trail = left ? 0 : size * look.spacing;
+  ctx.fillText(text, left ? margin : width - margin + trail, top ? margin : height - margin);
   return encode(canvas);
 }
 

@@ -245,8 +245,8 @@ export const hasWatermark = (watermark: Watermark) => watermark.text.trim() !== 
 
 /** Watermark fields, and the frame shape, that change its rendered PNG. */
 export function watermarkImageKey(watermark: Watermark, aspect: Aspect): string {
-  const { position, size } = watermark;
-  return JSON.stringify({ text: watermark.text.trim(), position, size, aspect });
+  const { position, size, style } = watermark;
+  return JSON.stringify({ text: watermark.text.trim(), position, size, style, aspect });
 }
 
 /** Everything that changes the rendered video; previews re-run when it does. */

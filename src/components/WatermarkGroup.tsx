@@ -1,10 +1,39 @@
 import * as stylex from "@stylexjs/stylex";
-import type { Watermark } from "../api";
+import type { MarkStyle, Watermark } from "../api";
 import type { Action } from "../project";
-import { Field, Group, Slider, Switch, ui } from "../ui";
+import { MARK_LOOKS, MARK_NAME, markText } from "../title";
+import { Field, Group, PopupSelect, Slider, Switch } from "../ui";
 
-/** The only mark offered; matches the Rust default. */
-const MARK = "hd-live-reel";
+const styles = stylex.create({
+  // A style's name written in that style, as the menu shows it.
+  look: (fontFamily: string, fontWeight: number, fontStyle: string, letterSpacing: string, fontSize: number) => ({
+    fontFamily: `"${fontFamily}", "PingFang SC", sans-serif`,
+    fontWeight,
+    fontStyle,
+    letterSpacing,
+    fontSize,
+    lineHeight: 1,
+  }),
+});
+
+/** The menu's order: the recommended look first, the plain one last. */
+const ORDER: MarkStyle[] = ["script", "spaced", "italic", "credits", "plain"];
+
+function Lettering({ style }: { style: MarkStyle }) {
+  const look = MARK_LOOKS[style];
+  // About 13 px for plain text, so every look reads at a similar size.
+  const size = Math.min(18, 13 * look.scale);
+  return (
+    <span
+      title={look.label}
+      {...stylex.props(
+        styles.look(look.family, look.weight, look.italic ? "italic" : "normal", `${look.spacing}em`, size),
+      )}
+    >
+      {markText(MARK_NAME, style)}
+    </span>
+  );
+}
 
 interface Props {
   watermark: Watermark;
@@ -12,21 +41,26 @@ interface Props {
 }
 
 /** The app's name in the corner of every frame (bottom right by default),
- * on or off. Stored as the text, empty when off, so the project format is
- * unchanged. */
+ * on or off, in one of a few letterings. On and off are stored as the
+ * text, empty when off. */
 export function WatermarkGroup({ watermark, dispatch }: Props) {
   const set = (patch: Partial<Watermark>) => dispatch({ type: "updateWatermark", patch });
   const on = watermark.text.trim() !== "";
   return (
-    <Group title="水印">
-      <Field>
-        <div {...stylex.props(ui.inline)}>
-          <span {...stylex.props(ui.spacer)}>{MARK}</span>
-          <Switch on={on} label="显示水印" onToggle={() => set({ text: on ? "" : MARK })} />
-        </div>
-      </Field>
+    <Group
+      title="水印"
+      action={<Switch on={on} label="显示水印" onToggle={() => set({ text: on ? "" : MARK_NAME })} />}
+    >
       {on && (
         <>
+          <Field label="样式">
+            <PopupSelect<MarkStyle>
+              label="水印样式"
+              options={ORDER.map((style) => [style, <Lettering key={style} style={style} />])}
+              value={watermark.style}
+              onChange={(style) => set({ style })}
+            />
+          </Field>
           <Field label="大小">
             <Slider
               min={24}
@@ -48,7 +82,6 @@ export function WatermarkGroup({ watermark, dispatch }: Props) {
               onChange={(transparency) => set({ opacity: Math.round((1 - transparency) * 100) / 100 })}
             />
           </Field>
-          <p {...stylex.props(ui.note)}>从第一帧到最后一帧都显示。</p>
         </>
       )}
     </Group>

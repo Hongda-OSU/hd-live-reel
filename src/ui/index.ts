@@ -6,6 +6,7 @@ export { Field } from "./Field";
 export { Group } from "./Group";
 export { Icon } from "./Icon";
 export { NumberField } from "./NumberField";
+export { PopupSelect } from "./PopupSelect";
 export { Seg } from "./Seg";
 export { Select } from "./Select";
 export { Slider } from "./Slider";

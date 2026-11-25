@@ -368,6 +368,8 @@ pub struct Watermark {
     pub size: u32,
     /// 0 is invisible, 1 fully opaque.
     pub opacity: f64,
+    /// How the frontend writes it; Rust only keeps it.
+    pub style: MarkStyle,
     /// The laid-out text as a transparent PNG, rendered by the frontend.
     pub image: Option<PathBuf>,
 }
@@ -379,9 +381,26 @@ impl Default for Watermark {
             position: Corner::BottomRight,
             size: 36,
             opacity: 0.7,
+            style: MarkStyle::Script,
             image: None,
         }
     }
+}
+
+/// The watermark's lettering; each names a font and how the text is set.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum MarkStyle {
+    /// PingFang, as the app's name is spelled; the look before styles.
+    Plain,
+    /// Snell Roundhand, like a signature.
+    Script,
+    /// Didot italic.
+    Italic,
+    /// Avenir Next capitals, widely spaced.
+    Spaced,
+    /// Didot capitals, widely spaced, like end credits.
+    Credits,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -709,6 +728,13 @@ mod tests {
         assert_eq!(json["watermark"]["text"], "@hd");
         assert_eq!(json["watermark"]["position"], "topLeft");
         assert_eq!(json["watermark"]["opacity"], 0.7);
+        assert_eq!(json["watermark"]["style"], "script", "new marks are signed");
+        let older: Watermark = serde_json::from_str(r#"{"text": "hd-live-reel"}"#).unwrap();
+        assert_eq!(
+            older.style,
+            MarkStyle::Script,
+            "a saved mark without a style takes the default"
+        );
         let again: Project = serde_json::from_value(json).unwrap();
         assert_eq!(again, project);
 
