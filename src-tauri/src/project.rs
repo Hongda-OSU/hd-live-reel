@@ -200,6 +200,10 @@ pub enum Preset {
     City,
     Vapor,
     Mono,
+    Autumn,
+    Film,
+    Airy,
+    Vivid,
 }
 
 /// Values follow FFmpeg's `eq` filter: brightness is an offset around 0,

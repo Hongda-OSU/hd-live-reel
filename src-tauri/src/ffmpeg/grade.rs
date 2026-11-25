@@ -3,7 +3,7 @@
 //! filters; the preset numbers are hand-picked starting points.
 
 /// A preset look; the frontend calls these 林间 / 水色 / 暖阳 / 晴空 /
-/// 球场 / 城市 / 蒸汽波 / 黑白.
+/// 球场 / 城市 / 蒸汽波 / 黑白 / 秋色 / 胶片 / 日系 / 浓郁.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Look {
     /// Richer, deeper greens.
@@ -22,6 +22,14 @@ pub enum Look {
     Vapor,
     /// Black and white.
     Mono,
+    /// Autumn leaves towards orange.
+    Autumn,
+    /// Lifted blacks, soft whites and fine grain.
+    Film,
+    /// Bright, soft and pale, with cool shadows.
+    Airy,
+    /// Dull colours raised, strong ones mostly left alone.
+    Vivid,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -121,6 +129,30 @@ fn look_filter(look: Look) -> &'static str {
              curves=r='0/0.08 1/1':g='0/0.02 1/1':b='0/0.16 1/1'"
         }
         Look::Mono => "hue=s=0,eq=contrast=1.12",
+        // Yellow leaves pushed towards orange; sky and water stay as shot.
+        Look::Autumn => {
+            "huesaturation=colors=y:hue=-8:saturation=0.5:strength=3,\
+             huesaturation=colors=r:saturation=0.4:strength=3,\
+             colorbalance=rm=0.05:bm=-0.05,\
+             eq=contrast=1.05"
+        }
+        // Lifted blacks, softened whites, a little warmth and grain that
+        // changes every frame, on luma only so it never turns colourful.
+        Look::Film => {
+            "curves=all='0/0.06 0.5/0.5 1/0.94',\
+             colorbalance=rs=0.03:bs=-0.03:rm=0.04:bm=-0.04,\
+             eq=saturation=0.9,\
+             noise=c0s=7:c0f=t+u"
+        }
+        // Bright, soft and pale, with cool shadows.
+        Look::Airy => {
+            "eq=brightness=0.05:contrast=0.88:saturation=0.82,\
+             colorbalance=rs=-0.04:gs=0.02:bs=0.05,\
+             curves=all='0/0.08 1/1'"
+        }
+        // Raises dull colours more than ones already strong, so a clear
+        // sky doesn't glare.
+        Look::Vivid => "vibrance=intensity=0.25,eq=contrast=1.08",
     }
 }
 
@@ -204,6 +236,10 @@ mod tests {
             Look::City,
             Look::Vapor,
             Look::Mono,
+            Look::Autumn,
+            Look::Film,
+            Look::Airy,
+            Look::Vivid,
         ] {
             let grade = Grade {
                 look: Some(look),
@@ -288,6 +324,48 @@ mod tests {
             warmth(midtone, look(Look::City)) > warmth(midtone, None) + 3.0,
             "warm mids"
         );
+    }
+
+    #[test]
+    fn autumn_film_airy_and_vivid_do_what_they_say() {
+        let look = |look| {
+            Grade {
+                look: Some(look),
+                ..Grade::default()
+            }
+            .filter()
+        };
+        let sat = |source, filter| stat_of(source, filter, "SATAVG");
+        let luma = |source, filter| stat_of(source, filter, "YAVG");
+        let yellow = "color=0xd8c020:s=64x64:d=1";
+        let blue = "color=0x3a6ea5:s=64x64:d=1";
+        let grey = "color=0x707070:s=64x64:d=1";
+        let black = "color=black:s=64x64:d=1";
+
+        // Yellow towards orange: more red (V) than before.
+        assert!(stat_of(yellow, look(Look::Autumn), "VAVG") > stat_of(yellow, None, "VAVG") + 5.0);
+        assert!(
+            (sat(blue, look(Look::Autumn)) - sat(blue, None)).abs() < 3.0,
+            "sky as shot"
+        );
+
+        assert!(
+            luma(black, look(Look::Film)) > luma(black, None) + 8.0,
+            "lifted blacks"
+        );
+
+        assert!(
+            luma(grey, look(Look::Airy)) > luma(grey, None) + 5.0,
+            "brighter"
+        );
+        assert!(sat(blue, look(Look::Airy)) < sat(blue, None), "paler");
+
+        // A dull colour gains proportionally more than a strong one.
+        let dull = "color=0x6a7a8a:s=64x64:d=1";
+        let strong = "color=0x1060e0:s=64x64:d=1";
+        let gain = |source| sat(source, look(Look::Vivid)) / sat(source, None);
+        assert!(gain(dull) > 1.1, "dull colours gain");
+        assert!(gain(dull) > gain(strong), "strong colours gain less");
     }
 
     #[test]

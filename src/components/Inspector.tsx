@@ -169,23 +169,28 @@ const PAGES: [InspectorPage, string, ReactNode][] = [
   ["export", "导出", <path key="export" d="M8 10V2.5M5 5.5 8 2.5l3 3M3.5 8.5v4a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1v-4" />],
 ];
 
-/** The looks in the 滤镜 menu after 原片: ones for the places I shoot,
- * then styled ones. More go in either group. */
+/** The looks in the 滤镜 menu after 原片: 自然 ones make the scene look
+ * better without changing its mood, 风格 ones read as graded. More go
+ * in either group. */
 const FILTER_GROUPS: [string, [Filter["preset"], string][]][] = [
   [
     "自然",
     [
       ["forest", "林间"],
       ["river", "水色"],
-      ["golden", "暖阳"],
       ["sky", "晴空"],
+      ["golden", "暖阳"],
+      ["autumn", "秋色"],
+      ["vivid", "浓郁"],
     ],
   ],
   [
     "风格",
     [
-      ["court", "球场"],
+      ["film", "胶片"],
+      ["airy", "日系"],
       ["city", "城市"],
+      ["court", "球场"],
       ["vapor", "蒸汽波"],
       ["mono", "黑白"],
     ],

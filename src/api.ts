@@ -96,7 +96,20 @@ export interface Title {
 }
 
 export interface Filter {
-  preset: "none" | "forest" | "river" | "golden" | "sky" | "court" | "city" | "vapor" | "mono";
+  preset:
+    | "none"
+    | "forest"
+    | "river"
+    | "golden"
+    | "sky"
+    | "autumn"
+    | "vivid"
+    | "court"
+    | "city"
+    | "vapor"
+    | "mono"
+    | "film"
+    | "airy";
   /** Added to luma; 0 leaves it alone. */
   brightness: number;
   /** 1 leaves it alone. */
