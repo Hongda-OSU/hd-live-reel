@@ -141,6 +141,12 @@ impl Segment {
     }
 }
 
+/// Least time a clip shows whole, between the joins either side of it.
+pub const CLEAR: f64 = 0.8;
+/// Joins that would be shorter than this are cuts; a flicker of a fade
+/// only looks like a glitch.
+pub const SHORTEST_JOIN: f64 = 0.1;
+
 /// How neighbouring clips join: one of FFmpeg's xfade transitions over
 /// `seconds`, the sound cross-fading alongside; 0 seconds is a hard cut.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -172,40 +178,52 @@ pub struct Composition {
 }
 
 impl Composition {
-    /// The cross-dissolve actually used: whole frames, and never more than
-    /// half the shortest segment, so no segment is consumed by its fades.
-    pub fn crossfade(&self) -> f64 {
-        if self.clips.len() < 2 || self.transition.seconds <= 0.0 {
-            return 0.0;
+    /// Seconds each join overlaps its two clips, in whole frames: the
+    /// chosen length, cut down so each clip still shows whole for `CLEAR`
+    /// between its joins. Judged per join, so one short clip doesn't
+    /// shorten every other; under `SHORTEST_JOIN` it is a cut.
+    pub fn joins(&self) -> Vec<f64> {
+        if self.transition.seconds <= 0.0 {
+            return vec![0.0; self.clips.len().saturating_sub(1)];
         }
-        let shortest = self
-            .clips
-            .iter()
-            .map(Segment::length)
-            .fold(f64::INFINITY, f64::min);
-        snap_down(self.transition.seconds.min(shortest / 2.0))
+        let room = |clip: &Segment| ((clip.length() - CLEAR) / 2.0).max(0.0);
+        self.clips
+            .windows(2)
+            .map(|pair| {
+                let join = snap_down(
+                    self.transition
+                        .seconds
+                        .min(room(&pair[0]))
+                        .min(room(&pair[1])),
+                );
+                if join < SHORTEST_JOIN {
+                    0.0
+                } else {
+                    join
+                }
+            })
+            .collect()
     }
 
     /// Length of the result; each join overlaps two segments.
     pub fn length(&self) -> f64 {
         let sum: f64 = self.clips.iter().map(Segment::length).sum();
-        sum - self.crossfade() * self.clips.len().saturating_sub(1) as f64
+        sum - self.joins().iter().sum::<f64>()
     }
 
     /// When each clip is fully on screen, in seconds of the result: after
-    /// the dissolve into it and before the one out of it.
+    /// the join into it and before the one out of it.
     pub fn clip_windows(&self) -> Vec<(f64, f64)> {
-        let fade = self.crossfade();
-        let last = self.clips.len().saturating_sub(1);
+        let joins = self.joins();
         let mut start = 0.0;
         self.clips
             .iter()
             .enumerate()
             .map(|(i, clip)| {
-                let fade_in = if i > 0 { fade } else { 0.0 };
-                let fade_out = if i < last { fade } else { 0.0 };
+                let fade_in = if i > 0 { joins[i - 1] } else { 0.0 };
+                let fade_out = joins.get(i).copied().unwrap_or(0.0);
                 let window = (start + fade_in, start + clip.length() - fade_out);
-                start += clip.length() - fade;
+                start += clip.length() - fade_out;
                 window
             })
             .collect()
@@ -301,10 +319,10 @@ fn filter_graph(composition: &Composition, quality: Quality) -> String {
             segment_filters(i, segment, (width, height), composition.fill, &mut graph)
         })
         .collect();
-    let crossfade = composition.crossfade();
-    if crossfade > 0.0 {
+    let joins = composition.joins();
+    if joins.iter().any(|&join| join > 0.0) {
         let style = composition.transition.style;
-        join_with_crossfades(&composition.clips, &labels, style, crossfade, &mut graph);
+        join_pairwise(&composition.clips, &labels, style, &joins, &mut graph);
     } else {
         let inputs: String = labels.iter().map(|(v, a)| format!("[{v}][{a}]")).collect();
         graph.push_str(&format!("{inputs}concat=n={n}:v=1:a=1[joined][a0];"));
@@ -393,32 +411,51 @@ fn filter_graph(composition: &Composition, quality: Quality) -> String {
     graph
 }
 
-/// Chains the segments pairwise: each one passes into the next over
-/// `crossfade` seconds, picture with xfade's `style` and sound with
-/// acrossfade. Leaves `[joined]` and `[a0]` like concat does.
-fn join_with_crossfades(
+/// Chains the segments pairwise: each passes into the next over its
+/// join's seconds, picture with xfade's `style` and sound with
+/// acrossfade, or is simply followed where the join is a cut. Leaves
+/// `[joined]` and `[a0]` like concat does.
+fn join_pairwise(
     segments: &[Segment],
     labels: &[(String, String)],
     style: &str,
-    crossfade: f64,
+    joins: &[f64],
     graph: &mut String,
 ) {
     let last = labels.len() - 1;
     let (mut video, mut audio) = labels[0].clone();
     let mut length = segments[0].length();
+    // concat puts its output on FFmpeg's own time base, and xfade needs
+    // both pictures on one; after a cut, the next clip joins it there.
+    let mut rebased = false;
     for (i, (next_video, next_audio)) in labels.iter().enumerate().skip(1) {
         let (out_video, out_audio) = if i == last {
             ("joined".to_string(), "a0".to_string())
         } else {
             (format!("x{i}v"), format!("x{i}a"))
         };
-        // The offset is where the dissolve starts on the joined timeline.
-        graph.push_str(&format!(
-            "[{video}][{next_video}]xfade=transition={style}:duration={crossfade:.4}:offset={:.4}[{out_video}];\
-             [{audio}][{next_audio}]acrossfade=d={crossfade:.4}[{out_audio}];",
-            length - crossfade,
-        ));
-        length += segments[i].length() - crossfade;
+        let join = joins[i - 1];
+        if join > 0.0 {
+            let next = if rebased {
+                graph.push_str(&format!("[{next_video}]settb=AVTB[t{i}v];"));
+                format!("t{i}v")
+            } else {
+                next_video.clone()
+            };
+            // The offset is where the join starts on the joined timeline.
+            graph.push_str(&format!(
+                "[{video}][{next}]xfade=transition={style}:duration={join:.4}:offset={:.4}[{out_video}];\
+                 [{audio}][{next_audio}]acrossfade=d={join:.4}[{out_audio}];",
+                length - join,
+            ));
+        } else {
+            graph.push_str(&format!(
+                "[{video}][{next_video}]concat=n=2:v=1:a=0[{out_video}];\
+                 [{audio}][{next_audio}]concat=n=2:v=0:a=1[{out_audio}];",
+            ));
+            rebased = true;
+        }
+        length += segments[i].length() - join;
         (video, audio) = (out_video, out_audio);
     }
 }
@@ -867,16 +904,32 @@ mod tests {
     }
 
     #[test]
-    fn crossfade_is_whole_frames_and_at_most_half_the_shortest_clip() {
-        let mut short = composition(None);
-        short.transition.seconds = 0.8;
-        short.clips[1].trim = Some((0.0, 0.5));
-        // Half of 0.5 s is 7.5 frames; it rounds down to 7.
-        assert!((short.crossfade() - 7.0 / 30.0).abs() < 1e-9);
-        short.transition.seconds = 0.11;
-        assert!((short.crossfade() - 0.1).abs() < 1e-9, "3 frames");
-        short.clips.truncate(1);
-        assert_eq!(short.crossfade(), 0.0, "nothing to join");
+    fn joins_are_judged_per_pair_and_leave_each_clip_clear() {
+        let mut four = composition(None);
+        four.clips = ["a.mov", "b.mov", "c.mov", "d.mov"]
+            .map(|p| Segment::whole(p.into(), 2.0))
+            .into();
+        four.transition.seconds = 0.5;
+        assert_eq!(four.joins(), vec![0.5, 0.5, 0.5]);
+
+        // A 1.2 s clip can give up 0.2 s each side and still show 0.8 s
+        // whole; its neighbours' joins shrink, the last one doesn't.
+        four.clips[1].trim = Some((0.0, 1.2));
+        let joins = four.joins();
+        assert!((joins[0] - 0.2).abs() < 1e-9 && (joins[1] - 0.2).abs() < 1e-9);
+        assert_eq!(joins[2], 0.5, "untouched by the short clip");
+        assert!((four.length() - (7.2 - 0.9)).abs() < 1e-9);
+
+        // Under 0.1 s a join is a cut.
+        four.clips[1].trim = Some((0.0, 0.9));
+        assert_eq!(&four.joins()[..2], &[0.0, 0.0]);
+        four.transition.seconds = 0.11;
+        assert!(
+            (four.joins()[2] - 0.1).abs() < 1e-9,
+            "3 frames, rounded down"
+        );
+        four.clips.truncate(1);
+        assert!(four.joins().is_empty(), "nothing to join");
     }
 
     fn music(original: Option<f64>) -> Music {
@@ -1259,11 +1312,11 @@ mod tests {
     }
 
     #[test]
-    fn crossfaded_output_keeps_sound_and_picture_together() {
+    fn cut_and_faded_joins_keep_sound_with_picture() {
         let dir = std::env::temp_dir().join(format!("hd-live-reel-xfade-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let mut clips = Vec::new();
-        for i in 0..3 {
+        for i in 0..4 {
             let src = dir.join(format!("src{i}.mov"));
             Tool::Ffmpeg
                 .run([
@@ -1289,7 +1342,9 @@ mod tests {
             normalize(&src, &norm).unwrap();
             clips.push(Segment::whole(norm, 2.0));
         }
-        clips[1].trim = Some((0.5, 1.5));
+        // Too short to give up time to a join: cuts either side of it, then
+        // a fade, which has to meet the cuts' time base.
+        clips[1].trim = Some((0.5, 1.4));
         let composition = Composition {
             watermark: None,
             captions: Vec::new(),
@@ -1319,9 +1374,10 @@ mod tests {
             .unwrap();
         std::fs::remove_dir_all(&dir).unwrap();
 
-        // 2 + 1 + 2 seconds with two 0.3 s overlaps.
+        // 2 + 0.9 + 2 + 2 seconds with one 0.3 s overlap.
+        assert_eq!(composition.joins(), vec![0.0, 0.0, 0.3]);
         let expected = composition.length();
-        assert!((expected - 4.4).abs() < 1e-9);
+        assert!((expected - 6.6).abs() < 1e-9);
         let durations: Vec<f64> = String::from_utf8_lossy(&streams.stdout)
             .lines()
             .filter_map(|line| line.split(',').nth(1)?.parse().ok())

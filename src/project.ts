@@ -158,31 +158,38 @@ export function parseTime(text: string): number | null {
 }
 
 const FPS = 30;
+/** Least a clip shows whole between its joins, and the shortest join
+ * that isn't a cut; `CLEAR` and `SHORTEST_JOIN` in compose.rs. */
+const CLEAR = 0.8;
+const SHORTEST_JOIN = 0.1;
 
-/** Seconds each join overlaps two clips, computed as the Rust side does:
- * whole frames, at most half the shortest clip. */
-export function crossfade(project: Project): number {
+/** Seconds each join overlaps its two clips, as `Composition::joins` in
+ * Rust: the transition's length, cut down so each clip keeps `CLEAR`
+ * whole, in whole frames; under `SHORTEST_JOIN` it is a cut. */
+export function joins(project: Project): number[] {
   const { clips, transition } = project;
-  if (transition.type === "none" || clips.length < 2 || transition.duration <= 0) return 0;
-  const shortest = Math.min(...clips.map(clipLength));
-  return Math.floor(Math.min(transition.duration, shortest / 2) * FPS + 1e-6) / FPS;
+  if (transition.type === "none" || transition.duration <= 0) return clips.slice(1).map(() => 0);
+  const room = (clip: Clip) => Math.max(0, (clipLength(clip) - CLEAR) / 2);
+  return clips.slice(1).map((clip, i) => {
+    const join = Math.floor(Math.min(transition.duration, room(clips[i]), room(clip)) * FPS + 1e-6) / FPS;
+    return join < SHORTEST_JOIN ? 0 : join;
+  });
 }
 
-/** How long each clip holds the joined timeline; a dissolve is split
- * between the two clips it joins, so the boundary sits at its middle. */
+/** How long each clip holds the joined timeline; a join is split between
+ * the two clips it joins, so the boundary sits at its middle. */
 export function clipSpans(project: Project): number[] {
-  const overlap = crossfade(project);
-  const last = project.clips.length - 1;
-  return project.clips.map((clip, i) => clipLength(clip) - (i > 0 ? overlap / 2 : 0) - (i < last ? overlap / 2 : 0));
+  const overlaps = joins(project);
+  return project.clips.map((clip, i) => clipLength(clip) - (i > 0 ? overlaps[i - 1] / 2 : 0) - (overlaps[i] ?? 0) / 2);
 }
 
-/** Where `id` is fully on screen: its start, past the dissolve into it. */
+/** Where `id` is fully on screen: its start, past the join into it. */
 export function clipStart(project: Project, id: string): number {
   const index = project.clips.findIndex((c) => c.id === id);
   const spanStart = clipSpans(project)
     .slice(0, index)
     .reduce((sum, span) => sum + span, 0);
-  const settled = index > 0 ? crossfade(project) / 2 : 0;
+  const settled = index > 0 ? joins(project)[index - 1] / 2 : 0;
   return spanStart + settled + 0.01;
 }
 

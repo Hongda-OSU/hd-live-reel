@@ -33,7 +33,7 @@ Personal macOS desktop app that stitches iPhone Live Photos into one MP4 with or
 - Originals are read-only. Intermediates go in `~/Library/Caches/<App>/` (macOS may clear it; `load_project` rebuilds them); our only copies (iPhone downloads, music) in `~/Library/Application Support/<App>/`.
 - Normalize every clip on import to 30 fps, BT.709 SDR, stereo 48 kHz, keeping its shape; compose fits it to the output frame.
 - Lay out title, caption and watermark text in a frontend Canvas and overlay it as a transparent PNG. Do not use FFmpeg `drawtext`.
-- Rust owns timing and frame sizes (`Composition::length`, `crossfade`, `clip_windows`, `SCENE_GAP`, `Shape::size`); `clipSpans` and `FRAME` in `src/project.ts` and `src/scenes.ts` must match it.
+- Rust owns timing and frame sizes (`Composition::length`, `joins`, `clip_windows`, `SCENE_GAP`, `Shape::size`); `clipSpans`, `joins` and `FRAME` in `src/project.ts` and `src/scenes.ts` mirror it.
 - Style components with StyleX; colours and sizes come from `src/tokens.stylex.ts`. Only document-level resets go in `src/global.css`.
 - `src/ui/` holds generic controls that know nothing about Live Photos or projects; app-specific components go in `src/components/`, hooks in `src/hooks/`.
 - Never commit photos or videos; they carry GPS data. Test media stays outside the repo.
