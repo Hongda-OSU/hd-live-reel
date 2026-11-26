@@ -6,11 +6,7 @@ A macOS app that stitches iPhone Live Photos into one video.
 
 ## Demo
 
-
-
 https://github.com/user-attachments/assets/bc3bb1f5-7fea-405b-acb8-a603cebc2cc3
-
-
 
 ## Features
 
