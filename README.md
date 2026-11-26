@@ -70,3 +70,7 @@ pnpm tauri dev
 ```
 
 The development and installed apps share one project and cache, so quit one before opening the other.
+
+## License
+
+MIT
