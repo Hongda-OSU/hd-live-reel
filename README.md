@@ -6,14 +6,16 @@ A macOS app that stitches iPhone Live Photos into one video.
 
 ## Demo
 
+A one-minute walkthrough: pick a day from the iPhone, let AI choose the shots, add a title and a filter, export.
+
 https://github.com/user-attachments/assets/bc3bb1f5-7fea-405b-acb8-a603cebc2cc3
 
 ## Features
 
 - Pick Live Photos and videos from a USB-connected iPhone, or drag them in from Finder
 - Tick photos, a whole day or scene at a time, and let on-device AI narrow them to a reel's worth, skipping Live Photos too short to show, with a reason and a score for each shot
-- Keep each clip's original sound, loudness-matched, or lay a music track under or over it
-- Trim, reorder and replace clips; add a styled opening title, captions on single clips, a corner watermark, colour filters and transitions (dissolve, dip to black, push, zoom and more)
+- Keep each clip's original sound, loudness-matched, at a level you set, with an optional music track mixed in
+- Trim, reorder and replace clips; add a styled opening title, captions on single clips, a signature watermark, colour filters and transitions (dissolve, dip to black, push, zoom and more)
 - Keep the look you like (title style, filter, transition, watermark, volumes) as your own default, so new projects start from it
 - Preview from the same FFmpeg pipeline as the export, with the clips on a timeline; export a 9:16 MP4 that WeChat plays directly
 
