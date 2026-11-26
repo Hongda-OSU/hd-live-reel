@@ -7,7 +7,7 @@ Personal macOS desktop app that stitches iPhone Live Photos into one MP4 with or
 - Shell: Tauri 2
 - Frontend: React + TypeScript (Vite), styled with StyleX (`src/`)
 - Core: Rust (`src-tauri/`) — project JSON, FFmpeg command building, AI selection
-- Photos: Swift CLI (`photos-helper/`) — ImageCaptureCore (iPhone over USB), Vision scores; prints JSON for Rust
+- Photos: Swift CLI (`photos-helper/`) — ImageCaptureCore (iPhone over USB), Vision scores, as JSON for Rust
 - Video: FFmpeg + ffprobe as Tauri sidecars (`binaries/`, fetched by `scripts/fetch-ffmpeg.sh`), built with libzimg
 - Package manager: **pnpm**
 - macOS 15+ only, all processing local; no cloud, login or database
@@ -22,10 +22,9 @@ Personal macOS desktop app that stitches iPhone Live Photos into one MP4 with or
 - Format everything: `pnpm format`
 - Rust tests: `cargo test --manifest-path src-tauri/Cargo.toml`
 - Personal-media tests (`baseline`, `ai_select`; env vars in each file): `cargo test --manifest-path src-tauri/Cargo.toml --test <name> -- --ignored`
-- Build Swift helper into `binaries/`: `pnpm helper` (also run by `tauri dev`/`build`)
-- Run Swift helper: `./binaries/photos-helper-aarch64-apple-darwin list`
+- Swift helper: `pnpm helper` (`tauri dev`/`build` run it), then `./binaries/photos-helper-aarch64-apple-darwin list`
 
-- `photos-helper` needs a USB-connected, unlocked iPhone for `list`, `download` and `thumbnails`.
+- `photos-helper` needs a USB-connected, unlocked iPhone for `list`, `download`, `thumbnails` and `durations`.
 
 ## Rules
 
@@ -33,10 +32,10 @@ Personal macOS desktop app that stitches iPhone Live Photos into one MP4 with or
 - Originals are read-only. Intermediates go in `~/Library/Caches/<App>/` (macOS may clear it; `load_project` rebuilds them); our only copies (iPhone downloads, music) in `~/Library/Application Support/<App>/`.
 - Normalize every clip on import to 30 fps, BT.709 SDR, stereo 48 kHz, keeping its shape; compose fits it to the output frame.
 - Lay out title, caption and watermark text in a frontend Canvas and overlay it as a transparent PNG. Do not use FFmpeg `drawtext`.
-- Rust owns timing and frame sizes (`Composition::length`, `joins`, `clip_windows`, `SCENE_GAP`, `Shape::size`); `clipSpans`, `joins` and `FRAME` in `src/project.ts` and `src/scenes.ts` mirror it.
+- Rust owns timing and frame sizes (`Composition::length`, `joins`, `clip_windows`, `SCENE_GAP`, `Shape::size`); `clipSpans`, `joins`, `FRAME` and `FPS` in `src/project.ts` and `src/scenes.ts` mirror it.
 - Style components with StyleX; colours and sizes come from `src/tokens.stylex.ts`. Only document-level resets go in `src/global.css`.
 - `src/ui/` holds generic controls that know nothing about Live Photos or projects; app-specific components go in `src/components/`, hooks in `src/hooks/`.
-- Never commit photos or videos; they carry GPS data. Test media stays outside the repo.
+- Never commit photos or videos (they carry GPS data); test media stays outside the repo.
 - Ask before adding a dependency or changing the `project.json` schema. If a change touches more than three files, propose the approach first.
 - Run `pnpm check` before every commit; never commit if it fails.
 - After code changes, run the affected tests before saying it's done.
@@ -46,12 +45,13 @@ Personal macOS desktop app that stitches iPhone Live Photos into one MP4 with or
 ## Gotchas
 
 - Homebrew's default `ffmpeg` has no `zscale`; P3 → BT.709 and HDR → SDR need it.
-- Live Photo MOVs are ~2 s, 1920×1440, variable frame rate, mono and very quiet (−40 to −59 LUFS).
+- Live Photo MOVs are ~2 s, 1920×1440, VFR, mono and very quiet (−40 to −59 LUFS).
 - Live Photos are SDR (P3, 8-bit). Only regular iPhone videos are HDR (HLG) and need tone mapping.
-- iPhone imports arriving as JPG or thumbnails: see the phone settings in README Usage.
-- WebKit can stall seeks on a long-paused `<video>`; `usePlayback` reloads it when no frame draws within 0.7 s. Keep that fallback.
-- "Invalid hook call" after adding a JS dependency is a stale Vite cache: delete `node_modules/.vite`, restart `pnpm tauri dev`.
+- iPhone imports arriving as JPG or thumbnails: see README Usage.
+- WebKit can stall seeks on a long-paused `<video>`; `usePlayback` reloads it when no frame draws within 0.7 s; keep it.
+- "Invalid hook call" after adding a JS dependency: stale Vite cache; delete `node_modules/.vite`, restart `pnpm tauri dev`.
 - Dev and installed apps share one project; never run both.
+- Watermark font `src/assets/fonts/keshilu-pen-crane.woff` holds only 鴻鵠誌達; new `MARK_TEXT` needs a new subset.
 
 ## Read these only when relevant (Notion MCP)
 
