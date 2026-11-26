@@ -834,6 +834,7 @@ function App() {
             thumbs={thumbs}
             playback={playback}
             ready={preview.url !== null && !trimClip}
+            busy={preview.busy}
             onSelect={pickClip}
             onMove={(from, to) => dispatch({ type: "moveClip", from, to })}
           />

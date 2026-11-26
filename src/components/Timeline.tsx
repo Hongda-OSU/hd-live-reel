@@ -32,6 +32,10 @@ const MAX_ZOOM = 16;
 const TICK_STEPS = [1, 2, 5, 10, 15, 30, 60, 120];
 const TICK_SPACING = 64;
 
+const spin = stylex.keyframes({
+  to: { transform: "rotate(360deg)" },
+});
+
 const styles = stylex.create({
   timeline: {
     gridColumnStart: 1,
@@ -83,8 +87,28 @@ const styles = stylex.create({
     color: colors.muted,
   },
   quality: {
+    display: "flex",
+    alignItems: "center",
+    gap: 6,
     color: colors.muted,
     fontSize: 11,
+  },
+  spinner: {
+    width: 10,
+    height: 10,
+    boxSizing: "border-box",
+    borderWidth: 2,
+    borderStyle: "solid",
+    borderColor: colors.surface2,
+    borderTopColor: colors.muted,
+    borderRadius: "50%",
+    animationName: {
+      default: spin,
+      "@media (prefers-reduced-motion: reduce)": "none",
+    },
+    animationDuration: "0.9s",
+    animationTimingFunction: "linear",
+    animationIterationCount: "infinite",
   },
   spacer: {
     flex: "1",
@@ -322,13 +346,15 @@ interface Props {
   playback: Playback;
   /** False while there is no preview to play. */
   ready: boolean;
+  /** A new preview is being made; said here rather than over the picture. */
+  busy: boolean;
   onSelect: (id: string) => void;
   onMove: (from: number, to: number) => void;
 }
 
 /** The clips in play order, each as wide as its time: picks, reorders and
  * plays the reel. */
-export function Timeline({ clips, spans, selectedId, thumbs, playback, ready, onSelect, onMove }: Props) {
+export function Timeline({ clips, spans, selectedId, thumbs, playback, ready, busy, onSelect, onMove }: Props) {
   const scroller = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
   const [zoom, setZoom] = useState(0);
@@ -432,9 +458,16 @@ export function Timeline({ clips, spans, selectedId, thumbs, playback, ready, on
           {formatTime(ready ? time : 0)}{" "}
           <span {...stylex.props(styles.muted)}>/ {formatTime(ready ? duration || total : total)}</span>
         </span>
-        <span title="导出为 1080p 高清" {...stylex.props(styles.quality)}>
-          低清预览
-        </span>
+        {busy ? (
+          <span role="status" {...stylex.props(styles.quality)}>
+            <span aria-hidden {...stylex.props(styles.spinner)} />
+            正在更新预览…
+          </span>
+        ) : (
+          <span title="导出为 1080p 高清" {...stylex.props(styles.quality)}>
+            低清预览
+          </span>
+        )}
         <span {...stylex.props(styles.spacer)} />
         <span {...stylex.props(styles.hint)}>{clips.length} 段 · 拖动或 ⌥← ⌥→ 换位置</span>
         <label {...stylex.props(styles.zoom)}>

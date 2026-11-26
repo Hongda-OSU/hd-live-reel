@@ -116,6 +116,8 @@ interface Props {
   aspect: Output["aspect"];
   /** Play state; the timeline holds the controls. */
   playback: Playback;
+  /** A new preview is being made: the timeline bar says so, and notes
+   * about the old one are held back meanwhile. */
   busy: boolean;
   error: string | null;
   /** Which clips the preview leaves out because their originals are
@@ -143,7 +145,6 @@ export function Stage(props: Props) {
           {src && (
             <video ref={video} key={src} src={src} playsInline {...playback.events} {...stylex.props(styles.video)} />
           )}
-          {busy && <div {...stylex.props(styles.pill)}>正在更新预览…</div>}
           {error && !busy && <div {...stylex.props(styles.pill, styles.errorPill)}>{error}</div>}
           {skipped && !missing && !error && !busy && !playing && (
             <div {...stylex.props(styles.pill, styles.notice)}>
