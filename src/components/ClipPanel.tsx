@@ -4,7 +4,7 @@ import { LogicalPosition } from "@tauri-apps/api/dpi";
 import { Menu, MenuItem } from "@tauri-apps/api/menu";
 import type { Caption, Clip } from "../api";
 import {
-  CAPTION_FIRST_SECONDS,
+  CAPTION_SECONDS,
   clipLabel,
   clipLength,
   formatTime,
@@ -364,13 +364,11 @@ function CaptionGroup({ clip, dispatch }: { clip: Clip; dispatch: (action: Actio
         />
       </Field>
       <Field label="显示">
-        <Seg<"whole" | "first">
-          options={[
-            ["whole", "整段"],
-            ["first", `前 ${CAPTION_FIRST_SECONDS} 秒`],
-          ]}
-          value={caption.showFor === null ? "whole" : "first"}
-          onChange={(shown) => set({ showFor: shown === "whole" ? null : CAPTION_FIRST_SECONDS })}
+        {/* Values are seconds, or "whole" for null. */}
+        <Seg<string>
+          options={[["whole", "整段"], ...CAPTION_SECONDS.map((s): [string, string] => [String(s), `${s} 秒`])]}
+          value={caption.showFor === null ? "whole" : String(caption.showFor)}
+          onChange={(shown) => set({ showFor: shown === "whole" ? null : Number(shown) })}
         />
       </Field>
     </Group>

@@ -32,8 +32,9 @@ pub struct Caption {
     pub image: PathBuf,
     /// Index of the clip it belongs to.
     pub clip: usize,
-    /// Seconds on screen once the clip is fully in; `None` keeps it until
-    /// the clip starts to leave.
+    /// Seconds on screen once the clip is fully in, running on into the
+    /// clips after it until the next caption; `None` keeps it until the
+    /// clip starts to leave.
     pub show_for: Option<f64>,
 }
 
@@ -230,17 +231,28 @@ impl Composition {
             .collect()
     }
 
-    /// The captions that get any screen time, with when they show: their
-    /// clip's window, after the title is gone, cut to `show_for`.
+    /// The captions that get any screen time, with when they show: from
+    /// when their clip is fully in and the title is gone, for `show_for`
+    /// (which may run on past the clip, up to the next caption and the
+    /// end of the video) or until the clip starts to leave.
     fn shown_captions(&self) -> Vec<(&Caption, (f64, f64))> {
         let windows = self.clip_windows();
         let title_end = self.title.as_ref().map_or(0.0, |title| title.show_for);
+        let length = self.length();
+        let start_of = |caption: &Caption| windows.get(caption.clip).map(|w| w.0.max(title_end));
         self.captions
             .iter()
             .filter_map(|caption| {
-                let (start, end) = *windows.get(caption.clip)?;
-                let start = start.max(title_end);
-                let end = caption.show_for.map_or(end, |s| end.min(start + s));
+                let start = start_of(caption)?;
+                let end = match caption.show_for {
+                    None => windows[caption.clip].1,
+                    Some(seconds) => self
+                        .captions
+                        .iter()
+                        .filter(|next| next.clip > caption.clip)
+                        .filter_map(start_of)
+                        .fold((start + seconds).min(length), f64::min),
+                };
                 (end > start).then_some((caption, (start, end)))
             })
             .collect()
@@ -706,6 +718,25 @@ mod tests {
         assert!(with.shown_captions().is_empty());
         assert!(!filter_graph(&with, Quality::Export).contains("[c0]"));
         assert!(!args(&with, Quality::Export, Path::new("out.mp4")).contains(&"caption.png".into()));
+    }
+
+    #[test]
+    fn a_long_caption_runs_on_until_the_next_caption_or_the_end() {
+        // Two 2 s clips, no title: clip 1 runs from 2 s to 4 s.
+        let mut with = composition(None);
+        let windows = |with: &Composition| -> Vec<(f64, f64)> {
+            with.shown_captions().into_iter().map(|(_, w)| w).collect()
+        };
+        with.captions = vec![caption(0, Some(3.0))];
+        assert_eq!(windows(&with), [(0.0, 3.0)]);
+
+        // It gives way to the next caption rather than sharing the screen.
+        with.captions = vec![caption(0, Some(3.0)), caption(1, None)];
+        assert_eq!(windows(&with), [(0.0, 2.0), (2.0, 4.0)]);
+
+        // And stops with the video.
+        with.captions = vec![caption(1, Some(3.0))];
+        assert_eq!(windows(&with), [(2.0, 4.0)]);
     }
 
     #[test]

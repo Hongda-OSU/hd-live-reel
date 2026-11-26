@@ -228,8 +228,9 @@ export const hasTitleText = (title: Title) => title.text.trim() !== "" || title.
 
 /** A caption before any text is typed. */
 export const NEW_CAPTION: Caption = { text: "", position: "bottom", showFor: null };
-/** The "first seconds" choice for how long a caption shows. */
-export const CAPTION_FIRST_SECONDS = 1.5;
+/** The timed choices for how long a caption shows; the longer one runs on
+ * past a Live Photo's 2 s or so into the clips after it. */
+export const CAPTION_SECONDS = [1.5, 3] as const;
 
 export const hasCaption = (clip: Clip) => !!clip.caption?.text.trim();
 

@@ -104,8 +104,9 @@ fn centre() -> f64 {
 pub struct Caption {
     pub text: String,
     pub position: Position,
-    /// Seconds on screen once the clip is fully in; `None` keeps it for
-    /// the whole clip.
+    /// Seconds on screen once the clip is fully in, running on into the
+    /// clips after it until the next caption; `None` keeps it for the
+    /// whole clip.
     pub show_for: Option<f64>,
     /// The laid-out text as a transparent PNG, rendered by the frontend.
     pub image: Option<PathBuf>,
